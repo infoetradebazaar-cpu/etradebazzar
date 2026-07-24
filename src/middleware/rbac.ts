@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { db } from "../db/index";
 import { redis, RedisKeys } from "../db/redis";
 import { logger } from "../utils/logger";
+import { withTenantScope } from "./tenant";
 
 export async function invalidateRoleCache(userId: string, scope: string) {
   await redis.del(RedisKeys.userRoles(userId, scope));
@@ -63,10 +64,12 @@ export const requireSellerRole = (...roles: string[]) => {
       if (cached) {
         sellerRole = cached;
       } else {
-        const member = await db.sellerMember.findUnique({
-          where: { userId_sellerId: { userId: req.user.id, sellerId: req.seller.id } },
-          select: { role: { select: { name: true } } },
-        });
+        const member = await withTenantScope((tx) =>
+          tx.sellerMember.findUnique({
+            where: { userId_sellerId: { userId: req.user!.id, sellerId: req.seller!.id } },
+            select: { role: { select: { name: true } } },
+          }),
+        );
         sellerRole = member?.role.name ?? null;
         if (sellerRole) {
           await redis.setex(cacheKey, 300, sellerRole);

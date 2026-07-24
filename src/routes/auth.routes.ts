@@ -66,9 +66,12 @@ router.post("/login", authLimiter, validate(loginSchema),
       where: { userId: user.id },
       select: { role: { select: { name: true } } },
     }),
-    db.sellerMember.findFirst({
-      where: { userId: user.id, isActive: true },
-      select: { sellerId: true },
+    db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.is_platform_admin', 'true', true)`;
+      return tx.sellerMember.findFirst({
+        where: { userId: user.id, isActive: true },
+        select: { sellerId: true },
+      });
     }),
     ]);
 
@@ -165,20 +168,23 @@ router.get("/me", protect, ah(async (req, res) => {
     return res.status(401).json({ success: false, error: "Unauthorized" });
 
   const [sellerMemberships, platformMember] = await Promise.all([
-    db.sellerMember.findMany({
-      where: { userId: req.user.id, isActive: true },
-      select: {
-        sellerId: true,
-        role: {
-          select: {
-            name: true,
-            permissions: {
-              select: { permission: { select: { key: true } } },
+    db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.is_platform_admin', 'true', true)`;
+      return tx.sellerMember.findMany({
+        where: { userId: req.user!.id, isActive: true },
+        select: {
+          sellerId: true,
+          role: {
+            select: {
+              name: true,
+              permissions: {
+                select: { permission: { select: { key: true } } },
+              },
             },
           },
+          seller: { select: { businessName: true, status: true } },
         },
-        seller: { select: { businessName: true, status: true } },
-      },
+      });
     }),
     db.platformMember.findUnique({
       where: { userId: req.user.id },

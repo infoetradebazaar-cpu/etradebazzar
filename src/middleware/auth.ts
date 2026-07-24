@@ -66,9 +66,12 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
       if (!user.isActive) throw new Error("User account disabled");
 
       const [member, platformMember] = await Promise.all([
-        db.sellerMember.findFirst({
-          where: { userId: user.id, isActive: true },
-          select: { sellerId: true },
+        db.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT set_config('app.is_platform_admin', 'true', true)`;
+          return tx.sellerMember.findFirst({
+            where: { userId: user.id, isActive: true },
+            select: { sellerId: true },
+          });
         }),
 
         db.platformMember.findFirst({

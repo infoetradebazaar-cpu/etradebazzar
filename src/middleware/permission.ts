@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { db } from "../db/index";
 import { redis, RedisKeys } from "../db/redis";
 import { logger } from "../utils/logger";
+import { withTenantScope } from "./tenant";
 
 export const requirePermission = (...keys: string[]) => {
     return async (req: Request, res: Response, next: NextFunction) => {
@@ -18,16 +19,18 @@ export const requirePermission = (...keys: string[]) => {
             if (cached) {
                 permissions = JSON.parse(cached);
             } else {
-                const member = await db.sellerMember.findUnique({
-                    where: { userId_sellerId: { userId: req.user.id, sellerId: req.seller.id } },
-                    select: {
-                        role: {
-                            select: {
-                                permissions: { select: { permission: { select: { key: true } } } },
+                const member = await withTenantScope((tx) =>
+                    tx.sellerMember.findUnique({
+                        where: { userId_sellerId: { userId: req.user!.id, sellerId: req.seller!.id } },
+                        select: {
+                            role: {
+                                select: {
+                                    permissions: { select: { permission: { select: { key: true } } } },
+                                },
                             },
                         },
-                    },
-                });
+                    }),
+                );
                 permissions = member?.role.permissions.map((p) => p.permission.key) ?? [];
                 await redis.setex(cacheKey, 300, JSON.stringify(permissions));
             }
