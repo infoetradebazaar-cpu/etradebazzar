@@ -30,5 +30,6 @@ export const checkoutSchema = z.object({
             longitude: z.number().optional(),
         }).optional(),
         couponCode: z.string().optional(),
+        paymentMethod: z.enum(["ONLINE", "COD"]).optional(),
     }),
 });

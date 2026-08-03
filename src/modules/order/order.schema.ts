@@ -131,3 +131,10 @@ export const listAllOrdersSchema = z.object({
 export const markPackedSchema = z.object({
     params: z.object({ orderId: z.string() }),
 });
+
+export const cancelOrderSchema = z.object({
+    params: z.object({ orderId: z.string() }),
+    body: z.object({
+        reason: z.string().max(500).optional(),
+    }).optional(),
+});

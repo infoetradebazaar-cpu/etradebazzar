@@ -6,9 +6,10 @@ import { z } from "zod";
 import { logger } from "../utils/logger";
 import { protect } from "../middleware/auth";
 import { redis, RedisKeys } from "../db/redis";
-import { authLimiter } from "../middleware/rate-limit";
+import { authLimiter, otpLimiter } from "../middleware/rate-limit";
 import bcrypt from "bcryptjs";
 import { ah } from "../utils/async-handler";
+import { otpService } from "../lib/otp/otp.service";
 
 const router: Router = Router();
 
@@ -19,6 +20,19 @@ const loginSchema = z.object({
   }),
 });
 
+const otpRequestSchema = z.object({
+  body: z.object({ phone: z.string().min(10).max(15) }),
+});
+
+const otpVerifySchema = z.object({
+  body: z.object({
+    phone: z.string().min(10).max(15),
+    otp: z.string().length(6),
+  }),
+});
+
+const LOGIN_OTP_PURPOSE = "login";
+
 const DUMMY_HASH = "$2b$10$q/Cw9LzIerrEJshd1W4luOz/GrNRkxASaqxYhaUtQcUpfap/LkNSO";
 
 const REFRESH_COOKIE_OPTS = {
@@ -27,6 +41,55 @@ const REFRESH_COOKIE_OPTS = {
   sameSite: "strict" as const,
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
+
+async function deriveRole(userId: string): Promise<string> {
+  const [platformMember, sellerMember] = await Promise.all([
+    db.platformMember.findFirst({
+      where: { userId },
+      select: { role: { select: { name: true } } },
+    }),
+    db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.is_platform_admin', 'true', true)`;
+      return tx.sellerMember.findFirst({
+        where: { userId, isActive: true },
+        select: { sellerId: true },
+      });
+    }),
+  ]);
+
+  if (platformMember?.role?.name) return platformMember.role.name;
+  if (sellerMember?.sellerId) return "seller";
+  return "user";
+}
+
+async function issueSession(
+  user: { id: string; email: string; name: string | null },
+  req: { ip?: string; get: (h: string) => string | undefined },
+) {
+  const session = await db.session.create({
+    data: {
+      userId: user.id,
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent") ?? undefined,
+    },
+  });
+
+  const role = await deriveRole(user.id);
+
+  const { accessToken, refreshToken } = jwtService.signTokens(
+    { sub: user.id, email: user.email, role },
+    { sessionId: session.id },
+  );
+
+  await db.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() },
+  });
+
+  logger.info({ userId: user.id, sessionId: session.id }, "User logged in");
+
+  return { accessToken, refreshToken, user };
+}
 
 router.post("/login", authLimiter, validate(loginSchema),
   ah(async (req, res) => {
@@ -94,6 +157,55 @@ router.post("/login", authLimiter, validate(loginSchema),
     });
 
     logger.info({ userId: user.id, sessionId: session.id }, "User logged in");
+
+    res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
+
+    res.json({
+      success: true,
+      accessToken,
+      refreshToken,
+      user: { id: user.id, email: user.email, name: user.name ?? undefined },
+    });
+  }),
+);
+
+router.post("/otp/request", authLimiter, otpLimiter, validate(otpRequestSchema),
+  ah(async (req, res) => {
+    const { phone } = req.body;
+
+    const user = await db.user.findFirst({
+      where: { phone, phoneVerifiedAt: { not: null } },
+      select: { isActive: true },
+    });
+    if (user?.isActive) {
+      await otpService.requestOtp(LOGIN_OTP_PURPOSE, phone);
+    }
+
+    res.json({ success: true, message: "If this phone is linked to an account, an OTP has been sent" });
+  }),
+);
+
+router.post("/otp/verify", authLimiter, validate(otpVerifySchema),
+  ah(async (req, res) => {
+    const { phone, otp } = req.body;
+
+    const valid = await otpService.verifyOtp(LOGIN_OTP_PURPOSE, phone, otp);
+    if (!valid) {
+      return res.status(401).json({ success: false, error: "Invalid or expired OTP" });
+    }
+
+    const user = await db.user.findFirst({
+      where: { phone, phoneVerifiedAt: { not: null } },
+      select: { id: true, email: true, name: true, isActive: true },
+    });
+    if (!user) {
+      return res.status(401).json({ success: false, error: "Invalid or expired OTP" });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ success: false, error: "Account disabled" });
+    }
+
+    const { accessToken, refreshToken } = await issueSession(user, req);
 
     res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
 

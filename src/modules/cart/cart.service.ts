@@ -1,6 +1,7 @@
 import { db } from "../../db/index";
 import { orderService } from "../order/order.service";
 import { couponService } from "../coupon/coupon.service";
+import { shipmentService } from "../shipment/shipment.service";
 
 async function getOrCreateCart(userId: string) {
   let cart = await db.cart.findUnique({ where: { userId } });
@@ -31,6 +32,7 @@ async function getCartWithItems(userId: string) {
           price: true,
           stock: true,
           sellerId: true,
+          weightGrams: true,
           images: { take: 1, orderBy: { order: "asc" } },
         },
       },
@@ -63,6 +65,7 @@ async function getCartWithItems(userId: string) {
       lineTotal,
       availableStock: item.sku?.stock ?? item.product.stock ?? 0,
       options: item.sku?.options,
+      weightGrams: item.product.weightGrams ?? 500,
     };
   });
 
@@ -186,7 +189,12 @@ export const cartService = {
   async checkout(
     userId: string,
     idempotencyKey: string,
-    data: { addressId?: string; newAddress?: any; couponCode?: string },
+    data: {
+      addressId?: string;
+      newAddress?: any;
+      couponCode?: string;
+      paymentMethod?: "ONLINE" | "COD";
+    },
   ) {
     const { cart, items, subtotal, sellerId } = await getCartWithItems(userId);
     if (!items.length) throw new Error("Cart is empty");
@@ -203,6 +211,29 @@ export const cartService = {
       deliveryAddress = data.newAddress;
     } else {
       throw new Error("Delivery address required");
+    }
+
+    const paymentMethod = data.paymentMethod ?? "ONLINE";
+
+    if (paymentMethod === "COD") {
+      const seller = await db.seller.findUnique({
+        where: { id: sellerId },
+        select: { pincode: true },
+      });
+      if (!seller) throw new Error("Cart has no seller assigned");
+
+      const weightKg =
+        items.reduce((sum, i) => sum + i.weightGrams * i.quantity, 0) / 1000;
+
+      const serviceability = await shipmentService.checkServiceability(
+        seller.pincode,
+        deliveryAddress.pincode,
+        weightKg,
+        true,
+      );
+      if (!serviceability.available) {
+        throw new Error("Cash on Delivery is not available for this address");
+      }
     }
 
     const buildOrderInput = (discount: number, couponCode?: string) => ({
@@ -228,6 +259,7 @@ export const cartService = {
       },
       discountAmount: discount > 0 ? discount : undefined,
       couponCode,
+      paymentMethod,
     });
 
     let order;

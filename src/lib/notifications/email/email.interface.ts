@@ -17,6 +17,7 @@ export type EmailTemplate =
     | "product-rejected"
     | "order-placed"
     | "order-confirmed"
+    | "order-cancelled"
     | "shipment-updated";
 
 export interface EmailProvider {

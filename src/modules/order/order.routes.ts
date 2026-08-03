@@ -22,6 +22,7 @@ import {
   bulkRespondNegotiationsSchema,
   listAllOrdersSchema,
   markPackedSchema,
+  cancelOrderSchema,
 } from "./order.schema";
 
 const router = Router();
@@ -148,6 +149,15 @@ router.get(
   publicLimiter,
   validate(orderParamSchema),
   orderController.getOrder,
+);
+
+router.patch(
+  "/:orderId/cancel",
+  protect,
+  resolveTenant,
+  publicLimiter,
+  validate(cancelOrderSchema),
+  orderController.cancelOrder,
 );
 
 router.patch(

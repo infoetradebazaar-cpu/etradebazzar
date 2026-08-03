@@ -243,6 +243,33 @@ export const orderController = {
     }
   },
 
+  async cancelOrder(req: Request, res: Response) {
+    try {
+      const { orderId } = req.params;
+      const actorId = req.user!.id;
+      const actorType = req.seller?.id ? "seller" : "customer";
+      const result = await orderService.cancelOrder(
+        orderId as string,
+        actorId,
+        actorType,
+        req.user?.id,
+        req.seller?.id,
+      );
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Cancel order failed");
+      if (error.message === "Order not found") {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      if (error.message === "Order cannot be cancelled") {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async listOrders(req: Request, res: Response) {
     try {
       const sellerId = req.seller!.id;

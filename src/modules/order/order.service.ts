@@ -12,6 +12,7 @@ import { reliabilityService } from "../../lib/order-assignment/reliability.servi
 import { OrderStatus } from "../../../prisma/generated/client";
 import { slaConfigService } from "../platform/sla-config.service";
 import { shipmentService } from "../shipment/shipment.service";
+import { paymentService } from "../payment/payment.service";
 
 const ORDER_LOCK_TTL = 15;
 const IDEMPOTENCY_TTL_SECONDS = 60 * 60 * 24; // 24h durable window
@@ -65,6 +66,7 @@ export const orderService = {
       };
       discountAmount?: number;
       couponCode?: string;
+      paymentMethod?: "ONLINE" | "COD";
     },
   ) {
     const idemKey = idempotencyRedisKey(customerId, idempotencyKey);
@@ -112,6 +114,7 @@ export const orderService = {
       };
       discountAmount?: number;
       couponCode?: string;
+      paymentMethod?: "ONLINE" | "COD";
     },
   ) {
     const products = await db.product.findMany({
@@ -208,6 +211,8 @@ export const orderService = {
       : undefined;
 
     const order = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.is_platform_admin', 'true', true)`;
+
       const created = await tx.order.create({
         data: {
           sellerId: data.sellerId,
@@ -220,6 +225,7 @@ export const orderService = {
           discountAmount: discountAmount > 0 ? discountAmount : undefined,
           commissionRate,
           commissionAmount,
+          paymentMethod: data.paymentMethod ?? "ONLINE",
           assignedShopId: autoAssignedShopId,
           packingDeadline,
           items: { create: itemsData },
@@ -426,6 +432,8 @@ export const orderService = {
     const displayId = await generateDisplayId("order");
 
     return db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.is_platform_admin', 'true', true)`;
+
       const order = await tx.order.create({
         data: {
           sellerId,
@@ -1104,7 +1112,11 @@ export const orderService = {
   ) {
     const order = await db.order.findUnique({
       where: { id: orderId },
-      include: { items: true },
+      include: {
+        items: true,
+        payments: true,
+        customer: { select: { id: true, email: true, name: true } },
+      },
     });
     if (!order) throw new Error("Order not found");
 
@@ -1117,11 +1129,22 @@ export const orderService = {
       }
     }
 
+    const CANCELLABLE_STATUSES: OrderStatus[] = [
+      "PENDING",
+      "NEGOTIATING",
+      "CONFIRMED",
+      "PACKED",
+      "PROCESSING",
+      "PENDING_ASSIGNMENT",
+    ];
+
     const result = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.is_platform_admin', 'true', true)`;
+
       const updateResult = await tx.order.updateMany({
         where: {
           id: orderId,
-          status: { notIn: ["DELIVERED", "CANCELLED"] },
+          status: { in: CANCELLABLE_STATUSES },
         },
         data: { status: "CANCELLED" },
       });
@@ -1160,6 +1183,26 @@ export const orderService = {
     creditEngine
       .checkCancelPenalty(order.customerId, orderId, order.createdAt)
       .catch(() => null);
+
+    if (order.customer?.email) {
+      notificationService
+        .orderCancelled({
+          userId: order.customer.id,
+          email: order.customer.email,
+          customerName: order.customer.name ?? "Customer",
+          orderId,
+        })
+        .catch(() => null);
+    }
+
+    if (order.payments.some((p) => p.status === "PAID")) {
+      paymentService.initiateRefund(orderId, actorId).catch((err) => {
+        logger.error(
+          { err: err.message, orderId },
+          "Auto-refund on cancel failed",
+        );
+      });
+    }
 
     triggerAnalyticsRefresh("ORDER_CANCELLED", order.sellerId).catch(
       () => null,

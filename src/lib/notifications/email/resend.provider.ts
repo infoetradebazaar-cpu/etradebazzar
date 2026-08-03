@@ -7,6 +7,7 @@ import { ProductApprovedEmail } from "./templates/product-approved";
 import { ProductRejectedEmail } from "./templates/product-rejected";
 import { OrderPlacedEmail } from "./templates/order-placed";
 import { OrderConfirmedEmail } from "./templates/order-confirmed";
+import { OrderCancelledEmail } from "./templates/order-cancelled";
 import { ShipmentUpdatedEmail } from "./templates/shipment-updated";
 import { render } from "@react-email/render";
 
@@ -18,6 +19,7 @@ const Subject: Record<string, string> = {
     "product-rejected": "Your product needs attention",
     "order-placed": "Order placed successfully 🛒",
     "order-confirmed": "Your order has been confirmed ✓",
+    "order-cancelled": "Your order has been cancelled",
     "shipment-updated": "Shipment update for your order 📦",
 }
 
@@ -43,6 +45,8 @@ export class ResendProvider implements EmailProvider {
                 return render(OrderPlacedEmail(data as any));
             case "order-confirmed":
                 return render(OrderConfirmedEmail(data as any));
+            case "order-cancelled":
+                return render(OrderCancelledEmail(data as any));
             case "shipment-updated":
                 return render(ShipmentUpdatedEmail(data as any));
             default:

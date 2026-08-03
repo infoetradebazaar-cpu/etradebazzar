@@ -16,15 +16,12 @@ function generateSlug(name: string): string {
     .replace(/-+/g, "-");
 }
 
-function toAttributeCreateData(categoryId: string, attr: CategoryAttributeInput) {
+function toAttributeScalarData(attr: CategoryAttributeInput) {
   return {
-    categoryId,
-    key: attr.key,
     label: attr.label,
     type: attr.type,
     required: attr.required,
     isVariant: attr.isVariant,
-    options: attr.options,
     unit: attr.unit,
     sortOrder: attr.sortOrder,
   };
@@ -61,9 +58,18 @@ export const categoryService = {
         });
 
         if (data.attributes?.length) {
-          await tx.categoryAttribute.createMany({
-            data: data.attributes.map((attr) => toAttributeCreateData(category.id, attr)),
-          });
+          for (const attr of data.attributes) {
+            await tx.categoryAttribute.create({
+              data: {
+                categoryId: category.id,
+                key: attr.key,
+                ...toAttributeScalarData(attr),
+                options: {
+                  create: attr.options.map((value) => ({ value, status: "APPROVED" as const })),
+                },
+              },
+            });
+          }
         }
 
         return tx.category.findUniqueOrThrow({
@@ -118,19 +124,25 @@ export const categoryService = {
 
         if (data.attributes?.length) {
           for (const attr of data.attributes) {
-            await tx.categoryAttribute.upsert({
+            const attribute = await tx.categoryAttribute.upsert({
               where: { categoryId_key: { categoryId, key: attr.key } },
-              create: toAttributeCreateData(categoryId, attr),
-              update: {
-                label: attr.label,
-                type: attr.type,
-                required: attr.required,
-                isVariant: attr.isVariant,
-                options: attr.options,
-                unit: attr.unit,
-                sortOrder: attr.sortOrder,
+              create: {
+                categoryId,
+                key: attr.key,
+                ...toAttributeScalarData(attr),
+                options: {
+                  create: attr.options.map((value) => ({ value, status: "APPROVED" as const })),
+                },
               },
+              update: toAttributeScalarData(attr),
             });
+            for (const value of attr.options) {
+              await tx.categoryAttributeOption.upsert({
+                where: { categoryAttributeId_value: { categoryAttributeId: attribute.id, value } },
+                create: { categoryAttributeId: attribute.id, value, status: "APPROVED" },
+                update: { status: "APPROVED" },
+              });
+            }
           }
         }
 

@@ -13,6 +13,8 @@ model User {
   email                String                @unique
   name                 String?
   password             String
+  phone                String?               @unique
+  phoneVerifiedAt      DateTime?
   isActive             Boolean               @default(true)
   lastLoginAt          DateTime?
   createdAt            DateTime              @default(now())
@@ -28,6 +30,7 @@ model User {
   addresses            CustomerAddress[]
   cart                 Cart?
   customerUploadAssets CustomerUploadAsset[]
+  wishlistItems        WishlistItem[]
 
   @@index([email])
   @@map("users")
@@ -106,6 +109,7 @@ model Seller {
   payouts             SellerPayout[]
   templates           Template[]
   teamInvites         TeamInvite[]
+  attributeOptionSubmissions CategoryAttributeOption[]
 
   @@index([status])
   @@map("sellers")
@@ -296,23 +300,54 @@ model Category {
 }
 
 model CategoryAttribute {
-  id         String                @id @default(cuid())
+  id         String                     @id @default(cuid())
   categoryId String
   key        String
   label      String
   type       CategoryAttributeType
-  required   Boolean               @default(false)
-  isVariant  Boolean               @default(false)
-  options    String[]              @default([])
+  required   Boolean                    @default(false)
+  isVariant  Boolean                    @default(false)
   unit       String?
-  sortOrder  Int                   @default(0)
-  createdAt  DateTime              @default(now())
-  updatedAt  DateTime              @updatedAt
-  category   Category              @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sortOrder  Int                        @default(0)
+  createdAt  DateTime                   @default(now())
+  updatedAt  DateTime                   @updatedAt
+  category   Category                   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  options    CategoryAttributeOption[]
 
   @@unique([categoryId, key])
   @@index([categoryId])
   @@map("category_attributes")
+}
+
+enum AttributeOptionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  MERGED
+}
+
+model CategoryAttributeOption {
+  id                   String                   @id @default(cuid())
+  categoryAttributeId  String
+  categoryAttribute    CategoryAttribute        @relation(fields: [categoryAttributeId], references: [id], onDelete: Cascade)
+  value                String
+  label                String?
+  metadata             Json?
+  status               AttributeOptionStatus    @default(APPROVED)
+  createdBySellerId    String?
+  createdBySeller      Seller?                  @relation(fields: [createdBySellerId], references: [id])
+  reviewedBy           String?
+  reviewNote           String?
+  reviewedAt           DateTime?
+  mergedIntoId         String?
+  mergedInto           CategoryAttributeOption?  @relation("AttributeOptionMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom           CategoryAttributeOption[] @relation("AttributeOptionMerge")
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  @@unique([categoryAttributeId, value])
+  @@index([categoryAttributeId, status])
+  @@map("category_attribute_options")
 }
 
 // PRODUCT
@@ -351,6 +386,7 @@ model Product {
   templates         Template[]
   reviews           Review[]
   cartItems         CartItem[]
+  wishlistItems     WishlistItem[]
 
   @@index([sellerId, status])
   @@index([sellerId])
@@ -410,6 +446,7 @@ model ProductSKU {
   product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   orderItems  OrderItem[]
   cartItems   CartItem[]
+  wishlistItems WishlistItem[]
 
   @@index([productId])
   @@map("product_skus")
@@ -481,6 +518,7 @@ model Order {
   commissionRate   Decimal?           @db.Decimal(5, 2)
   commissionAmount Decimal?           @db.Decimal(10, 2)
   paymentStatus    PaymentStatus      @default(UNPAID)
+  paymentMethod    PaymentMethod      @default(ONLINE)
   assignedShopId   String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -993,6 +1031,21 @@ model CartItem {
   @@map("cart_items")
 }
 
+model WishlistItem {
+  id        String      @id @default(cuid())
+  userId    String
+  productId String
+  skuId     String?
+  createdAt DateTime    @default(now())
+  user      User        @relation(fields: [userId], references: [id])
+  product   Product     @relation(fields: [productId], references: [id])
+  sku       ProductSKU? @relation(fields: [skuId], references: [id])
+
+  @@unique([userId, productId, skuId])
+  @@index([userId])
+  @@map("wishlist_items")
+}
+
 // ENUMS
 enum BusinessType {
   INDIVIDUAL
@@ -1087,6 +1140,11 @@ enum PaymentType {
   FINAL
 }
 
+enum PaymentMethod {
+  ONLINE
+  COD
+}
+
 enum PayoutMethod {
   UPI
   IMPS
@@ -1149,6 +1207,7 @@ enum NotificationType {
   PRODUCT_REJECTED
   ORDER_PLACED
   ORDER_CONFIRMED
+  ORDER_CANCELLED
   SHIPMENT_UPDATED
   PAYMENT_RECEIVED
   KYC_VERIFIED

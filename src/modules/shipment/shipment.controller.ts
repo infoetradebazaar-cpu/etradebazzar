@@ -6,9 +6,10 @@ import { toCsv } from "../../utils/csv";
 export const shipmentController = {
     async trackShipment(req: Request, res: Response) {
         try {
-            const sellerId = req.seller!.id;
             const { shipmentId } = req.params;
-            const result = await shipmentService.trackShipment(sellerId,String(shipmentId));
+            const result = req.seller?.id
+                ? await shipmentService.trackShipment(req.seller.id, String(shipmentId))
+                : await shipmentService.trackShipmentAsCustomer(req.user!.id, String(shipmentId));
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Track shipment failed");
@@ -58,10 +59,9 @@ export const shipmentController = {
 
     async listShipments(req: Request, res: Response) {
         try {
-            const sellerId = req.seller!.id;
-            const { status, search, shopId, courierPartner, dateFrom, dateTo, page, limit } = req.query as Record<string, string>;
-            const result = await shipmentService.listShipments(sellerId, {
-                status, search, shopId, courierPartner, dateFrom, dateTo,
+            const { status, search, sellerId, shopId, courierPartner, dateFrom, dateTo, page, limit } = req.query as Record<string, string>;
+            const result = await shipmentService.listShipments({
+                sellerId, status, search, shopId, courierPartner, dateFrom, dateTo,
                 page: page ? Number(page) : undefined,
                 limit: limit ? Number(limit) : undefined,
             });
@@ -74,9 +74,8 @@ export const shipmentController = {
 
     async getShipment(req: Request, res: Response) {
         try {
-            const sellerId = req.seller!.id;
             const { shipmentId } = req.params;
-            const result = await shipmentService.getShipment(sellerId, String(shipmentId));
+            const result = await shipmentService.getShipment(String(shipmentId));
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Get shipment failed");
@@ -106,9 +105,8 @@ export const shipmentController = {
 
     async getShipmentWithOrder(req: Request, res: Response) {
         try {
-            const sellerId = req.seller!.id;
             const { shipmentId } = req.params;
-            const result = await shipmentService.getShipmentWithOrder(sellerId, String(shipmentId));
+            const result = await shipmentService.getShipmentWithOrder(String(shipmentId));
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Get shipment with order failed");
@@ -121,7 +119,7 @@ export const shipmentController = {
 
     async listShipmentsWithOrders(req: Request, res: Response) {
         try {
-            const sellerId = req.seller!.id;
+            const { sellerId } = req.query as Record<string, string>;
             const result = await shipmentService.listShipmentsWithOrders(sellerId);
             return res.json({ success: true, data: result });
         } catch (error: any) {
@@ -143,7 +141,7 @@ export const shipmentController = {
     },
     async exportShipmentsCsv(req: Request, res: Response) {
         try {
-            const sellerId = req.seller!.id;
+            const { sellerId } = req.query as Record<string, string>;
             const shipments = await shipmentService.exportShipmentsCsv(sellerId);
 
             const rows = shipments.map(s => ({

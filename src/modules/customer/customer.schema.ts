@@ -19,6 +19,17 @@ export const updateProfileSchema = z.object({
   body: z.object({ name: z.string().min(2).max(100).optional() }),
 });
 
+export const phoneLinkRequestSchema = z.object({
+  body: z.object({ phone: z.string().min(10).max(15) }),
+});
+
+export const phoneLinkVerifySchema = z.object({
+  body: z.object({
+    phone: z.string().min(10).max(15),
+    otp: z.string().length(6),
+  }),
+});
+
 export const listMyOrdersSchema = z.object({
   query: z.object({
     status: z.string().optional(),

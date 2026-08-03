@@ -5,6 +5,67 @@ import { logger } from "../../utils/logger";
 import { generateDisplayId } from "../../lib/uid/uid.generator";
 import { creditEngine } from "../../lib/credit-engine/credit-rules";
 import { reliabilityService } from "../../lib/order-assignment/reliability.service";
+import { Shipment } from "../../../prisma/generated/client";
+
+async function performShipmentTrack(shipment: Shipment) {
+  if (!shipment.trackingId) throw new Error("No tracking ID available yet");
+
+  const provider = ShipmentFactory.get();
+
+  try {
+    const result = await provider.trackShipment(shipment.trackingId);
+
+    const statusMap: Record<string, string> = {
+      "DELIVERED": "DELIVERED",
+      "IN TRANSIT": "IN_TRANSIT",
+      "OUT FOR DELIVERY": "OUT_FOR_DELIVERY",
+      "RETURNED": "RETURNED",
+      "CANCELED": "FAILED",
+    };
+
+    const mappedStatus = statusMap[result.currentStatus.toUpperCase()];
+    if (mappedStatus && mappedStatus !== shipment.status) {
+      await db.shipment.update({
+        where: { id: shipment.id },
+        data: { status: mappedStatus as any },
+      });
+
+      if (mappedStatus === "OUT_FOR_DELIVERY") {
+        await db.order.update({
+          where: { id: shipment.orderId },
+          data: { status: "OUT_FOR_DELIVERY" },
+        });
+      }
+
+      const order = await db.order.findUnique({
+        where: { id: shipment.orderId },
+        select: {
+          customerId: true,
+          customer: { select: { email: true, name: true } },
+        },
+      });
+
+      if (order?.customer) {
+        notificationService
+          .shipmentUpdated({
+            userId: order.customerId,
+            email: order.customer.email,
+            customerName: order.customer.name ?? "Customer",
+            orderId: shipment.orderId,
+            status: mappedStatus,
+            trackingId: shipment.trackingId ?? undefined,
+            trackingUrl: shipment.trackingUrl ?? undefined,
+          })
+          .catch(() => null);
+      }
+    }
+
+    return result.raw;
+  } catch (err: any) {
+    logger.warn({ err: err.message }, "Tracking unavailable");
+    return { shipment, tracking: null };
+  }
+}
 
 const STATUS_FORWARD_MAP: Record<string, string> = {
   PENDING: "pending", BOOKED: "booked", IN_TRANSIT: "in_transit",
@@ -57,7 +118,7 @@ export const shipmentService = {
         country: "India",
         email: shop.contactEmail,
         phone: address.phone,
-        paymentMethod: "Prepaid",
+        paymentMethod: order.paymentMethod === "COD" ? "COD" : "Prepaid",
         subTotal: Number(order.finalAmount ?? order.totalAmount),
         length: 10,
         breadth: 10,
@@ -158,63 +219,15 @@ export const shipmentService = {
       where: { id: shipmentId, order: { sellerId } },
     });
     if (!shipment) throw new Error("Shipment not found");
-    if (!shipment.trackingId) throw new Error("No tracking ID available yet");
+    return performShipmentTrack(shipment);
+  },
 
-    const provider = ShipmentFactory.get();
-
-    try {
-      const result = await provider.trackShipment(shipment.trackingId);
-
-      const statusMap: Record<string, string> = {
-        "DELIVERED": "DELIVERED",
-        "IN TRANSIT": "IN_TRANSIT",
-        "OUT FOR DELIVERY": "OUT_FOR_DELIVERY",
-        "RETURNED": "RETURNED",
-        "CANCELED": "FAILED",
-      };
-
-      const mappedStatus = statusMap[result.currentStatus.toUpperCase()];
-      if (mappedStatus && mappedStatus !== shipment.status) {
-        await db.shipment.update({
-          where: { id: shipmentId },
-          data: { status: mappedStatus as any },
-        });
-
-        if (mappedStatus === "OUT_FOR_DELIVERY") {
-          await db.order.update({
-            where: { id: shipment.orderId },
-            data: { status: "OUT_FOR_DELIVERY" },
-          });
-        }
-
-        const order = await db.order.findUnique({
-          where: { id: shipment.orderId },
-          select: {
-            customerId: true,
-            customer: { select: { email: true, name: true } },
-          },
-        });
-
-        if (order?.customer) {
-          notificationService
-            .shipmentUpdated({
-              userId: order.customerId,
-              email: order.customer.email,
-              customerName: order.customer.name ?? "Customer",
-              orderId: shipment.orderId,
-              status: mappedStatus,
-              trackingId: shipment.trackingId ?? undefined,
-              trackingUrl: shipment.trackingUrl ?? undefined,
-            })
-            .catch(() => null);
-        }
-      }
-
-      return result.raw;
-    } catch (err: any) {
-      logger.warn({ err: err.message }, "Tracking unavailable");
-      return { shipment, tracking: null };
-    }
+  async trackShipmentAsCustomer(customerId: string, shipmentId: string) {
+    const shipment = await db.shipment.findFirst({
+      where: { id: shipmentId, order: { customerId } },
+    });
+    if (!shipment) throw new Error("Shipment not found");
+    return performShipmentTrack(shipment);
   },
 
   async cancelShipment(sellerId: string, shipmentId: string, actorId: string) {
@@ -328,15 +341,21 @@ export const shipmentService = {
     }
 
     if (mappedStatus === "DELIVERED") {
-      await db.order.update({
-        where: { id: shipment.orderId },
-        data: { status: "DELIVERED" },
-      });
-
       const deliveredOrder = await db.order.findUnique({
         where: { id: shipment.orderId },
-        select: { assignedShopId: true },
+        select: { paymentMethod: true, assignedShopId: true },
       });
+
+      await db.order.update({
+        where: { id: shipment.orderId },
+        data: {
+          status: "DELIVERED",
+          ...(deliveredOrder?.paymentMethod === "COD"
+            ? { paymentStatus: "PAID" }
+            : {}),
+        },
+      });
+
       if (deliveredOrder?.assignedShopId) {
         reliabilityService.recomputeReliability(deliveredOrder.assignedShopId).catch(() => null);
       }
@@ -390,9 +409,8 @@ export const shipmentService = {
   },
 
   async listShipments(
-    sellerId: string,
     filters: {
-      status?: string; search?: string; shopId?: string; courierPartner?: string;
+      sellerId?: string; status?: string; search?: string; shopId?: string; courierPartner?: string;
       dateFrom?: string; dateTo?: string; page?: number; limit?: number;
       sortBy?: string; sortOrder?: "asc" | "desc";
     }
@@ -403,7 +421,7 @@ export const shipmentService = {
     const sortBy = allowedSort.includes(filters.sortBy ?? "") ? filters.sortBy! : "createdAt";
     const sortOrder = filters.sortOrder === "asc" ? "asc" : "desc";
 
-    const where: any = { order: { sellerId } };
+    const where: any = filters.sellerId ? { order: { sellerId: filters.sellerId } } : {};
     if (filters.status) where.status = STATUS_REVERSE_MAP[filters.status] ?? filters.status.toUpperCase();
     if (filters.shopId) where.shopId = filters.shopId;
     if (filters.courierPartner) where.provider = { equals: filters.courierPartner, mode: "insensitive" };
@@ -446,9 +464,9 @@ export const shipmentService = {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 } };
   },
 
-  async getShipment(sellerId: string, shipmentId: string) {
+  async getShipment(shipmentId: string) {
     const shipment = await db.shipment.findFirst({
-      where: { id: shipmentId, order: { sellerId } },
+      where: { id: shipmentId },
       include: {
         order: {
           include: {
@@ -543,9 +561,9 @@ export const shipmentService = {
     };
   },
 
-  async getShipmentWithOrder(sellerId: string, shipmentId: string) {
+  async getShipmentWithOrder(shipmentId: string) {
     const shipment = await db.shipment.findFirst({
-      where: { id: shipmentId, order: { sellerId } },
+      where: { id: shipmentId },
       include: {
         order: {
           select: {
@@ -577,9 +595,9 @@ export const shipmentService = {
     };
   },
 
-  async listShipmentsWithOrders(sellerId: string) {
+  async listShipmentsWithOrders(sellerId?: string) {
     const shipments = await db.shipment.findMany({
-      where: { order: { sellerId } },
+      where: sellerId ? { order: { sellerId } } : {},
       include: {
         order: {
           select: {
@@ -631,9 +649,9 @@ export const shipmentService = {
 
     return { success, failed: failures.length, failures };
   },
-  async exportShipmentsCsv(sellerId: string) {
+  async exportShipmentsCsv(sellerId?: string) {
     return db.shipment.findMany({
-      where: { order: { sellerId } },
+      where: sellerId ? { order: { sellerId } } : {},
       select: {
         id: true, displayId: true, status: true, provider: true, trackingId: true,
         createdAt: true, order: { select: { displayId: true } },

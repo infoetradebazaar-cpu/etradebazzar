@@ -40,4 +40,6 @@ export const RedisKeys = {
     skuId ? `lowstock:sku:${skuId}` : `lowstock:product:${productId}`,
   rateLimit: (prefix: string, identifier: string) => `rl:${prefix}:${identifier}`,
   pincodeLookup: (pincode: string) => `pincode:${pincode}`,
+  otpCode: (purpose: string, phone: string) => `otp:code:${purpose}:${phone}`,
+  otpAttempts: (purpose: string, phone: string) => `otp:attempts:${purpose}:${phone}`,
 } as const;

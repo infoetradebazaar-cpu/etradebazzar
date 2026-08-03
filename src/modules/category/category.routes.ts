@@ -16,6 +16,13 @@ import {
   updateCategoryAttributeSchema,
   categoryAttributeParamSchema,
   listCategoryAttributesSchema,
+  listAttributeOptionsSchema,
+  createAttributeOptionSchema,
+  updateAttributeOptionSchema,
+  attributeOptionParamSchema,
+  reviewAttributeOptionSchema,
+  mergeAttributeOptionSchema,
+  listPendingAttributeOptionsSchema,
 } from "./category-attribute.schema";
 
 const router = Router();
@@ -29,6 +36,15 @@ router.get(
 );
 
 router.get("/tree", publicLimiter, categoryController.getCategoryTree);
+
+router.get(
+  "/attributes/options/pending",
+  protect,
+  sellerLimiter,
+  requirePlatformAdmin("super_admin"),
+  validate(listPendingAttributeOptionsSchema),
+  categoryAttributeController.listPendingOptions,
+);
 
 router.get(
   "/:categoryId",
@@ -97,6 +113,70 @@ router.delete(
   requirePlatformAdmin("super_admin"),
   validate(categoryAttributeParamSchema),
   categoryAttributeController.deleteAttribute,
+);
+
+// Platform admin  attribute option (variant value) catalog + moderation
+router.get(
+  "/:categoryId/attributes/:attributeId/options",
+  protect,
+  sellerLimiter,
+  requirePlatformAdmin("super_admin"),
+  validate(listAttributeOptionsSchema),
+  categoryAttributeController.listOptions,
+);
+
+router.post(
+  "/:categoryId/attributes/:attributeId/options",
+  protect,
+  sellerLimiter,
+  requirePlatformAdmin("super_admin"),
+  validate(createAttributeOptionSchema),
+  categoryAttributeController.createOption,
+);
+
+router.patch(
+  "/:categoryId/attributes/:attributeId/options/:optionId",
+  protect,
+  sellerLimiter,
+  requirePlatformAdmin("super_admin"),
+  validate(updateAttributeOptionSchema),
+  categoryAttributeController.updateOption,
+);
+
+router.post(
+  "/:categoryId/attributes/:attributeId/options/:optionId/approve",
+  protect,
+  sellerLimiter,
+  requirePlatformAdmin("super_admin"),
+  validate(reviewAttributeOptionSchema),
+  categoryAttributeController.approveOption,
+);
+
+router.post(
+  "/:categoryId/attributes/:attributeId/options/:optionId/reject",
+  protect,
+  sellerLimiter,
+  requirePlatformAdmin("super_admin"),
+  validate(reviewAttributeOptionSchema),
+  categoryAttributeController.rejectOption,
+);
+
+router.post(
+  "/:categoryId/attributes/:attributeId/options/:optionId/merge",
+  protect,
+  sellerLimiter,
+  requirePlatformAdmin("super_admin"),
+  validate(mergeAttributeOptionSchema),
+  categoryAttributeController.mergeOption,
+);
+
+router.delete(
+  "/:categoryId/attributes/:attributeId/options/:optionId",
+  protect,
+  sellerLimiter,
+  requirePlatformAdmin("super_admin"),
+  validate(attributeOptionParamSchema),
+  categoryAttributeController.deleteOption,
 );
 
 export default router;

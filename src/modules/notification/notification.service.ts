@@ -190,6 +190,23 @@ export const notificationService = {
         });
     },
 
+    async orderCancelled(params: { userId: string; email: string; customerName: string; orderId: string }) {
+        return this.notify({
+            userId: params.userId,
+            email: params.email,
+            type: "ORDER_CANCELLED",
+            title: "Order cancelled",
+            message: `Your order #${params.orderId} has been cancelled.`,
+            channels: ["email", "sse"],
+            emailTemplate: "order-cancelled",
+            emailData: {
+                customerName: params.customerName,
+                orderId: params.orderId,
+                orderUrl: `${config.appUrl}/orders/${params.orderId}`,
+            },
+        });
+    },
+
     async shipmentUpdated(params: {
         userId: string; email: string; phone?: string;
         customerName: string; orderId: string; status: string;

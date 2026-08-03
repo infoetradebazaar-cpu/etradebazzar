@@ -1,25 +1,25 @@
 import { Router } from "express";
 import { shipmentController } from "./shipment.controller";
 import { protect } from "../../middleware/auth";
-import { resolveTenant } from "../../middleware/tenant";
+import { resolveTenant, requirePlatformAdmin } from "../../middleware/tenant";
 import { requireSellerRole } from "../../middleware/rbac";
-import { sellerLimiter, } from "../../middleware/rate-limit";
+import { sellerLimiter, publicLimiter } from "../../middleware/rate-limit";
 import express from "express";
 import { validate } from "../../utils/validate";
 import {
     bulkCancelShipmentsSchema,
     shipmentParamSchema,
     serviceabilitySchema,
+    listAllShipmentsSchema,
 } from "./shipment.schema";
 const router = Router();
 
-//Seller
+//Platform admin
 router.get(
     "/with-orders",
     protect,
     sellerLimiter,
-    resolveTenant,
-    requireSellerRole("owner", "manager", "staff"),
+    requirePlatformAdmin("super_admin"),
     shipmentController.listShipmentsWithOrders
 );
 
@@ -27,8 +27,8 @@ router.get(
     "/",
     protect,
     sellerLimiter,
-    resolveTenant,
-    requireSellerRole("owner", "manager", "staff"),
+    requirePlatformAdmin("super_admin"),
+    validate(listAllShipmentsSchema),
     shipmentController.listShipments
 );
 
@@ -46,8 +46,7 @@ router.get(
     "/:shipmentId/with-order",
     protect,
     sellerLimiter,
-    resolveTenant,
-    requireSellerRole("owner", "manager", "staff"),
+    requirePlatformAdmin("super_admin"),
     validate(shipmentParamSchema),
     shipmentController.getShipmentWithOrder
 );
@@ -56,8 +55,7 @@ router.get(
     "/:shipmentId",
     protect,
     sellerLimiter,
-    resolveTenant,
-    requireSellerRole("owner", "manager", "staff"),
+    requirePlatformAdmin("super_admin"),
     validate(shipmentParamSchema),
     shipmentController.getShipment
 );
@@ -65,9 +63,8 @@ router.get(
 router.get(
     "/:shipmentId/track",
     protect,
-    sellerLimiter,
+    publicLimiter,
     resolveTenant,
-    requireSellerRole("owner", "manager", "staff"),
     validate(shipmentParamSchema),
     shipmentController.trackShipment
 );
@@ -96,8 +93,7 @@ router.get(
     "/export",
     protect,
     sellerLimiter,
-    resolveTenant,
-    requireSellerRole("owner", "manager"),
+    requirePlatformAdmin("super_admin"),
     shipmentController.exportShipmentsCsv
 );
 

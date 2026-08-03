@@ -226,6 +226,7 @@ export const productService = {
         include: {
           images: { orderBy: { order: "asc" } },
           skus: true,
+          variants: { include: { values: true } },
           shop: { select: { id: true, name: true, slug: true } },
           category: { select: { id: true, name: true } },
         },
@@ -259,6 +260,7 @@ export const productService = {
         include: {
           images: { orderBy: { order: "asc" } },
           skus: true,
+          variants: { include: { values: true } },
           shop: {
             select: {
               id: true,

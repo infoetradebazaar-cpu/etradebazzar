@@ -249,7 +249,441 @@ const productNames: Record<string, string[]> = {
   ],
 };
 
-// Fix Permissions
+const categoryAttributeDefs: Record<
+  string,
+  {
+    key: string;
+    label: string;
+    type: "TEXT" | "NUMBER" | "ENUM" | "BOOLEAN";
+    required: boolean;
+    isVariant: boolean;
+    options?: string[];
+    unit?: string;
+    sortOrder: number;
+  }[]
+> = {
+  Electronics: [
+    {
+      key: "brand",
+      label: "Brand",
+      type: "TEXT",
+      required: true,
+      isVariant: false,
+      sortOrder: 1,
+    },
+    {
+      key: "model_number",
+      label: "Model Number",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 2,
+    },
+    {
+      key: "warranty_period",
+      label: "Warranty Period",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 3,
+    },
+    {
+      key: "power_consumption",
+      label: "Power Consumption",
+      type: "NUMBER",
+      required: false,
+      isVariant: false,
+      unit: "watts",
+      sortOrder: 4,
+    },
+    {
+      key: "color",
+      label: "Color",
+      type: "ENUM",
+      required: false,
+      isVariant: true,
+      options: ["Black", "White", "Blue", "Silver", "Gold"],
+      sortOrder: 5,
+    },
+  ],
+  Fashion: [
+    {
+      key: "brand",
+      label: "Brand",
+      type: "TEXT",
+      required: true,
+      isVariant: false,
+      sortOrder: 1,
+    },
+    {
+      key: "material",
+      label: "Material",
+      type: "TEXT",
+      required: true,
+      isVariant: false,
+      sortOrder: 2,
+    },
+    {
+      key: "care_instructions",
+      label: "Care Instructions",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 3,
+    },
+    {
+      key: "gender",
+      label: "Gender",
+      type: "ENUM",
+      required: false,
+      isVariant: false,
+      options: ["Men", "Women", "Unisex"],
+      sortOrder: 4,
+    },
+    {
+      key: "size",
+      label: "Size",
+      type: "ENUM",
+      required: true,
+      isVariant: true,
+      options: ["S", "M", "L", "XL", "XXL"],
+      sortOrder: 5,
+    },
+    {
+      key: "color",
+      label: "Color",
+      type: "ENUM",
+      required: false,
+      isVariant: true,
+      options: ["Black", "White", "Blue", "Red", "Green", "Navy"],
+      sortOrder: 6,
+    },
+  ],
+  "Home & Kitchen": [
+    {
+      key: "material",
+      label: "Material",
+      type: "TEXT",
+      required: true,
+      isVariant: false,
+      sortOrder: 1,
+    },
+    {
+      key: "capacity",
+      label: "Capacity",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 2,
+    },
+    {
+      key: "dishwasher_safe",
+      label: "Dishwasher Safe",
+      type: "BOOLEAN",
+      required: false,
+      isVariant: false,
+      sortOrder: 3,
+    },
+    {
+      key: "warranty_period",
+      label: "Warranty Period",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 4,
+    },
+    {
+      key: "color",
+      label: "Color",
+      type: "ENUM",
+      required: false,
+      isVariant: true,
+      options: ["Black", "White", "Brown", "Grey"],
+      sortOrder: 5,
+    },
+  ],
+  Sports: [
+    {
+      key: "material",
+      label: "Material",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 1,
+    },
+    {
+      key: "skill_level",
+      label: "Skill Level",
+      type: "ENUM",
+      required: false,
+      isVariant: false,
+      options: ["Beginner", "Intermediate", "Advanced"],
+      sortOrder: 2,
+    },
+    {
+      key: "age_group",
+      label: "Age Group",
+      type: "ENUM",
+      required: false,
+      isVariant: false,
+      options: ["Kids", "Teens", "Adults"],
+      sortOrder: 3,
+    },
+    {
+      key: "size",
+      label: "Size",
+      type: "ENUM",
+      required: false,
+      isVariant: true,
+      options: ["S", "M", "L", "XL"],
+      sortOrder: 4,
+    },
+  ],
+  Beauty: [
+    {
+      key: "brand",
+      label: "Brand",
+      type: "TEXT",
+      required: true,
+      isVariant: false,
+      sortOrder: 1,
+    },
+    {
+      key: "skin_type",
+      label: "Skin Type",
+      type: "ENUM",
+      required: false,
+      isVariant: false,
+      options: ["All", "Oily", "Dry", "Normal", "Combination"],
+      sortOrder: 2,
+    },
+    {
+      key: "shelf_life",
+      label: "Shelf Life",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 3,
+    },
+    {
+      key: "paraben_free",
+      label: "Paraben Free",
+      type: "BOOLEAN",
+      required: false,
+      isVariant: false,
+      sortOrder: 4,
+    },
+  ],
+  Books: [
+    {
+      key: "author",
+      label: "Author",
+      type: "TEXT",
+      required: true,
+      isVariant: false,
+      sortOrder: 1,
+    },
+    {
+      key: "publisher",
+      label: "Publisher",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 2,
+    },
+    {
+      key: "pages",
+      label: "Pages",
+      type: "NUMBER",
+      required: false,
+      isVariant: false,
+      sortOrder: 3,
+    },
+    {
+      key: "language",
+      label: "Language",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 4,
+    },
+  ],
+  Automotive: [
+    {
+      key: "brand",
+      label: "Brand",
+      type: "TEXT",
+      required: true,
+      isVariant: false,
+      sortOrder: 1,
+    },
+    {
+      key: "compatible_models",
+      label: "Compatible Models",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 2,
+    },
+    {
+      key: "warranty_period",
+      label: "Warranty Period",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 3,
+    },
+  ],
+  Health: [
+    {
+      key: "brand",
+      label: "Brand",
+      type: "TEXT",
+      required: true,
+      isVariant: false,
+      sortOrder: 1,
+    },
+    {
+      key: "dosage",
+      label: "Dosage",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 2,
+    },
+    {
+      key: "vegetarian",
+      label: "Vegetarian",
+      type: "BOOLEAN",
+      required: false,
+      isVariant: false,
+      sortOrder: 3,
+    },
+    {
+      key: "shelf_life",
+      label: "Shelf Life",
+      type: "TEXT",
+      required: false,
+      isVariant: false,
+      sortOrder: 4,
+    },
+  ],
+};
+
+function generateProductAttributes(
+  parentCatName: string,
+  subCatName: string,
+): Record<string, string | number | boolean | null> {
+  const defs = categoryAttributeDefs[parentCatName];
+  if (!defs) return {};
+
+  const attrs: Record<string, string | number | boolean | null> = {};
+  for (const def of defs) {
+    if (def.isVariant) continue;
+    if (def.type === "TEXT") {
+      if (def.key === "brand") {
+        const brands = [
+          "Samsung",
+          "Apple",
+          "Sony",
+          "Nike",
+          "Adidas",
+          "Puma",
+          "LG",
+          "Philips",
+          "Havells",
+          "Bosch",
+          "Himalaya",
+          "Mamaearth",
+          "Penguin",
+          "HarperCollins",
+        ];
+        attrs[def.key] = randomItem(brands);
+      } else if (def.key === "material") {
+        attrs[def.key] = randomItem([
+          "Cotton",
+          "Polyester",
+          "Stainless Steel",
+          "Aluminum",
+          "Plastic",
+          "Wood",
+          "Leather",
+        ]);
+      } else if (def.key === "author") {
+        attrs[def.key] = `${randomItem(firstNames)} ${randomItem(lastNames)}`;
+      } else if (def.key === "publisher") {
+        attrs[def.key] = randomItem([
+          "Penguin Books",
+          "HarperCollins",
+          "Random House",
+          "Oxford Press",
+        ]);
+      } else if (def.key === "warranty_period") {
+        attrs[def.key] = randomItem([
+          "6 months",
+          "1 year",
+          "2 years",
+          "3 years",
+        ]);
+      } else if (def.key === "care_instructions") {
+        attrs[def.key] = randomItem([
+          "Machine wash cold",
+          "Hand wash only",
+          "Dry clean only",
+          "Do not bleach",
+        ]);
+      } else if (def.key === "capacity") {
+        attrs[def.key] = randomItem(["1L", "2L", "5L", "10L"]);
+      } else if (def.key === "dosage") {
+        attrs[def.key] = randomItem([
+          "1 tablet daily",
+          "2 tablets daily",
+          "As directed by physician",
+        ]);
+      } else if (def.key === "shelf_life") {
+        attrs[def.key] = randomItem([
+          "12 months",
+          "18 months",
+          "24 months",
+          "36 months",
+        ]);
+      } else if (def.key === "compatible_models") {
+        attrs[def.key] = "Universal fit";
+      } else if (def.key === "model_number") {
+        attrs[def.key] = `MODEL-${randomInt(1000, 9999)}`;
+      } else if (def.key === "language") {
+        attrs[def.key] = randomItem(["English", "Hindi", "Spanish", "French"]);
+      } else {
+        attrs[def.key] = `Sample ${def.label}`;
+      }
+    } else if (def.type === "NUMBER") {
+      if (def.key === "pages") {
+        attrs[def.key] = randomInt(50, 800);
+      } else if (def.key === "power_consumption") {
+        attrs[def.key] = randomInt(5, 500);
+      } else {
+        attrs[def.key] = randomInt(1, 100);
+      }
+    } else if (def.type === "ENUM") {
+      if (def.options && def.options.length > 0) {
+        attrs[def.key] = randomItem(def.options);
+      }
+    } else if (def.type === "BOOLEAN") {
+      attrs[def.key] = Math.random() > 0.5;
+    }
+  }
+  return attrs;
+}
+
+function getVariantAxesForCategory(
+  parentCatName: string,
+): { name: string; values: string[] }[] {
+  const defs = categoryAttributeDefs[parentCatName];
+  if (!defs) return [];
+  return defs
+    .filter((d) => d.isVariant)
+    .map((d) => ({ name: d.label, values: d.options ?? [] }));
+}
 async function fixSellerPermissions() {
   logger.info("Fixing seller role permissions...");
 
@@ -291,6 +725,31 @@ async function fixSellerPermissions() {
   }
 
   logger.info(`Permissions fixed for ${fixed} sellers.`);
+}
+
+async function cleanProductData() {
+  logger.info("Cleaning product-related tables...");
+  const tableNames = [
+    "wishlist_items",
+    "cart_items",
+    "order_items",
+    "return_shipments",
+    "return_requests",
+    "review_helpful",
+    "reviews",
+    "product_skus",
+    "variant_option_values",
+    "variant_options",
+    "product_images",
+    "product_commissions",
+    "products",
+    "category_attributes",
+  ];
+  for (const table of tableNames) {
+    await db.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
+    logger.info(`  Truncated ${table}`);
+  }
+  logger.info("Product tables cleaned.");
 }
 
 // Seed
@@ -406,9 +865,9 @@ async function seedComprehensive() {
         ["low_stock_threshold", "10"],
       ].map(([key, value]) =>
         db.platformConfig.upsert({
-          where: { key },
+          where: { key: key! },
           update: {},
-          create: { key, value },
+          create: { key: key!, value: value! },
         }),
       ),
     );
@@ -417,10 +876,148 @@ async function seedComprehensive() {
     const existingSellers = await db.seller.findFirst();
     if (existingSellers) {
       logger.info(
-        "Comprehensive data already exists, skipping data creation...",
+        "Sellers already exist — cleaning product data and re-seeding products...",
       );
+
+      // Clean all product-related data
+      await cleanProductData();
+
+      // Fetch existing shops and categories
+      const existingShops = await db.shop.findMany({
+        where: { status: "APPROVED" },
+      });
+      const existingCategories = await db.category.findMany();
+      const categoryMap = new Map<string, string>();
+      for (const cat of existingCategories) {
+        categoryMap.set(cat.name, cat.id);
+      }
+
+      // Create category attributes for existing categories
+      logger.info("Seeding category attributes...");
+      for (const parentCat of categoryTree) {
+        const parentId = categoryMap.get(parentCat.name);
+        if (!parentId) continue;
+        const defs = categoryAttributeDefs[parentCat.name];
+        if (!defs) continue;
+        for (const def of defs) {
+          await db.categoryAttribute
+            .create({
+              data: {
+                categoryId: parentId,
+                key: def.key,
+                label: def.label,
+                type: def.type,
+                required: def.required,
+                isVariant: def.isVariant,
+                options: def.options ?? [],
+                unit: def.unit ?? null,
+                sortOrder: def.sortOrder,
+              },
+            })
+            .catch(() => {});
+        }
+      }
+
+      // Re-seed products
+      logger.info("Re-seeding products...");
+      const products: any[] = [];
+      let skuCounter = 100000;
+      const allSubCats = categoryTree.flatMap((c) => c.subs);
+      for (const shop of existingShops) {
+        for (let i = 0; i < 6; i++) {
+          const subCat = randomItem(allSubCats);
+          const catId =
+            categoryMap.get(subCat) ?? categoryMap.get("Electronics")!;
+          const parentCat = categoryTree.find((c) => c.subs.includes(subCat));
+          const parentCatName = parentCat?.name ?? "Electronics";
+          const names = productNames[subCat] ?? ["Generic Product"];
+          const pName = `${randomItem(names)} ${randomItem(["Pro", "Plus", "Elite", "Basic", "Premium"])}`;
+          const price = randomDecimal(299, 49999);
+          const productDisplayId = await generateDisplayId("product");
+          const attrs = generateProductAttributes(parentCatName, subCat);
+          const product = await db.product.create({
+            data: {
+              shopId: shop.id,
+              sellerId: shop.sellerId,
+              categoryId: catId,
+              displayId: productDisplayId,
+              name: pName,
+              description: `Premium ${pName}. Manufacturer warranty included.`,
+              price,
+              compareAtPrice: price * 1.2,
+              sku: `SKU-${++skuCounter}`,
+              stock: randomInt(20, 500),
+              lowStockThreshold: 10,
+              weightGrams: randomInt(100, 5000),
+              length: randomDecimal(5, 60),
+              width: randomDecimal(5, 60),
+              height: randomDecimal(2, 30),
+              isDigital: false,
+              attributes: attrs,
+              status: "APPROVED",
+              reviewedBy: adminUser.id,
+              reviewedAt: randomDate(new Date("2024-01-01"), new Date()),
+            },
+          });
+          await Promise.all(
+            [1, 2, 3].map((n) =>
+              db.productImage.create({
+                data: {
+                  productId: product.id,
+                  url: `https://picsum.photos/seed/${product.id}${n}/400/400`,
+                  key: `${product.id}-${n}`,
+                  order: n - 1,
+                },
+              }),
+            ),
+          );
+          const variantAxes = getVariantAxesForCategory(parentCatName);
+          for (const axis of variantAxes) {
+            const opt = await db.variantOption.create({
+              data: { productId: product.id, name: axis.name },
+            });
+            await Promise.all(
+              axis.values.map((v) =>
+                db.variantOptionValue.create({
+                  data: { optionId: opt.id, value: v },
+                }),
+              ),
+            );
+          }
+          const colorValues = variantAxes.find((a) => a.name === "Color")
+            ?.values ?? ["Default"];
+          for (const color of colorValues.slice(0, 3)) {
+            await db.productSKU.create({
+              data: {
+                productId: product.id,
+                sku: `SKU-${++skuCounter}-${color.toUpperCase()}`,
+                price,
+                stock: randomInt(5, 100),
+                minQuantity: 1,
+                options: variantAxes.reduce(
+                  (acc, a) => {
+                    acc[a.name] = a.name === "Color" ? color : a.values[0]!;
+                    return acc;
+                  },
+                  {} as Record<string, string>,
+                ),
+              },
+            });
+          }
+          await db.productCommission.create({
+            data: {
+              productId: product.id,
+              rate: randomDecimal(3, 10),
+              setBy: adminUser.id,
+            },
+          });
+          products.push(product);
+        }
+      }
+
       await fixSellerPermissions();
-      logger.info("✅ Seed completed (permission fix only)!");
+      logger.info("✅ Seed completed (product re-seed)!");
+      logger.info(`  Products: ${products.length}`);
       return;
     }
 
@@ -546,21 +1143,21 @@ async function seedComprehensive() {
       const [ownerRole, managerRole, staffRole] = await Promise.all([
         db.sellerRole.create({
           data: {
-            sellerId: allSellers[i].id,
+            sellerId: allSellers[i]!.id,
             name: "owner",
             description: "Business owner",
           },
         }),
         db.sellerRole.create({
           data: {
-            sellerId: allSellers[i].id,
+            sellerId: allSellers[i]!.id,
             name: "manager",
             description: "Store manager",
           },
         }),
         db.sellerRole.create({
           data: {
-            sellerId: allSellers[i].id,
+            sellerId: allSellers[i]!.id,
             name: "staff",
             description: "Staff member",
           },
@@ -583,8 +1180,8 @@ async function seedComprehensive() {
       );
       await db.sellerMember.create({
         data: {
-          userId: allSellerUsers[i].id,
-          sellerId: allSellers[i].id,
+          userId: allSellerUsers[i]!.id,
+          sellerId: allSellers[i]!.id,
           roleId: ownerRole.id,
         },
       });
@@ -592,7 +1189,7 @@ async function seedComprehensive() {
 
     // KYC + Bank details + 3 extra team members for approved sellers
     for (let i = 0; i < 2; i++) {
-      const seller = allSellers[i];
+      const seller = allSellers[i]!;
       await db.sellerKyc.create({
         data: {
           sellerId: seller.id,
@@ -632,7 +1229,7 @@ async function seedComprehensive() {
             userId: teamUser.id,
             sellerId: seller.id,
             roleId:
-              j === 0 ? sellerRoles[i].manager.id : sellerRoles[i].staff.id,
+              j === 0 ? sellerRoles[i]!.manager.id : sellerRoles[i]!.staff.id,
           },
         });
       }
@@ -688,6 +1285,32 @@ async function seedComprehensive() {
       }
     }
 
+    // 6b. Category Attributes
+    logger.info("Seeding category attributes...");
+    for (const parentCat of categoryTree) {
+      const parentId = categoryMap.get(parentCat.name);
+      if (!parentId) continue;
+      const defs = categoryAttributeDefs[parentCat.name];
+      if (!defs) continue;
+      for (const def of defs) {
+        await db.categoryAttribute
+          .create({
+            data: {
+              categoryId: parentId,
+              key: def.key,
+              label: def.label,
+              type: def.type,
+              required: def.required,
+              isVariant: def.isVariant,
+              options: def.options ?? [],
+              unit: def.unit ?? null,
+              sortOrder: def.sortOrder,
+            },
+          })
+          .catch(() => {});
+      }
+    }
+
     // 7. Shops
     logger.info("Seeding shops...");
     const shops: any[] = [];
@@ -700,7 +1323,7 @@ async function seedComprehensive() {
             sellerId: seller.id,
             displayId: shopDisplayId,
             name: shopName,
-            slug: `${slugify(seller.businessName)}-${shopNames[i].toLowerCase()}-${uid()}`,
+            slug: `${slugify(seller.businessName)}-${shopNames[i]!.toLowerCase()}-${uid()}`,
             description: `${shopName}  quality guaranteed`,
             category: randomItem(categoryTree.map((c) => c.name)),
             contactEmail: seller.email,
@@ -761,10 +1384,13 @@ async function seedComprehensive() {
         const subCat = randomItem(allSubCats);
         const catId =
           categoryMap.get(subCat) ?? categoryMap.get("Electronics")!;
+        const parentCat = categoryTree.find((c) => c.subs.includes(subCat));
+        const parentCatName = parentCat?.name ?? "Electronics";
         const names = productNames[subCat] ?? ["Generic Product"];
         const pName = `${randomItem(names)} ${randomItem(["Pro", "Plus", "Elite", "Basic", "Premium"])}`;
         const price = randomDecimal(299, 49999);
         const productDisplayId = await generateDisplayId("product");
+        const attrs = generateProductAttributes(parentCatName, subCat);
         const product = await db.product.create({
           data: {
             shopId: shop.id,
@@ -783,6 +1409,7 @@ async function seedComprehensive() {
             width: randomDecimal(5, 60),
             height: randomDecimal(2, 30),
             isDigital: false,
+            attributes: attrs,
             status: "APPROVED",
             reviewedBy: adminUser.id,
             reviewedAt: randomDate(new Date("2024-01-01"), new Date()),
@@ -800,27 +1427,22 @@ async function seedComprehensive() {
             }),
           ),
         );
-        const colorOpt = await db.variantOption.create({
-          data: { productId: product.id, name: "Color" },
-        });
-        await Promise.all(
-          ["Black", "White", "Blue", "Red"].map((v) =>
-            db.variantOptionValue.create({
-              data: { optionId: colorOpt.id, value: v },
-            }),
-          ),
-        );
-        const sizeOpt = await db.variantOption.create({
-          data: { productId: product.id, name: "Size" },
-        });
-        await Promise.all(
-          ["S", "M", "L", "XL"].map((v) =>
-            db.variantOptionValue.create({
-              data: { optionId: sizeOpt.id, value: v },
-            }),
-          ),
-        );
-        for (const color of ["Black", "White", "Blue"]) {
+        const variantAxes = getVariantAxesForCategory(parentCatName);
+        for (const axis of variantAxes) {
+          const opt = await db.variantOption.create({
+            data: { productId: product.id, name: axis.name },
+          });
+          await Promise.all(
+            axis.values.map((v) =>
+              db.variantOptionValue.create({
+                data: { optionId: opt.id, value: v },
+              }),
+            ),
+          );
+        }
+        const colorValues = variantAxes.find((a) => a.name === "Color")
+          ?.values ?? ["Default"];
+        for (const color of colorValues.slice(0, 3)) {
           await db.productSKU.create({
             data: {
               productId: product.id,
@@ -828,7 +1450,13 @@ async function seedComprehensive() {
               price,
               stock: randomInt(5, 100),
               minQuantity: 1,
-              options: { Color: color, Size: "M" },
+              options: variantAxes.reduce(
+                (acc, a) => {
+                  acc[a.name] = a.name === "Color" ? color : a.values[0]!;
+                  return acc;
+                },
+                {} as Record<string, string>,
+              ),
             },
           });
         }
@@ -1170,7 +1798,7 @@ async function seedComprehensive() {
     // 17. Coupon Usages
     logger.info("Seeding coupon usages...");
     for (let i = 0; i < 8; i++) {
-      const { order } = orders[i];
+      const { order } = orders[i]!;
       if (usedCouponOrders.has(order.id)) continue;
       await db.couponUsage.create({
         data: {

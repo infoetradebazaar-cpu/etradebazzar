@@ -7,6 +7,7 @@ const clientErrors = [
   "SKU not found",
   "SKU code already exists",
   "Variant option not found",
+  'Variant option "',
   "Variant value not found",
   "Cannot modify approved product variants",
   "Delete all SKUs before removing variant options",

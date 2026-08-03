@@ -3,6 +3,9 @@ import bcrypt from "bcryptjs";
 import { creditEngine } from "../../lib/credit-engine/credit-rules";
 import { jwtService } from "../../utils/jwt";
 import { logger } from "../../utils/logger";
+import { otpService } from "../../lib/otp/otp.service";
+
+const PHONE_LINK_PURPOSE = "phone-link";
 
 export const customerService = {
   async register(data: {
@@ -80,6 +83,31 @@ export const customerService = {
     const updated = await db.user.update({ where: { id: userId }, data });
     creditEngine.checkProfileCompletion(userId).catch(() => null);
     return updated;
+  },
+
+  async requestPhoneLink(userId: string, phone: string) {
+    const existing = await db.user.findUnique({ where: { phone } });
+    if (existing && existing.id !== userId) {
+      throw new Error("Phone number already linked to another account");
+    }
+    await otpService.requestOtp(PHONE_LINK_PURPOSE, phone);
+    return { sent: true };
+  },
+
+  async verifyPhoneLink(userId: string, phone: string, otp: string) {
+    const valid = await otpService.verifyOtp(PHONE_LINK_PURPOSE, phone, otp);
+    if (!valid) throw new Error("Invalid or expired OTP");
+
+    const existing = await db.user.findUnique({ where: { phone } });
+    if (existing && existing.id !== userId) {
+      throw new Error("Phone number already linked to another account");
+    }
+
+    return db.user.update({
+      where: { id: userId },
+      data: { phone, phoneVerifiedAt: new Date() },
+      select: { id: true, phone: true, phoneVerifiedAt: true },
+    });
   },
 
   async listMyOrders(

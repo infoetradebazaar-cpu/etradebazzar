@@ -1,9 +1,9 @@
 import { db } from "../../db/index";
 
 type CategoryVariantAttribute = {
+  id: string;
   label: string;
   type: "TEXT" | "NUMBER" | "ENUM" | "BOOLEAN";
-  options: string[];
 };
 
 async function findCategoryVariantAttribute(
@@ -26,15 +26,67 @@ async function findCategoryVariantAttribute(
   return match;
 }
 
-function assertAllowedValues(attribute: CategoryVariantAttribute, values: string[]): void {
-  if (attribute.type !== "ENUM") return;
-  for (const value of values) {
-    if (!attribute.options.includes(value)) {
+async function resolveVariantValues(
+  attribute: CategoryVariantAttribute,
+  sellerId: string,
+  values: string[],
+): Promise<string[]> {
+  if (attribute.type !== "ENUM") return values;
+
+  const existing = await db.categoryAttributeOption.findMany({
+    where: { categoryAttributeId: attribute.id },
+  });
+  const byValue = new Map(existing.map((o) => [o.value.toLowerCase(), o]));
+  const byId = new Map(existing.map((o) => [o.id, o]));
+
+  const resolved: string[] = [];
+  const toCreate: string[] = [];
+
+  for (const rawValue of values) {
+    const match = byValue.get(rawValue.toLowerCase());
+    if (!match) {
+      toCreate.push(rawValue);
+      resolved.push(rawValue);
+      continue;
+    }
+    if (match.status === "REJECTED") {
       throw new Error(
-        `Invalid variant value "${value}" for attribute "${attribute.label}"`,
+        `Variant value "${rawValue}" for attribute "${attribute.label}" was rejected and can't be used`,
       );
     }
+    if (match.status === "MERGED" && match.mergedIntoId) {
+      const canonical = byId.get(match.mergedIntoId);
+      resolved.push(canonical?.value ?? match.value);
+      continue;
+    }
+    resolved.push(match.value);
   }
+
+  if (toCreate.length) {
+    await db.categoryAttributeOption.createMany({
+      data: toCreate.map((value) => ({
+        categoryAttributeId: attribute.id,
+        value,
+        status: "PENDING" as const,
+        createdBySellerId: sellerId,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  return resolved;
+}
+
+function dedupeCaseInsensitive(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
 }
 
 export const productVariantService = {
@@ -60,14 +112,18 @@ export const productVariantService = {
       product.categoryId,
       data.name,
     );
-    if (categoryAttribute) assertAllowedValues(categoryAttribute, data.values);
+    const values = dedupeCaseInsensitive(
+      categoryAttribute
+        ? await resolveVariantValues(categoryAttribute, sellerId, data.values)
+        : data.values,
+    );
 
     return db.variantOption.create({
       data: {
         productId,
         name: data.name,
         values: {
-          create: data.values.map((value) => ({ value })),
+          create: values.map((value) => ({ value })),
         },
       },
       include: { values: true },
@@ -94,13 +150,17 @@ export const productVariantService = {
       product.categoryId,
       option.name,
     );
-    if (categoryAttribute) assertAllowedValues(categoryAttribute, values);
+    const resolvedValues = dedupeCaseInsensitive(
+      categoryAttribute
+        ? await resolveVariantValues(categoryAttribute, sellerId, values)
+        : values,
+    );
 
     const existing = await db.variantOptionValue.findMany({
       where: { optionId },
     });
-    const existingValues = new Set(existing.map((v) => v.value));
-    const newValues = values.filter((v) => !existingValues.has(v));
+    const existingValues = new Set(existing.map((v) => v.value.toLowerCase()));
+    const newValues = resolvedValues.filter((v) => !existingValues.has(v.toLowerCase()));
 
     if (!newValues.length) throw new Error("All values already exist");
 
