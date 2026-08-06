@@ -47,6 +47,27 @@ export const payoutController = {
     }
   },
 
+  async getMyPayoutById(req: Request, res: Response) {
+    try {
+      if (!req.seller) {
+        return res
+          .status(403)
+          .json({ success: false, error: "Seller context not found" });
+      }
+      const { payoutId } = req.params;
+      const result = await payoutService.getMyPayoutById(req.seller.id, payoutId as string);
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Get my payout by id failed");
+      if (error.message === "Payout not found") {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async setPlatformConfig(req: Request, res: Response) {
     try {
       const actorId = req.user!.id;

@@ -2,14 +2,26 @@ import { Request, Response } from "express";
 import { shipmentService } from "./shipment.service";
 import { logger } from "../../utils/logger";
 import { toCsv } from "../../utils/csv";
+import { db } from "../../db/index";
 
 export const shipmentController = {
     async trackShipment(req: Request, res: Response) {
         try {
             const { shipmentId } = req.params;
-            const result = req.seller?.id
-                ? await shipmentService.trackShipment(req.seller.id, String(shipmentId))
-                : await shipmentService.trackShipmentAsCustomer(req.user!.id, String(shipmentId));
+            let result;
+            if (req.seller?.id) {
+                result = await shipmentService.trackShipment(req.seller.id, String(shipmentId));
+            } else {
+                const platformMember = await db.platformMember.findUnique({
+                    where: { userId: req.user!.id },
+                    select: { id: true },
+                });
+                if (platformMember) {
+                    result = await shipmentService.trackShipmentAsAdmin(String(shipmentId));
+                } else {
+                    result = await shipmentService.trackShipmentAsCustomer(req.user!.id, String(shipmentId));
+                }
+            }
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Track shipment failed");

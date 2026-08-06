@@ -98,6 +98,24 @@ router.post(
   orderController.setThreshold,
 );
 
+router.get(
+  "/threshold",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  requireSellerRole("owner", "manager"),
+  orderController.getThresholds,
+);
+
+router.delete(
+  "/threshold/:productCategory",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  requireSellerRole("owner"),
+  orderController.deleteThreshold,
+);
+
 router.post(
   "/commission",
   protect,

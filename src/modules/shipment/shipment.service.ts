@@ -222,6 +222,14 @@ export const shipmentService = {
     return performShipmentTrack(shipment);
   },
 
+  async trackShipmentAsAdmin(shipmentId: string) {
+    const shipment = await db.shipment.findFirst({
+      where: { id: shipmentId },
+    });
+    if (!shipment) throw new Error("Shipment not found");
+    return performShipmentTrack(shipment);
+  },
+
   async trackShipmentAsCustomer(customerId: string, shipmentId: string) {
     const shipment = await db.shipment.findFirst({
       where: { id: shipmentId, order: { customerId } },

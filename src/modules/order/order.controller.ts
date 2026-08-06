@@ -206,6 +206,38 @@ export const orderController = {
     }
   },
 
+  async getThresholds(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const result = await orderService.getThresholds(sellerId);
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Get thresholds failed");
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async deleteThreshold(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const { productCategory } = req.params;
+      await orderService.deleteThreshold(sellerId, productCategory as string);
+      return res.json({ success: true, data: null });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Delete threshold failed");
+      if (error?.code === "P2025") {
+        return res
+          .status(404)
+          .json({ success: false, error: "Threshold not found" });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async setCommission(req: Request, res: Response) {
     try {
       const actorId = req.user!.id;

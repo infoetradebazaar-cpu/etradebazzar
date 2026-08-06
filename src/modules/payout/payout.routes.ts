@@ -32,6 +32,16 @@ router.get(
   payoutController.getMyPayoutHistory,
 );
 
+// Seller-facing: get own payout by id
+router.get(
+  "/me/:payoutId",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(payoutParamSchema),
+  payoutController.getMyPayoutById,
+);
+
 router.post(
   "/webhook",
   express.raw({ type: "application/json" }),

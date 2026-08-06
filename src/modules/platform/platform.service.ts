@@ -215,10 +215,63 @@ export const platformService = {
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
         take: limit,
+        include: {
+          seller: { select: { id: true, name: true, businessName: true, email: true } },
+        },
       }),
       db.auditLog.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 } };
+    // Batch-lookup actor names for platform actors (User table)
+    const platformActorIds = Array.from(
+      new Set(
+        data
+          .filter((l) => l.actorType === "platform")
+          .map((l) => l.actorId),
+      ),
+    );
+    const sellerActorIds = Array.from(
+      new Set(
+        data
+          .filter((l) => l.actorType === "seller")
+          .map((l) => l.actorId),
+      ),
+    );
+
+    const [platformUsers, sellerActors] = await Promise.all([
+      platformActorIds.length
+        ? db.user.findMany({
+            where: { id: { in: platformActorIds } },
+            select: { id: true, name: true, email: true },
+          })
+        : [],
+      sellerActorIds.length
+        ? db.seller.findMany({
+            where: { id: { in: sellerActorIds } },
+            select: { id: true, name: true, businessName: true, email: true },
+          })
+        : [],
+    ]);
+
+    const userMap = new Map(platformUsers.map((u) => [u.id, u]));
+    const sellerMap = new Map(sellerActors.map((s) => [s.id, s]));
+
+    const enrichedData = data.map((log) => {
+      const actor =
+        log.actorType === "platform"
+          ? userMap.get(log.actorId)
+          : sellerMap.get(log.actorId);
+      return {
+        ...log,
+        actorName: actor?.name || null,
+        actorEmail: actor?.email || null,
+        actorBusinessName:
+          log.actorType === "seller"
+            ? (actor as { businessName?: string })?.businessName || null
+            : null,
+      };
+    });
+
+    return { data: enrichedData, meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 } };
   },
 };

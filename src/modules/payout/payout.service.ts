@@ -468,7 +468,23 @@ export const payoutService = {
                 seller: { select: { id: true, name: true, businessName: true, email: true } },
                 orders: {
                     include: {
-                        order: { select: { id: true, type: true, totalAmount: true, finalAmount: true } },
+                        order: { select: { id: true, displayId: true, type: true, totalAmount: true, finalAmount: true } },
+                    },
+                },
+            },
+        });
+        if (!payout) throw new Error("Payout not found");
+        return payout;
+    },
+
+    async getMyPayoutById(sellerId: string, payoutId: string) {
+        const payout = await db.sellerPayout.findFirst({
+            where: { id: payoutId, sellerId },
+            include: {
+                seller: { select: { id: true, name: true, businessName: true, email: true } },
+                orders: {
+                    include: {
+                        order: { select: { id: true, displayId: true, type: true, totalAmount: true, finalAmount: true } },
                     },
                 },
             },

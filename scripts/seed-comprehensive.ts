@@ -4,6 +4,7 @@ import {
   assignDefaultRolePermissions,
   seedPlatformPermissions,
 } from "../src/lib/permission/permission.service";
+import { analyticsRegistry } from "../src/lib/analytics/analytics.registry";
 import { generateDisplayId } from "../src/lib/uid/uid.generator";
 import { encrypt } from "../src/utils/encryption";
 import { logger } from "../src/utils/logger";
@@ -900,7 +901,7 @@ async function seedComprehensive() {
         const defs = categoryAttributeDefs[parentCat.name];
         if (!defs) continue;
         for (const def of defs) {
-          await db.categoryAttribute
+          const attr = await db.categoryAttribute
             .create({
               data: {
                 categoryId: parentId,
@@ -909,12 +910,24 @@ async function seedComprehensive() {
                 type: def.type,
                 required: def.required,
                 isVariant: def.isVariant,
-                options: def.options ?? [],
                 unit: def.unit ?? null,
                 sortOrder: def.sortOrder,
               },
             })
-            .catch(() => {});
+            .catch(() => null);
+          if (attr && def.options?.length) {
+            for (const opt of def.options) {
+              await db.categoryAttributeOption
+                .create({
+                  data: {
+                    categoryAttributeId: attr.id,
+                    value: opt,
+                    status: "APPROVED",
+                  },
+                })
+                .catch(() => {});
+            }
+          }
         }
       }
 
@@ -1016,6 +1029,8 @@ async function seedComprehensive() {
       }
 
       await fixSellerPermissions();
+      logger.info("Refreshing analytics views...");
+      await analyticsRegistry.refreshAll();
       logger.info("✅ Seed completed (product re-seed)!");
       logger.info(`  Products: ${products.length}`);
       return;
@@ -1293,7 +1308,7 @@ async function seedComprehensive() {
       const defs = categoryAttributeDefs[parentCat.name];
       if (!defs) continue;
       for (const def of defs) {
-        await db.categoryAttribute
+        const attr = await db.categoryAttribute
           .create({
             data: {
               categoryId: parentId,
@@ -1302,12 +1317,24 @@ async function seedComprehensive() {
               type: def.type,
               required: def.required,
               isVariant: def.isVariant,
-              options: def.options ?? [],
               unit: def.unit ?? null,
               sortOrder: def.sortOrder,
             },
           })
-          .catch(() => {});
+          .catch(() => null);
+        if (attr && def.options?.length) {
+          for (const opt of def.options) {
+            await db.categoryAttributeOption
+              .create({
+                data: {
+                  categoryAttributeId: attr.id,
+                  value: opt,
+                  status: "APPROVED",
+                },
+              })
+              .catch(() => {});
+          }
+        }
       }
     }
 
@@ -2034,6 +2061,10 @@ async function seedComprehensive() {
 
     // 23. Fix Permissions
     await fixSellerPermissions();
+
+    // 24. Refresh analytics materialized views
+    logger.info("Refreshing analytics views...");
+    await analyticsRegistry.refreshAll();
 
     logger.info("✅ Seed completed!");
     logger.info(

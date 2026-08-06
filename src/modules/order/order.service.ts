@@ -766,6 +766,29 @@ export const orderService = {
     });
   },
 
+  async getThresholds(sellerId: string) {
+    const rows = await db.orderThreshold.findMany({
+      where: { sellerId },
+      orderBy: { productCategory: "asc" },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      sellerId: r.sellerId,
+      productCategory: r.productCategory,
+      amount: Number(r.amount),
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }));
+  },
+
+  async deleteThreshold(sellerId: string, productCategory: string) {
+    const where =
+      productCategory === "default"
+        ? { sellerId_productCategory: { sellerId, productCategory: null } }
+        : { sellerId_productCategory: { sellerId, productCategory } };
+    return db.orderThreshold.delete({ where });
+  },
+
   async markPacked(orderId: string, sellerId: string, actorId: string) {
     const order = await db.order.findFirst({
       where: { id: orderId, sellerId },
