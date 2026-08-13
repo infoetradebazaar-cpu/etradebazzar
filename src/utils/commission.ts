@@ -46,3 +46,16 @@ export async function isHighTicket(
   if (!threshold) return false;
   return totalAmount > Number(threshold.amount);
 }
+
+export function isOverQuantityThreshold(
+  items: { productId: string; quantity: number }[],
+  products: { id: string; negotiationThresholdQty: number | null }[],
+): boolean {
+  return items.some((item) => {
+    const product = products.find((p) => p.id === item.productId);
+    return (
+      product?.negotiationThresholdQty != null &&
+      item.quantity >= product.negotiationThresholdQty
+    );
+  });
+}

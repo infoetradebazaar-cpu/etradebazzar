@@ -5,8 +5,14 @@ export const initiatePayoutSchema = z.object({
     body: z.object({
         method: z.enum(["UPI", "IMPS", "RTGS", "NEFT"]),
         note: z.string().optional(),
-        periodStart: z.string().datetime().optional(),
-        periodEnd: z.string().datetime().optional(),
+        periodStart: z.string().datetime(),
+        periodEnd: z.string().datetime(),
+    }).refine((data) => new Date(data.periodEnd) > new Date(data.periodStart), {
+        message: "periodEnd must be after periodStart",
+        path: ["periodEnd"],
+    }).refine((data) => new Date(data.periodEnd) <= new Date(), {
+        message: "periodEnd cannot be in the future",
+        path: ["periodEnd"],
     }),
 });
 

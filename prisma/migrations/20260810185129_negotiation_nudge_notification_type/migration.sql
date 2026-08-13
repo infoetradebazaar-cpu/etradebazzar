@@ -1,0 +1,2 @@
+
+ALTER TYPE "NotificationType" ADD VALUE 'NEGOTIATION_NUDGE';

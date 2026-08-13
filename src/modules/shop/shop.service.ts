@@ -363,6 +363,7 @@ export const shopService = {
   async listAllShops(filters: {
     search?: string;
     status?: string;
+    sellerId?: string;
     page?: number;
     limit?: number;
   }) {
@@ -370,6 +371,7 @@ export const shopService = {
     const limit = Math.min(filters.limit ?? 20, 100);
 
     const where: any = {};
+    if (filters.sellerId) where.sellerId = filters.sellerId;
     if (filters.status) {
       const STATUS_REVERSE: Record<string, string> = {
         active: "APPROVED",

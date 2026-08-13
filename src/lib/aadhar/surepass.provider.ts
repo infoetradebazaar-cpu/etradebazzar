@@ -1,10 +1,10 @@
-import { AadhaarProvider, AadhaarOtpSession, AadhaarDetails } from "./aadhar.interface";
+import { AadhaarProvider, DigilockerInitInput, DigilockerSession, AadhaarDetails } from "./aadhar.interface";
 
-const BASE_URL = "https://kyc-api.surepass.io/api/v1";
+const BASE_URL = "https://sandbox.surepass.app/api/v1";
 
-// need confirm with surepass team if the endpoints are correct, as they have not provided any documentation for aadhaar v2 endpoints
-const GENERATE_OTP_ENDPOINT = `${BASE_URL}/aadhaar-v2/generate-otp`;
-const SUBMIT_OTP_ENDPOINT = `${BASE_URL}/aadhaar-v2/submit-otp`;
+const INITIALIZE_ENDPOINT = `${BASE_URL}/digilocker/initialize`;
+
+const DOWNLOAD_AADHAAR_ENDPOINT = `${BASE_URL}/digilocker/download-aadhaar`;
 
 export class SurepassAadhaarInstance implements AadhaarProvider {
     private token: string;
@@ -13,56 +13,73 @@ export class SurepassAadhaarInstance implements AadhaarProvider {
         this.token = token;
     }
 
-    async generateOtp(aadhaarNumber: string): Promise<AadhaarOtpSession> {
-        const res = await fetch(GENERATE_OTP_ENDPOINT, {
+    async initializeDigilocker(input: DigilockerInitInput): Promise<DigilockerSession> {
+        const res = await fetch(INITIALIZE_ENDPOINT, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${this.token}`,
             },
-            body: JSON.stringify({ id_number: aadhaarNumber }),
+            body: JSON.stringify({
+                data: {
+                    signup_flow: true,
+                    redirect_url: input.redirectUrl,
+                    skip_main_screen: false,
+                    prefill_options: input.prefill
+                        ? {
+                            full_name: input.prefill.fullName,
+                            user_email: input.prefill.email,
+                            mobile_number: input.prefill.phone,
+                        }
+                        : undefined,
+                },
+            }),
         });
 
         if (!res.ok)
-            throw new Error("Aadhaar OTP request failed invalid Aadhaar or service error");
+            throw new Error("Aadhaar DigiLocker initialization failed - service error");
 
-        const data = (await res.json()) as any;
-        const result = data.data;
+        const body = (await res.json()) as any;
+        const result = body.data;
 
-        if (!result?.client_id)
-            throw new Error("Aadhaar OTP request failed invalid Aadhaar or service error");
-
-        return { clientId: result.client_id, raw: result };
-    }
-
-    async submitOtp(clientId: string, otp: string): Promise<AadhaarDetails> {
-        const res = await fetch(SUBMIT_OTP_ENDPOINT, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${this.token}`,
-            },
-            body: JSON.stringify({ client_id: clientId, otp }),
-        });
-
-        if (!res.ok)
-            throw new Error("Aadhaar OTP verification failed invalid OTP or expired session");
-
-        const data = (await res.json()) as any;
-        const result = data.data;
-
-        if (!result)
-            throw new Error("Aadhaar OTP verification failed incorrect OTP or expired session");
+        if (!result?.client_id || !result?.url)
+            throw new Error("Aadhaar DigiLocker initialization failed - service error");
 
         return {
-            aadhaarNumberMasked: result.aadhaar_number ?? "",
-            fullName: result.full_name ?? "",
-            dob: result.dob,
-            gender: result.gender,
-            address: result.address
-                ? [result.address.house, result.address.street, result.address.dist,
-                result.address.state, result.address.pincode].filter(Boolean).join(", ")
-                : undefined,
+            clientId: result.client_id,
+            url: result.url,
+            expirySeconds: result.expiry_seconds,
+        };
+    }
+
+    async fetchAadhaarDetails(clientId: string): Promise<AadhaarDetails> {
+        const res = await fetch(DOWNLOAD_AADHAAR_ENDPOINT, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${this.token}`,
+            },
+            body: JSON.stringify({ client_id: clientId }),
+        });
+
+        if (!res.ok)
+            throw new Error("Aadhaar verification failed - DigiLocker data could not be retrieved");
+
+        const body = (await res.json()) as any;
+        const result = body.data;
+
+        if (!result)
+            throw new Error("Aadhaar verification failed - DigiLocker data could not be retrieved");
+
+        const xml = result.aadhaar_xml_data ?? {};
+        const meta = result.digilocker_metadata ?? {};
+
+        return {
+            aadhaarNumberMasked: xml.masked_aadhaar ?? "",
+            fullName: xml.full_name ?? meta.name,
+            dob: xml.dob ?? meta.dob,
+            gender: xml.gender ?? meta.gender,
+            address: xml.full_address,
             raw: result,
         };
     }

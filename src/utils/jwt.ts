@@ -25,7 +25,7 @@ interface SignInput {
 }
 
 interface JwtPayload extends SignInput {
-  type?: "access" | "refresh";
+  type?: "access" | "refresh" | "sse";
   jti?: string;
   fam?: string;
   exp?: number;
@@ -39,7 +39,7 @@ interface Tokens {
 }
 
 class JwtService {
-  private sign(payload: SignInput,type: "access" | "refresh",expiresIn: string, jti: string, fam?: string): string {
+  private sign(payload: SignInput,type: "access" | "refresh" | "sse",expiresIn: string, jti: string, fam?: string): string {
     const options: SignOptions = {
       algorithm: ALGORITHM,
       expiresIn: expiresIn as SignOptions["expiresIn"],
@@ -81,6 +81,10 @@ class JwtService {
     };
   }
 
+  signSseToken(userId: string): string {
+    return this.sign({ sub: userId }, "sse", "3m", crypto.randomUUID());
+  }
+
   async refreshToken(oldRefreshToken: string): Promise<Tokens> {
     const payload = this.verify<JwtPayload>(oldRefreshToken);
 
@@ -114,7 +118,7 @@ class JwtService {
     );
   }
 
-  verifyToken<T extends object = JwtPayload>(token: string, expectedType?: "access" | "refresh") {
+  verifyToken<T extends object = JwtPayload>(token: string, expectedType?: "access" | "refresh" | "sse") {
     const payload = this.verify<T & { type?: string }>(token);
     if (expectedType && payload.type !== expectedType) {
       throw new Error("Invalid token type");
@@ -143,3 +147,4 @@ export const jwtService = new JwtService();
 export const signTokens = jwtService.signTokens.bind(jwtService);
 export const refreshToken = jwtService.refreshToken.bind(jwtService);
 export const verifyToken = jwtService.verifyToken.bind(jwtService);
+export const signSseToken = jwtService.signSseToken.bind(jwtService);

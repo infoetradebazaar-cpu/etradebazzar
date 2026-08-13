@@ -16,6 +16,8 @@ export const registerSellerSchema = z.object({
     businessName: z.string().min(2).max(100),
     businessType: z.enum(["INDIVIDUAL", "COMPANY", "PARTNERSHIP"]),
     address: addressSchema,
+    gstin: z.string().regex(/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/, "Invalid GSTIN format").optional(),
+    pan: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "Invalid PAN format").optional(),
   }),
 });
 
@@ -71,6 +73,19 @@ export const bankOverrideSchema = z.object({
   params: z.object({ sellerId: z.string() }),
   body: z.object({
     verificationStatus: z.enum(["VERIFIED", "NAME_MISMATCH", "FAILED"]),
+    reason: z.string().min(5),
+  }),
+});
+
+export const gstPanReverifySchema = z.object({
+  params: z.object({ sellerId: z.string() }),
+});
+
+export const gstPanOverrideSchema = z.object({
+  params: z.object({ sellerId: z.string() }),
+  body: z.object({
+    field: z.enum(["gst", "pan"]),
+    status: z.enum(["VERIFIED", "FAILED"]),
     reason: z.string().min(5),
   }),
 });

@@ -1,0 +1,1 @@
+export const NEGOTIATION_SESSION_OMIT = { hiddenFloorPrice: true } as const;

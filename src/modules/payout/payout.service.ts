@@ -7,6 +7,7 @@ import { logger } from "../../utils/logger";
 import { triggerAnalyticsRefresh } from "../../lib/analytics/analytics.events";
 import { getPlatformConfig } from "../../lib/platform-config/platform-config";
 import { maskAccountNumber } from "../../utils/mask";
+import { config } from "../../../config/config";
 
 const PAYOUT_LOCK_TTL = 30;
 
@@ -176,8 +177,8 @@ export const payoutService = {
         data: {
             method: "UPI" | "IMPS" | "RTGS" | "NEFT";
             note?: string;
-            periodStart?: string;
-            periodEnd?: string;
+            periodStart: string;
+            periodEnd: string;
         }
     ) {
         const locked = await acquirePayoutLock(sellerId);
@@ -196,18 +197,31 @@ export const payoutService = {
                 );
             }
 
+            const periodStart = new Date(data.periodStart);
+            const periodEnd = new Date(data.periodEnd);
+
+            const overlapping = await db.sellerPayout.findFirst({
+                where: {
+                    sellerId,
+                    status: { not: "FAILED" },
+                    periodStart: { lt: periodEnd },
+                    periodEnd: { gt: periodStart },
+                },
+                select: { id: true, periodStart: true, periodEnd: true, status: true },
+            });
+            if (overlapping) {
+                throw new Error(
+                    `Requested period overlaps an existing payout (${overlapping.id}, ${overlapping.periodStart?.toISOString()} - ${overlapping.periodEnd?.toISOString()}, status ${overlapping.status})`,
+                );
+            }
+
             const unpaidOrders = await db.order.findMany({
                 where: {
                     sellerId,
                     status: "DELIVERED",
                     paymentStatus: "PAID",
                     payoutOrders: { none: {} },
-                    ...(data.periodStart && data.periodEnd && {
-                        createdAt: {
-                            gte: new Date(data.periodStart),
-                            lte: new Date(data.periodEnd),
-                        },
-                    }),
+                    createdAt: { gte: periodStart, lte: periodEnd },
                 },
                 select: {
                     id: true,
@@ -217,7 +231,7 @@ export const payoutService = {
                 },
             });
 
-            if (!unpaidOrders.length) throw new Error("No unpaid orders to payout");
+            if (!unpaidOrders.length) throw new Error("No unpaid orders to payout in this period");
 
             const grossAmount = unpaidOrders.reduce(
                 (sum, o) => sum + Number(o.finalAmount ?? o.totalAmount),
@@ -260,8 +274,8 @@ export const payoutService = {
                         status: "PENDING",
                         initiatedBy: actorId,
                         note: data.note,
-                        periodStart: data.periodStart ? new Date(data.periodStart) : null,
-                        periodEnd: data.periodEnd ? new Date(data.periodEnd) : null,
+                        periodStart,
+                        periodEnd,
                         orders: {
                             create: unpaidOrders.map((o) => ({
                                 orderId: o.id,
@@ -329,6 +343,13 @@ export const payoutService = {
                     title: "Payout initiated",
                     message: `A payout of ₹${netAmount.toFixed(2)} has been initiated for ${seller.businessName}.`,
                     channels: ["email", "sse"],
+                    emailTemplate: "payout-initiated",
+                    emailData: {
+                        sellerName: owner.user.name ?? "there",
+                        businessName: seller.businessName,
+                        netAmount,
+                        payoutUrl: `${config.appUrl}/payouts/${payout.id}`,
+                    },
                     data: { payoutId: payout.id, netAmount },
                 }).catch(() => null);
             }
@@ -396,6 +417,20 @@ export const payoutService = {
                 title,
                 message,
                 channels: ["email", "sse"],
+                emailTemplate: result.status === "processed" ? "payout-paid" : "payout-failed",
+                emailData: result.status === "processed"
+                    ? {
+                        sellerName: owner.user.name ?? "there",
+                        netAmount: Number(payout.netAmount),
+                        utrRef: result.utrRef,
+                        payoutUrl: `${config.appUrl}/payouts/${payout.id}`,
+                    }
+                    : {
+                        sellerName: owner.user.name ?? "there",
+                        netAmount: Number(payout.netAmount),
+                        failureReason: result.failureReason,
+                        payoutUrl: `${config.appUrl}/payouts/${payout.id}`,
+                    },
                 data: { payoutId: payout.id, utrRef: result.utrRef },
             }).catch(() => null);
         }
@@ -498,5 +533,91 @@ export const payoutService = {
             select: { id: true, grossAmount: true, commissionAmount: true, netAmount: true, method: true, status: true, utrReference: true, createdAt: true },
             orderBy: { createdAt: "desc" },
         });
+    },
+
+    async reconcilePayout(payoutId: string) {
+        const payout = await db.sellerPayout.findUnique({
+            where: { id: payoutId },
+            include: {
+                orders: {
+                    include: {
+                        order: {
+                            select: {
+                                id: true,
+                                displayId: true,
+                                status: true,
+                                paymentStatus: true,
+                                totalAmount: true,
+                                finalAmount: true,
+                                commissionAmount: true,
+                                returnRequests: {
+                                    select: { status: true, updatedAt: true },
+                                    orderBy: { updatedAt: "desc" },
+                                    take: 1,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        if (!payout) throw new Error("Payout not found");
+
+        const lineItems = payout.orders.map((po) => {
+            const order = po.order;
+            const issues: string[] = [];
+
+            const currentOrderAmount = Number(order.finalAmount ?? order.totalAmount);
+            const currentCommission = Number(order.commissionAmount ?? 0);
+            const currentNetAmount = currentOrderAmount - currentCommission;
+            const frozenOrderAmount = Number(po.orderAmount);
+            const frozenCommission = Number(po.commissionAmount);
+            const frozenNetAmount = Number(po.netAmount);
+
+            if (Math.abs(currentOrderAmount - frozenOrderAmount) > 0.01) {
+                issues.push(`order amount changed since payout: was ${frozenOrderAmount}, now ${currentOrderAmount}`);
+            }
+            if (Math.abs(currentCommission - frozenCommission) > 0.01) {
+                issues.push(`commission changed since payout: was ${frozenCommission}, now ${currentCommission}`);
+            }
+            if (order.status === "RETURNED" || order.status === "CANCELLED") {
+                issues.push(`order status is now ${order.status} (was paid out while active)`);
+            }
+            if (order.paymentStatus === "REFUNDED" || order.paymentStatus === "PARTIALLY_REFUNDED") {
+                issues.push(`payment status is now ${order.paymentStatus} (was PAID at payout time)`);
+            }
+            const latestReturn = order.returnRequests[0];
+            if (latestReturn && ["APPROVED", "PICKED_UP", "COMPLETED"].includes(latestReturn.status)) {
+                issues.push(`a return request is ${latestReturn.status} for this order`);
+            }
+
+            return {
+                orderId: order.id,
+                displayId: order.displayId,
+                payoutOrderId: po.id,
+                orderStatus: order.status,
+                paymentStatus: order.paymentStatus,
+                frozenNetAmount,
+                currentNetAmount,
+                hasDrift: issues.length > 0,
+                issues,
+            };
+        });
+
+        const driftedItems = lineItems.filter((li) => li.hasDrift);
+        const atRiskAmount = driftedItems.reduce((sum, li) => sum + li.frozenNetAmount, 0);
+
+        return {
+            payoutId: payout.id,
+            status: payout.status,
+            netAmount: Number(payout.netAmount),
+            periodStart: payout.periodStart,
+            periodEnd: payout.periodEnd,
+            totalOrders: lineItems.length,
+            driftedOrderCount: driftedItems.length,
+            atRiskAmount,
+            hasDrift: driftedItems.length > 0,
+            lineItems,
+        };
     },
 };

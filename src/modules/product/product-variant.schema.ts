@@ -50,3 +50,25 @@ export const updateSKUSchema = z.object({
 export const skuParamSchema = z.object({
     params: z.object({ productId: z.string(), skuId: z.string() }),
 });
+
+export const createPriceTierSchema = z.object({
+    params: z.object({ productId: z.string(), skuId: z.string() }),
+    body: z.object({
+        minQty: z.number().int().min(2),
+        price: z.number().positive(),
+        hiddenFloorPrice: z.number().positive().optional(),
+    }),
+});
+
+export const updatePriceTierSchema = z.object({
+    params: z.object({ productId: z.string(), skuId: z.string(), tierId: z.string() }),
+    body: z.object({
+        minQty: z.number().int().min(2).optional(),
+        price: z.number().positive().optional(),
+        hiddenFloorPrice: z.number().positive().nullable().optional(),
+    }),
+});
+
+export const priceTierParamSchema = z.object({
+    params: z.object({ productId: z.string(), skuId: z.string(), tierId: z.string() }),
+});

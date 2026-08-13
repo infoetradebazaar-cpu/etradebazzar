@@ -2,13 +2,14 @@ import { Router } from "express";
 import { sellerProfileController } from "./seller-profile.controller";
 import { protect } from "../../middleware/auth";
 import { resolveTenant } from "../../middleware/tenant";
-import { requireSellerRole } from "../../middleware/rbac";
+import { requirePermission } from "../../middleware/permission";
+import { PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
 import { sellerLimiter } from "../../middleware/rate-limit";
 import { updateProfileSchema, updateBusinessSchema, shopStatsParamSchema } from "./seller-profile.schema";
 
 const router = Router();
-const guard = [protect, sellerLimiter, resolveTenant, requireSellerRole("owner", "manager")];
+const guard = [protect, sellerLimiter, resolveTenant, requirePermission(PERMISSIONS.SELLER_PROFILE_MANAGE)];
 
 router.get("/profile", ...guard, sellerProfileController.getProfile);
 router.put("/profile", ...guard, validate(updateProfileSchema), sellerProfileController.updateProfile);

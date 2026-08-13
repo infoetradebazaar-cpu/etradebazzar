@@ -1,9 +1,10 @@
 import { BankVerificationProvider } from "./bank-verification.interface";
 import { SandboxBankVerificationInstance } from "./sandbox.provider";
 import { RazorpayXBankVerificationInstance } from "./razorpayx.provider";
+import { SurepassBankVerificationInstance } from "./surepass.provider";
 import { getPlatformConfig } from "../platform-config/platform-config";
 
-type BankVerificationProviderType = "sandbox" | "razorpayx";
+type BankVerificationProviderType = "sandbox" | "razorpayx" | "surepass";
 
 class BankVerificationFactory {
     private static sandboxInstance: BankVerificationProvider | null = null;
@@ -43,6 +44,8 @@ class BankVerificationFactory {
                 ]);
                 return new RazorpayXBankVerificationInstance(keyId, keySecret, sourceAccountNumber);
             }
+            case "surepass":
+                return new SurepassBankVerificationInstance(process.env["SUREPASS_BANK_VERIFICATION_TOKEN"]!);
             default:
                 throw new Error(`Unsupported bank verification provider: ${provider}`);
         }

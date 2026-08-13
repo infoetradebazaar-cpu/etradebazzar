@@ -141,16 +141,40 @@ export const productController = {
     try {
       const { productId } = req.params;
       const actorId = req.user!.id;
-      const { note } = req.body;
+      const { note, commissionRate } = req.body;
       const result = await productService.approveProduct(
         productId as string,
         actorId,
+        commissionRate,
         note,
       );
       return res.json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "Approve product failed");
       const clientErrors = ["Product not found", "Product is not pending"];
+      if (clientErrors.includes(error.message)) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async submitForReview(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const actorId = req.user!.id;
+      const { productId } = req.params;
+      const result = await productService.submitForReview(
+        sellerId,
+        actorId,
+        productId as string,
+      );
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Submit product for review failed");
+      const clientErrors = ["Product not found", "Only draft products can be submitted for review"];
       if (clientErrors.includes(error.message)) {
         return res.status(400).json({ success: false, error: error.message });
       }

@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { sellerController } from "./seller.controller";
 import { protect } from "../../middleware/auth";
-import { resolveTenant, requirePlatformAdmin } from "../../middleware/tenant";
-import { requirePermission } from "../../middleware/permission";
-import { PERMISSIONS } from "../../lib/permission/permission.constants";
+import { resolveTenant } from "../../middleware/tenant";
+import { requirePermission, requirePlatformAdminAndPermission } from "../../middleware/permission";
+import { PERMISSIONS, PLATFORM_PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
-import { sellerLimiter, publicLimiter } from "../../middleware/rate-limit";
+import { sellerLimiter, publicLimiter, verificationCostLimiter } from "../../middleware/rate-limit";
 import {
   registerSellerSchema,
   completeSellerKycSchema,
@@ -13,6 +13,8 @@ import {
   updateBankDetailSchema,
   bankReverifySchema,
   bankOverrideSchema,
+  gstPanReverifySchema,
+  gstPanOverrideSchema,
   inviteSellerSchema,
   acceptInviteSchema,
   approveSellerSchema,
@@ -39,6 +41,7 @@ const router = Router();
 router.post(
   "/register",
   publicLimiter,
+  verificationCostLimiter,
   validate(registerSellerSchema),
   sellerController.register,
 );
@@ -54,7 +57,7 @@ router.post(
   "/invite",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_INVITE]),
   validate(inviteSellerSchema),
   sellerController.inviteSeller,
 );
@@ -63,7 +66,7 @@ router.get(
   "/pending",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_VIEW_LIST]),
   sellerController.listPendingSellers,
 );
 
@@ -71,7 +74,7 @@ router.get(
   "/all",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_VIEW_LIST]),
   sellerController.listAllSellers,
 );
 
@@ -79,7 +82,7 @@ router.get(
   "/kyc/pending",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_VIEW_LIST]),
   sellerController.listPendingKyc,
 );
 
@@ -285,7 +288,7 @@ router.get(
   "/:sellerId",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager", "product_reviewer"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_VIEW_DETAIL]),
   validate(approveSellerSchema),
   sellerController.getSellerById,
 );
@@ -294,7 +297,7 @@ router.patch(
   "/:sellerId/approve",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_APPROVE]),
   validate(approveSellerSchema),
   sellerController.approveSeller,
 );
@@ -303,7 +306,7 @@ router.patch(
   "/:sellerId/reject",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_REJECT]),
   validate(rejectSellerSchema),
   sellerController.rejectSeller,
 );
@@ -312,7 +315,7 @@ router.patch(
   "/:sellerId/suspend",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin"),
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_SUSPEND]),
   validate(suspendSellerSchema),
   sellerController.suspendSeller,
 );
@@ -321,7 +324,7 @@ router.patch(
   "/:sellerId/reactivate",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin"),
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_SUSPEND]),
   sellerController.reactivateSeller,
 );
 
@@ -329,7 +332,7 @@ router.patch(
   "/:sellerId/kyc/verify",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_KYC_REVIEW]),
   validate(kycActionSchema),
   sellerController.verifyKyc,
 );
@@ -338,7 +341,7 @@ router.patch(
   "/:sellerId/kyc/reject",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_KYC_REVIEW]),
   validate(rejectKycSchema),
   sellerController.rejectKyc,
 );
@@ -347,7 +350,7 @@ router.patch(
   "/:sellerId/bank/reverify",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_BANK_OVERRIDE]),
   validate(bankReverifySchema),
   sellerController.reverifyBankDetail,
 );
@@ -356,9 +359,28 @@ router.patch(
   "/:sellerId/bank/override",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_BANK_OVERRIDE]),
   validate(bankOverrideSchema),
   sellerController.overrideBankVerification,
+);
+
+router.patch(
+  "/:sellerId/gst-pan/reverify",
+  protect,
+  sellerLimiter,
+  verificationCostLimiter,
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_GST_PAN_OVERRIDE]),
+  validate(gstPanReverifySchema),
+  sellerController.reverifyGstPan,
+);
+
+router.patch(
+  "/:sellerId/gst-pan/override",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_GST_PAN_OVERRIDE]),
+  validate(gstPanOverrideSchema),
+  sellerController.overrideGstPanVerification,
 );
 
 // Public — no auth (invitee doesn't have account yet)

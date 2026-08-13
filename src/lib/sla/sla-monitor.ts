@@ -20,7 +20,11 @@ export async function checkSlaBreaches(): Promise<void> {
 
     for (const order of packingBreaches) {
         if (!order.assignedShopId) continue;
-        await db.order.update({ where: { id: order.id }, data: { slaBreachedAt: now } });
+        const claimed = await db.order.updateMany({
+            where: { id: order.id, slaBreachedAt: null },
+            data: { slaBreachedAt: now },
+        });
+        if (claimed.count === 0) continue;
         await reliabilityService.applySlaBreachPenalty(
             order.assignedShopId,
             order.id,
@@ -48,7 +52,12 @@ export async function checkSlaBreaches(): Promise<void> {
         if (!order.assignedShopId) continue;
         if (order.shipments[0]?.trackingId) continue;
 
-        await db.order.update({ where: { id: order.id }, data: { slaBreachedAt: now } });
+        // Same atomic-claim fix as the packing-breach loop above.
+        const claimed = await db.order.updateMany({
+            where: { id: order.id, slaBreachedAt: null },
+            data: { slaBreachedAt: now },
+        });
+        if (claimed.count === 0) continue;
         await reliabilityService.applySlaBreachPenalty(
             order.assignedShopId,
             order.id,

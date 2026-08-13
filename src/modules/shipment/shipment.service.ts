@@ -5,6 +5,7 @@ import { logger } from "../../utils/logger";
 import { generateDisplayId } from "../../lib/uid/uid.generator";
 import { creditEngine } from "../../lib/credit-engine/credit-rules";
 import { reliabilityService } from "../../lib/order-assignment/reliability.service";
+import { returnService } from "../return/return.service";
 import { Shipment } from "../../../prisma/generated/client";
 
 async function performShipmentTrack(shipment: Shipment) {
@@ -314,7 +315,9 @@ export const shipmentService = {
     const shipment = await db.shipment.findFirst({
       where: { trackingId: event.trackingId },
     });
-    if (!shipment) return { received: true };
+    if (!shipment) {
+      return returnService.handleReversePickupWebhookEvent(event);
+    }
 
     const statusMap: Record<string, string> = {
       "delivered": "DELIVERED",

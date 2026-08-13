@@ -2,11 +2,14 @@ import { Request, Response } from "express";
 import { gstService } from "./gst.service";
 import { logger } from "../../utils/logger";
 
-function isClientError(msg: string): boolean {
+function isClientError(error: any): boolean {
+    if (error?.name === "VerificationRejectedError") return true;
+    const msg: string = error?.message ?? "";
     return (
         msg === "Invalid GSTIN format" ||
         msg.includes("cannot proceed") ||
-        msg === "KYC record not found complete KYC before verifying GST"
+        msg.startsWith("KYC record not found") ||
+        msg.startsWith("GST verification failed")
     );
 }
 
@@ -18,7 +21,7 @@ export const gstController = {
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Verify GST failed");
-            if (isClientError(error.message)) {
+            if (isClientError(error)) {
                 return res.status(400).json({ success: false, error: error.message });
             }
             return res.status(500).json({ success: false, error: "Internal server error" });
@@ -33,7 +36,7 @@ export const gstController = {
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Verify and autofill GST failed");
-            if (isClientError(error.message)) {
+            if (isClientError(error)) {
                 return res.status(400).json({ success: false, error: error.message });
             }
             return res.status(500).json({ success: false, error: "Internal server error" });

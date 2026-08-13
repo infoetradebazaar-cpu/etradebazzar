@@ -1,33 +1,29 @@
-import { AadhaarProvider, AadhaarOtpSession, AadhaarDetails } from "./aadhar.interface";
+import { AadhaarProvider, DigilockerInitInput, DigilockerSession, AadhaarDetails } from "./aadhar.interface";
 
-/** Deterministic fake provider for local/dev/test. OTP is always "111111". */
+/** Deterministic fake DigiLocker provider for local/dev/test - never contacts Surepass or DigiLocker. */
 export class SandboxAadhaarInstance implements AadhaarProvider {
     constructor(
         private apiKey: string,
         private apiSecret: string,
     ) { }
 
-    async generateOtp(aadhaarNumber: string): Promise<AadhaarOtpSession> {
-        if (!/^\d{12}$/.test(aadhaarNumber)) {
-            throw new Error("Aadhaar OTP request failed - invalid Aadhaar or service error");
-        }
+    async initializeDigilocker(_input: DigilockerInitInput): Promise<DigilockerSession> {
+        const clientId = `sandbox_digilocker_${Date.now()}`;
         return {
-            clientId: `sandbox_${aadhaarNumber.slice(-4)}_${Date.now()}`,
-            raw: { sandbox: true, apiKey: this.apiKey ? "set" : "unset" },
+            clientId,
+            url: `https://sandbox.local/digilocker-mock?client_id=${clientId}&apiKey=${this.apiKey ? "set" : "unset"}`,
+            expirySeconds: 600,
         };
     }
 
-    async submitOtp(clientId: string, otp: string): Promise<AadhaarDetails> {
-        if (otp !== "111111") {
-            throw new Error("Aadhaar OTP verification failed incorrect OTP or expired session");
-        }
+    async fetchAadhaarDetails(clientId: string): Promise<AadhaarDetails> {
         return {
-            aadhaarNumberMasked: `XXXXXXXX${clientId.split("_")[1] ?? "0000"}`,
+            aadhaarNumberMasked: "XXXXXXXX0000",
             fullName: "SANDBOX TEST USER",
             dob: "1990-01-01",
             gender: "M",
             address: "Sandbox Address, Test City, Test State, 000000",
-            raw: { sandbox: true, clientId },
+            raw: { sandbox: true, clientId, apiSecret: this.apiSecret ? "set" : "unset" },
         };
     }
 }

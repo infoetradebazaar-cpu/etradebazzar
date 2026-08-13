@@ -1,11 +1,7 @@
 import { z } from "zod";
 
-export const submitAadhaarSchema = z.object({
-    body: z.object({ aadhaarNumber: z.string().length(12).regex(/^\d{12}$/, "Aadhaar number must be 12 digits") }),
-});
-
-export const submitAadhaarOtpSchema = z.object({
-    body: z.object({ otp: z.string().min(4).max(8) }),
+export const initializeDigilockerSchema = z.object({
+    body: z.object({ redirectUrl: z.string().url().optional() }),
 });
 
 export const submitGovtIdSchema = z.object({
@@ -22,4 +18,16 @@ export const rejectVerificationSchema = z.object({
 
 export const sellerParamSchema = z.object({
     params: z.object({ sellerId: z.string() }),
+});
+
+export const verifyPanSchema = z.object({
+    body: z.object({
+        panNumber: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "Invalid PAN number format"),
+    }),
+});
+
+export const verifyAadhaarSchema = z.object({
+    body: z.object({
+        aadhaarNumber: z.string().regex(/^\d{12}$/, "Aadhaar must be 12 digits"),
+    }),
 }); 

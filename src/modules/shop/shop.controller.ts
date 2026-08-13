@@ -96,13 +96,14 @@ export const shopController = {
 
   async listAllShops(req: Request, res: Response) {
     try {
-      const { search, status, page, limit } = req.query as Record<
+      const { search, status, sellerId, page, limit } = req.query as Record<
         string,
         string
       >;
       const result = await shopService.listAllShops({
         search,
         status,
+        sellerId,
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
       });

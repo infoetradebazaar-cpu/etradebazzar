@@ -19,6 +19,10 @@ export function generateShopBannerKey(sellerId: string, shopId: string, filename
     return `sellers/${sellerId}/shops/${shopId}/banner${ext}`;
 }
 
+export function generateProductModel3DKey(sellerId: string, productId: string, format: "glb" | "gltf"): string {
+    return `sellers/${sellerId}/products/${productId}/model3d/${randomUUID()}.${format}`;
+}
+
 export function validateImageFile(file: { mimetype: string; size: number }): void {
     if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
         throw new Error(`Invalid file type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}`);

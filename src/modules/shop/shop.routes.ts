@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { shopController } from "./shop.controller";
 import { protect } from "../../middleware/auth";
-import { resolveTenant, requirePlatformAdmin } from "../../middleware/tenant";
-import { requireSellerRole } from "../../middleware/rbac";
+import { resolveTenant } from "../../middleware/tenant";
+import { requirePlatformAdminAndPermission, requirePermission } from "../../middleware/permission";
+import { PLATFORM_PERMISSIONS, PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
 import { sellerLimiter } from "../../middleware/rate-limit";
 import {
@@ -21,7 +22,7 @@ router.get(
   "/all",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin"),
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_SHOPS_VIEW]),
   shopController.listAllShops,
 );
 
@@ -30,7 +31,7 @@ router.post(
   "/",
   protect,
   resolveTenant,
-  requireSellerRole("owner", "manager"),
+  requirePermission(PERMISSIONS.SHOPS_MANAGE),
   validate(createShopSchema),
   shopController.createShop,
 );
@@ -40,7 +41,7 @@ router.get(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager", "staff"),
+  requirePermission(PERMISSIONS.SHOPS_VIEW),
   shopController.listShops,
 );
 
@@ -49,7 +50,7 @@ router.get(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager", "staff"),
+  requirePermission(PERMISSIONS.SHOPS_VIEW),
   validate(shopParamSchema),
   shopController.getShop,
 );
@@ -59,7 +60,7 @@ router.patch(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager"),
+  requirePermission(PERMISSIONS.SHOPS_MANAGE),
   validate(updateShopSchema),
   shopController.updateShop,
 );
@@ -69,7 +70,7 @@ router.put(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager"),
+  requirePermission(PERMISSIONS.SHOPS_MANAGE),
   validate(setShopAccessSchema), shopAccessController.setShopAccess
 );
 
@@ -78,7 +79,7 @@ router.get(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager"),
+  requirePermission(PERMISSIONS.SHOPS_MANAGE),
   validate(memberParamSchema), shopAccessController.getMemberShopAccess
 );
 
@@ -87,7 +88,7 @@ router.patch(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner"),
+  requirePermission(PERMISSIONS.SHOPS_ADMIN),
   validate(setAutoAssignSchema),
   shopController.setAutoAssign
 );

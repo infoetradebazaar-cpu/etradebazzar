@@ -40,6 +40,7 @@ const envSchema = z.object({
 
   RESEND_API_TOKEN: z.string().min(1),
   COMPANY_EMAIL: z.string().email(),
+  SECURITY_ALERT_EMAIL: z.string().email().optional(),
 
   MSG91_AUTH_KEY: z.string().min(1),
   MSG91_SENDER_ID: z.string().min(1),
@@ -68,6 +69,12 @@ const envSchema = z.object({
   RAILWAY_BUCKET_SECRET_ACCESS_KEY: z.string().optional(),
   RAILWAY_BUCKET_NAME: z.string().optional(),
   RAILWAY_BUCKET_CDN_URL: z.string().optional().default(""),
+
+  SEARCH_INDEX_PROVIDER: z.enum(["opensearch", "sandbox"]).optional().default("sandbox"),
+  OPENSEARCH_URL: z.string().optional(),
+  OPENSEARCH_USERNAME: z.string().optional(),
+  OPENSEARCH_PASSWORD: z.string().optional(),
+  OPENSEARCH_TLS_REJECT_UNAUTHORIZED: z.enum(["true", "false"]).optional().default("true"),
 }).superRefine((data, ctx) => {
   const requireFields = (fields: Record<string, string | undefined>, providerLabel: string) => {
     for (const [key, value] of Object.entries(fields)) {
@@ -106,6 +113,22 @@ const envSchema = z.object({
       RAILWAY_BUCKET_SECRET_ACCESS_KEY: data.RAILWAY_BUCKET_SECRET_ACCESS_KEY,
       RAILWAY_BUCKET_NAME: data.RAILWAY_BUCKET_NAME,
     }, "railway");
+  }
+
+  if (data.SEARCH_INDEX_PROVIDER === "opensearch") {
+    requireFields({
+      OPENSEARCH_URL: data.OPENSEARCH_URL,
+      OPENSEARCH_USERNAME: data.OPENSEARCH_USERNAME,
+      OPENSEARCH_PASSWORD: data.OPENSEARCH_PASSWORD,
+    }, "opensearch");
+  }
+
+  if (data.NODE_ENV === "production" && data.OPENSEARCH_TLS_REJECT_UNAUTHORIZED === "false") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["OPENSEARCH_TLS_REJECT_UNAUTHORIZED"],
+      message: "OPENSEARCH_TLS_REJECT_UNAUTHORIZED cannot be \"false\" in production - that disables TLS verification against the search cluster",
+    });
   }
 });
 
@@ -179,6 +202,7 @@ export const config = {
 
   resendApiToken: env.RESEND_API_TOKEN,
   companyEmail: env.COMPANY_EMAIL,
+  securityAlertEmail: env.SECURITY_ALERT_EMAIL ?? env.COMPANY_EMAIL,
 
   msg91BaseUrl: "https://api.msg91.com/api/v5",
   msg91AuthKey: env.MSG91_AUTH_KEY,
@@ -209,4 +233,10 @@ export const config = {
   railwayBucketSecretAccessKey: env.RAILWAY_BUCKET_SECRET_ACCESS_KEY ?? "",
   railwayBucketName: env.RAILWAY_BUCKET_NAME ?? "",
   railwayBucketCdnUrl: env.RAILWAY_BUCKET_CDN_URL,
+
+  searchIndexProvider: env.SEARCH_INDEX_PROVIDER,
+  opensearchUrl: env.OPENSEARCH_URL ?? "",
+  opensearchUsername: env.OPENSEARCH_USERNAME ?? "",
+  opensearchPassword: env.OPENSEARCH_PASSWORD ?? "",
+  opensearchTlsRejectUnauthorized: env.OPENSEARCH_TLS_REJECT_UNAUTHORIZED === "true",
 } as const;

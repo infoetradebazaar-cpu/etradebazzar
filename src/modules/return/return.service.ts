@@ -1,13 +1,24 @@
 import { db } from "../../db/index";
 import { ShipmentFactory } from "../../lib/shipment/shipment.factory";
 import { notificationService } from "../notification/notification.service";
+import { paymentService } from "../payment/payment.service";
 import { logger } from "../../utils/logger";
 import { triggerAnalyticsRefresh } from "../../lib/analytics/analytics.events";
+import type { WebhookEvent } from "../../lib/shipment/shipment.interface";
+import { config } from "../../../config/config";
+
+// NOTE: exact status strings Shiprocket sends for reverse-pickup shipments
+const RETURN_STATUS_MAP: Record<string, "IN_TRANSIT" | "DELIVERED" | "FAILED"> = {
+  "picked up": "IN_TRANSIT",
+  "in transit": "IN_TRANSIT",
+  "delivered": "DELIVERED",
+  "canceled": "FAILED",
+};
 
 export const returnService = {
   async createReturnRequest(
     customerId: string,
-    data: { orderId: string; reason: string },
+    data: { orderId: string; reason: string; imageAssetIds?: string[] },
   ) {
     const order = await db.order.findUnique({
       where: { id: data.orderId },
@@ -22,6 +33,15 @@ export const returnService = {
       where: { orderId: data.orderId, status: { not: "REJECTED" } },
     });
     if (existing) throw new Error("Return request already exists");
+    const imageAssetIds = data.imageAssetIds ?? [];
+    if (imageAssetIds.length > 0) {
+      const ownedUnattached = await db.customerUploadAsset.count({
+        where: { id: { in: imageAssetIds }, userId: customerId, returnRequestId: null },
+      });
+      if (ownedUnattached !== imageAssetIds.length) {
+        throw new Error("One or more images are invalid or already attached");
+      }
+    }
 
     const returnRequest = await db.$transaction(async (tx) => {
       const created = await tx.returnRequest.create({
@@ -32,6 +52,13 @@ export const returnService = {
         },
       });
 
+      if (imageAssetIds.length > 0) {
+        await tx.customerUploadAsset.updateMany({
+          where: { id: { in: imageAssetIds }, userId: customerId, returnRequestId: null },
+          data: { returnRequestId: created.id },
+        });
+      }
+
       await tx.auditLog.create({
         data: {
           sellerId: order.sellerId,
@@ -40,7 +67,7 @@ export const returnService = {
           action: "RETURN_REQUESTED",
           entityType: "return_request",
           entityId: created.id,
-          metadata: { reason: data.reason },
+          metadata: { reason: data.reason, imageCount: imageAssetIds.length },
         },
       });
 
@@ -65,6 +92,12 @@ export const returnService = {
           title: "Return request received",
           message: `A return request has been raised for order #${data.orderId}`,
           channels: ["email", "sse"],
+          emailTemplate: "return-requested",
+          emailData: {
+            sellerName: seller.name,
+            orderId: data.orderId,
+            returnUrl: `${config.appUrl}/returns/${returnRequest.id}`,
+          },
           data: { orderId: data.orderId, returnId: returnRequest.id },
         })
         .catch(() => null);
@@ -196,6 +229,14 @@ export const returnService = {
           title: "Return approved",
           message: `Your return request for order #${returnRequest.orderId} has been approved.`,
           channels: ["email", "sse"],
+          emailTemplate: "return-approved",
+          emailData: {
+            customerName: customer.name ?? "there",
+            orderId: returnRequest.orderId,
+            trackingId,
+            trackingUrl,
+            returnUrl: `${config.appUrl}/returns/${returnId}`,
+          },
           data: { returnId, trackingId, trackingUrl },
         })
         .catch(() => null);
@@ -253,6 +294,13 @@ export const returnService = {
           title: "Return rejected",
           message: `Your return request for order #${returnRequest.orderId} was rejected. Reason: ${note}`,
           channels: ["email", "sse"],
+          emailTemplate: "return-rejected",
+          emailData: {
+            customerName: customer.name ?? "there",
+            orderId: returnRequest.orderId,
+            reason: note,
+            returnUrl: `${config.appUrl}/returns/${returnId}`,
+          },
         })
         .catch(() => null);
     }
@@ -277,6 +325,7 @@ export const returnService = {
           },
         },
         shipment: true,
+        images: { select: { id: true, url: true, fileType: true } },
       },
     });
     if (!returnRequest) throw new Error("Return request not found");
@@ -336,6 +385,7 @@ export const returnService = {
               customer: { select: { id: true, name: true } },
             },
           },
+          images: { select: { id: true, url: true, fileType: true } },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
@@ -350,6 +400,97 @@ export const returnService = {
     };
   },
 
+  async listAllReturnRequests(filters: {
+    status?: string;
+    search?: string;
+    reason?: string;
+    sellerId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = filters.page ?? 1;
+    const limit = Math.min(filters.limit ?? 20, 100);
+
+    const where: any = {};
+    if (filters.sellerId) where.order = { sellerId: filters.sellerId };
+    if (filters.status) where.status = filters.status;
+    if (filters.reason)
+      where.reason = { contains: filters.reason, mode: "insensitive" };
+    if (filters.dateFrom || filters.dateTo) {
+      where.createdAt = {};
+      if (filters.dateFrom) where.createdAt.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo);
+    }
+    if (filters.search) {
+      where.OR = [
+        { id: { contains: filters.search, mode: "insensitive" } },
+        {
+          order: {
+            displayId: { contains: filters.search, mode: "insensitive" },
+          },
+        },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      db.returnRequest.findMany({
+        where,
+        include: {
+          shipment: {
+            select: { trackingId: true, trackingUrl: true, status: true },
+          },
+          order: {
+            select: {
+              id: true,
+              displayId: true,
+              type: true,
+              totalAmount: true,
+              customer: { select: { id: true, name: true } },
+              seller: { select: { id: true, name: true, businessName: true } },
+            },
+          },
+          images: { select: { id: true, url: true, fileType: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      db.returnRequest.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 },
+    };
+  },
+
+  async getReturnRequestForAdmin(returnId: string) {
+    const returnRequest = await db.returnRequest.findUnique({
+      where: { id: returnId },
+      include: {
+        shipment: true,
+        images: { select: { id: true, url: true, fileType: true } },
+        order: {
+          select: {
+            id: true,
+            displayId: true,
+            type: true,
+            totalAmount: true,
+            finalAmount: true,
+            status: true,
+            paymentStatus: true,
+            customer: { select: { id: true, name: true, email: true } },
+            seller: { select: { id: true, name: true, businessName: true, email: true } },
+          },
+        },
+      },
+    });
+    if (!returnRequest) throw new Error("Return request not found");
+    return returnRequest;
+  },
+
   async listCustomerReturns(customerId: string) {
     return db.returnRequest.findMany({
       where: { customerId },
@@ -362,8 +503,68 @@ export const returnService = {
         shipment: {
           select: { trackingId: true, trackingUrl: true, status: true },
         },
+        images: { select: { id: true, url: true, fileType: true } },
       },
       orderBy: { createdAt: "desc" },
     });
+  },
+
+  async handleReversePickupWebhookEvent(event: WebhookEvent) {
+    const shipment = await db.returnShipment.findFirst({
+      where: { trackingId: event.trackingId },
+    });
+    if (!shipment) return { received: true };
+
+    const mappedStatus = RETURN_STATUS_MAP[event.status.toLowerCase()];
+    if (!mappedStatus || mappedStatus === shipment.status) return { received: true };
+
+    const claimed = await db.returnShipment.updateMany({
+      where: { id: shipment.id, status: { not: mappedStatus } },
+      data: { status: mappedStatus },
+    });
+    if (claimed.count === 0) return { received: true };
+
+    if (mappedStatus === "IN_TRANSIT") {
+      await db.returnRequest.updateMany({
+        where: { id: shipment.returnRequestId, status: "APPROVED" },
+        data: { status: "PICKED_UP" },
+      });
+    }
+
+    if (mappedStatus === "DELIVERED") {
+      const completed = await db.returnRequest.updateMany({
+        where: { id: shipment.returnRequestId, status: { in: ["APPROVED", "PICKED_UP"] } },
+        data: { status: "COMPLETED" },
+      });
+      if (completed.count === 1) {
+        const returnRequest = await db.returnRequest.findUnique({
+          where: { id: shipment.returnRequestId },
+          select: { orderId: true, customerId: true },
+        });
+        if (returnRequest) {
+          try {
+            await paymentService.initiateRefund(
+              returnRequest.orderId,
+              "system",
+              "Return completed - item received back",
+            );
+          } catch (err: any) {
+            logger.error(
+              { err: err.message, orderId: returnRequest.orderId, returnRequestId: shipment.returnRequestId },
+              "Failed to initiate refund after return marked COMPLETED",
+            );
+          }
+        }
+      }
+    }
+
+    if (mappedStatus === "FAILED") {
+      logger.warn(
+        { returnRequestId: shipment.returnRequestId, trackingId: event.trackingId },
+        "Reverse pickup failed - return stuck, needs manual follow-up",
+      );
+    }
+
+    return { received: true };
   },
 };

@@ -358,6 +358,30 @@ export const orderController = {
     }
   },
 
+  async adminAssignShop(req: Request, res: Response) {
+    try {
+      const { orderId } = req.params;
+      const { shopId } = req.body;
+      const actorId = req.user!.id;
+      const result = await orderService.adminAssignShop(orderId as string, shopId, actorId);
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Admin assign shop failed");
+      const clientErrors = [
+        "Order not found",
+        "Shop not found",
+        "Shop not approved",
+        "Order is not awaiting assignment",
+      ];
+      if (clientErrors.includes(error.message)) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async bulkAction(req: Request, res: Response) {
     try {
       const sellerId = req.seller!.id;

@@ -1,129 +1,65 @@
-import { db } from "../../db/index";
-import { Prisma } from "../../../prisma/generated/client";
+import { SearchIndexFactory } from "../../lib/search/search-index.factory";
+import { SearchFilters, SearchSort, SearchProductDocument } from "../../lib/search/search-index.interface";
+import { StorageFactory } from "../../lib/storage/storage.factory";
+import { parseSearchQuery } from "../../lib/search/query-parser";
 
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 60; // mirrors OpenSearchIndexInstance's own MAX_PAGE_SIZE hard cap
 const DEFAULT_LIMIT = 20;
 
-export interface SearchProductsInput {
-    q?: string;
-    categoryId?: string;
-    minPrice?: number;
-    maxPrice?: number;
-    sellerId?: string;
-    shopId?: string;
+export interface SearchProductsInput extends SearchFilters {
     page?: number;
     limit?: number;
+    sort?: SearchSort;
 }
 
-async function getAllCategoryIds(categoryId: string): Promise<string[]> {
-    const all = await db.category.findMany({
-        select: { id: true, parentId: true },
-    });
+async function resolveResultImages(products: SearchProductDocument[]) {
+    const storage = StorageFactory.get();
+    return Promise.all(
+        products.map(async ({ imageKey, ...rest }) => ({
+            ...rest,
+            imageUrl: imageKey ? await storage.getSignedUrl({ key: imageKey, expiresIn: 3600 }) : null,
+        })),
+    );
+}
 
-    const childMap = new Map<string, string[]>();
-    for (const cat of all) {
-        if (cat.parentId) {
-            const children = childMap.get(cat.parentId) ?? [];
-            children.push(cat.id);
-            childMap.set(cat.parentId, children);
-        }
-    }
+async function applyQueryParser<T extends SearchFilters>(filters: T): Promise<T> {
+    if (!filters.q) return filters;
 
-    const result: string[] = [];
-    const queue = [categoryId];
+    const parsed = await parseSearchQuery(filters.q);
+    const mergedAttributes = { ...parsed.attributes, ...filters.attributes };
 
-    while (queue.length) {
-        const current = queue.shift()!;
-        result.push(current);
-        const children = childMap.get(current) ?? [];
-        queue.push(...children);
-    }
-
-    return result;
+    return {
+        ...filters,
+        q: parsed.q,
+        minPrice: filters.minPrice ?? parsed.minPrice,
+        maxPrice: filters.maxPrice ?? parsed.maxPrice,
+        ...(Object.keys(mergedAttributes).length > 0 && { attributes: mergedAttributes }),
+    };
 }
 
 export const productSearchService = {
     async searchProducts(input: SearchProductsInput) {
         const page = Math.max(1, input.page ?? 1);
-        const limit = Math.min(MAX_LIMIT, input.limit ?? DEFAULT_LIMIT);
-        const skip = (page - 1) * limit;
+        const limit = Math.min(MAX_LIMIT, Math.max(1, input.limit ?? DEFAULT_LIMIT));
 
-        let categoryIds: string[] | undefined;
-        if (input.categoryId) {
-            categoryIds = await getAllCategoryIds(input.categoryId);
-        }
+        const filters = await applyQueryParser(input);
 
-        const where: Prisma.ProductWhereInput = {
-            status: "APPROVED",
-
-            ...(input.q && {
-                OR: [
-                    { name: { contains: input.q, mode: "insensitive" } },
-                    { description: { contains: input.q, mode: "insensitive" } },
-                ],
-            }),
-
-            ...(categoryIds && { categoryId: { in: categoryIds } }),
-            ...(input.sellerId && { sellerId: input.sellerId }),
-            ...(input.shopId && { shopId: input.shopId }),
-
-            ...((input.minPrice !== undefined || input.maxPrice !== undefined) && {
-                OR: [
-                    {
-                        price: {
-                            ...(input.minPrice !== undefined && { gte: input.minPrice }),
-                            ...(input.maxPrice !== undefined && { lte: input.maxPrice }),
-                        },
-                    },
-                    {
-                        skus: {
-                            some: {
-                                price: {
-                                    ...(input.minPrice !== undefined && { gte: input.minPrice }),
-                                    ...(input.maxPrice !== undefined && { lte: input.maxPrice }),
-                                },
-                            },
-                        },
-                    },
-                ],
-            }),
-        };
-
-        const [products, total] = await Promise.all([
-            db.product.findMany({
-                where,
-                select: {
-                    id: true,
-                    name: true,
-                    description: true,
-                    price: true,
-                    compareAtPrice: true,
-                    sku: true,
-                    stock: true,
-                    isDigital: true,
-                    status: true,
-                    createdAt: true,
-                    category: { select: { id: true, name: true, slug: true } },
-                    shop: { select: { id: true, name: true, slug: true } },
-                    images: {
-                        orderBy: { order: "asc" },
-                        take: 1,
-                        select: { url: true },
-                    },
-                    skus: {
-                        select: { id: true, sku: true, price: true, stock: true, minQuantity: true, options: true },
-                        orderBy: { price: "asc" },
-                    },
-                },
-                orderBy: { createdAt: "desc" },
-                skip,
-                take: limit,
-            }),
-            db.product.count({ where }),
-        ]);
+        const provider = SearchIndexFactory.get();
+        const { products, total } = await provider.search({
+            q: filters.q,
+            categoryId: filters.categoryId,
+            minPrice: filters.minPrice,
+            maxPrice: filters.maxPrice,
+            sellerId: filters.sellerId,
+            shopId: filters.shopId,
+            attributes: filters.attributes,
+            page,
+            limit,
+            sort: input.sort ?? "relevance",
+        });
 
         return {
-            products,
+            products: await resolveResultImages(products),
             pagination: {
                 total,
                 page,
@@ -133,5 +69,10 @@ export const productSearchService = {
                 hasPrev: page > 1,
             },
         };
+    },
+
+    async getFacets(filters: SearchFilters) {
+        const provider = SearchIndexFactory.get();
+        return provider.getFacets(await applyQueryParser(filters));
     },
 };

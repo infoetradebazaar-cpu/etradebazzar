@@ -1,6 +1,10 @@
 import { GstProvider, GstDetails } from "./gst.interface";
+import { fetchWithTimeout } from "../http/fetch-with-timeout";
+import { VerificationRejectedError } from "../verification/verification-errors";
+import { logger } from "../../utils/logger";
 
-const BASE_URL = "https://kyc-api.surepass.io/api/v1";
+const GST_ENDPOINT = "https://sandbox.surepass.app/api/v1/corporate/gstin";
+const GST_TIMEOUT_MS = 4000;
 
 export class SurepassGstInstance implements GstProvider {
   private token: string;
@@ -10,29 +14,41 @@ export class SurepassGstInstance implements GstProvider {
   }
 
   async verifyGst(gstin: string): Promise<GstDetails> {
-    const res = await fetch(`${BASE_URL}/corporate/gstin`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.token}`,
+    const res = await fetchWithTimeout(
+      GST_ENDPOINT,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({ id_number: gstin }),
       },
-      body: JSON.stringify({ id_number: gstin }),
-    });
+      GST_TIMEOUT_MS,
+    );
 
-    if (!res.ok)
-      throw new Error(
-        "GST verification failed  invalid GSTIN or service error",
+    // Surepass returns 422 - not 200 - for a legitimate "GSTIN doesn't
+    // exist/match" result
+    const data = await res.json().catch(() => null) as any;
+    const result = data?.data;
+
+    if (!res.ok || !result || !result.gstin) {
+      if (data?.success === false && res.status === 422) {
+        throw new VerificationRejectedError(data.message || "Invalid GSTIN");
+      }
+      logger.error(
+        { status: res.status, body: data },
+        "Surepass GST verification API returned an unexpected response",
       );
-
-    const data = (await res.json()) as any;
-    const result = data.data;
+      throw new Error("GST verification failed service error");
+    }
 
     return {
       gstin: result.gstin,
       legalName: result.legal_name,
-      tradeName: result.trade_name ?? result.legal_name,
+      tradeName: result.business_name ?? result.legal_name,
       status: result.gstin_status,
-      address: result.principal_place_address ?? "",
+      address: result.address ?? "",
       registrationDate: result.date_of_registration,
       businessType: result.constitution_of_business,
       raw: result,

@@ -18,6 +18,13 @@ const clientErrors = [
   "All values already exist",
   "Variant attribute ",
   "Invalid variant value ",
+  "Price tier not found",
+  "A tier at minQty=",
+  "SkuPriceTier.minQty must be >= 2",
+  "Tier price (",
+  "Tier hidden floor price (",
+  "Tier hidden floor (",
+  "Cannot set SKU price (",
 ];
 
 function isClientError(message: string): boolean {
@@ -220,6 +227,100 @@ export const productVariantController = {
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async listPriceTiers(req: Request, res: Response) {
+    try {
+      const { productId, skuId } = req.params;
+      const result = await productVariantService.listPriceTiers(String(productId), String(skuId));
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "List price tiers failed");
+      if (isClientError(error.message)) {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async listPriceTiersForSeller(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const { productId, skuId } = req.params;
+      const result = await productVariantService.listPriceTiersForSeller(
+        sellerId,
+        String(productId),
+        String(skuId),
+      );
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "List price tiers (seller) failed");
+      if (isClientError(error.message)) {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async createPriceTier(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const { productId, skuId } = req.params;
+      const result = await productVariantService.createPriceTier(
+        sellerId,
+        String(productId),
+        String(skuId),
+        req.body,
+      );
+      return res.status(201).json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Create price tier failed");
+      if (isClientError(error.message)) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async updatePriceTier(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const { productId, skuId, tierId } = req.params;
+      const result = await productVariantService.updatePriceTier(
+        sellerId,
+        String(productId),
+        String(skuId),
+        String(tierId),
+        req.body,
+      );
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Update price tier failed");
+      if (isClientError(error.message)) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async deletePriceTier(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const { productId, skuId, tierId } = req.params;
+      await productVariantService.deletePriceTier(
+        sellerId,
+        String(productId),
+        String(skuId),
+        String(tierId),
+      );
+      return res.json({ success: true, message: "Price tier deleted" });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Delete price tier failed");
+      if (isClientError(error.message)) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res.status(500).json({ success: false, error: "Internal server error" });
     }
   },
 };

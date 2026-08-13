@@ -2,8 +2,9 @@ import { Router } from "express";
 import multer from "multer";
 import { orderController } from "./order.controller";
 import { protect } from "../../middleware/auth";
-import { resolveTenant, requirePlatformAdmin } from "../../middleware/tenant";
-import { requireSellerRole } from "../../middleware/rbac";
+import { resolveTenant } from "../../middleware/tenant";
+import { requirePlatformAdminAndPermission, requirePermission } from "../../middleware/permission";
+import { PLATFORM_PERMISSIONS, PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
 import {
   sellerLimiter,
@@ -23,6 +24,7 @@ import {
   listAllOrdersSchema,
   markPackedSchema,
   cancelOrderSchema,
+  adminAssignShopSchema,
 } from "./order.schema";
 
 const router = Router();
@@ -37,7 +39,7 @@ router.get(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager"),
+  requirePermission(PERMISSIONS.ORDERS_MANAGE),
   orderController.exportOrdersCsv,
 );
 
@@ -46,7 +48,7 @@ router.get(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager", "staff"),
+  requirePermission(PERMISSIONS.ORDERS_FULFILL),
   orderController.getActionRequired,
 );
 
@@ -55,7 +57,7 @@ router.get(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager", "staff"),
+  requirePermission(PERMISSIONS.ORDERS_FULFILL),
   orderController.listBulkUploads,
 );
 
@@ -63,9 +65,18 @@ router.get(
   "/all",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin"),
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_ORDERS_VIEW_ALL]),
   validate(listAllOrdersSchema),
   orderController.listAllOrders,
+);
+
+router.patch(
+  "/:orderId/assign",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_ORDERS_ASSIGN]),
+  validate(adminAssignShopSchema),
+  orderController.adminAssignShop,
 );
 
 router.post(
@@ -73,7 +84,7 @@ router.post(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager"),
+  requirePermission(PERMISSIONS.ORDERS_MANAGE),
   validate(bulkOrderActionSchema),
   orderController.bulkAction,
 );
@@ -83,7 +94,7 @@ router.post(
   protect,
   sellerLimiter,
   resolveTenant,
-  requireSellerRole("owner", "manager"),
+  requirePermission(PERMISSIONS.ORDERS_MANAGE),
   validate(bulkRespondNegotiationsSchema),
   orderController.bulkRespondNegotiations,
 );
@@ -93,7 +104,7 @@ router.post(
   protect,
   resolveTenant,
   sellerLimiter,
-  requireSellerRole("owner"),
+  requirePermission(PERMISSIONS.ORDERS_ADMIN),
   validate(setThresholdSchema),
   orderController.setThreshold,
 );
@@ -103,7 +114,7 @@ router.get(
   protect,
   resolveTenant,
   sellerLimiter,
-  requireSellerRole("owner", "manager"),
+  requirePermission(PERMISSIONS.ORDERS_MANAGE),
   orderController.getThresholds,
 );
 
@@ -112,7 +123,7 @@ router.delete(
   protect,
   resolveTenant,
   sellerLimiter,
-  requireSellerRole("owner"),
+  requirePermission(PERMISSIONS.ORDERS_ADMIN),
   orderController.deleteThreshold,
 );
 
@@ -120,7 +131,7 @@ router.post(
   "/commission",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin"),
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_ORDERS_SET_COMMISSION]),
   validate(setCommissionSchema),
   orderController.setCommission,
 );
@@ -183,7 +194,7 @@ router.patch(
   protect,
   resolveTenant,
   sellerLimiter,
-  requireSellerRole("owner", "manager", "staff"),
+  requirePermission(PERMISSIONS.ORDERS_FULFILL),
   validate(markPackedSchema),
   orderController.markPacked,
 );
@@ -194,7 +205,7 @@ router.get(
   protect,
   resolveTenant,
   sellerLimiter,
-  requireSellerRole("owner", "manager", "staff"),
+  requirePermission(PERMISSIONS.ORDERS_FULFILL),
   orderController.listOrders,
 );
 
@@ -203,7 +214,7 @@ router.post(
   sellerLimiter,
   protect,
   resolveTenant,
-  requireSellerRole("owner", "manager"),
+  requirePermission(PERMISSIONS.ORDERS_MANAGE),
   validate(submitProposalSchema),
   orderController.submitProposalAsSeller,
 );
@@ -213,7 +224,7 @@ router.patch(
   protect,
   resolveTenant,
   sellerLimiter,
-  requireSellerRole("owner", "manager", "staff"),
+  requirePermission(PERMISSIONS.ORDERS_FULFILL),
   validate(assignShopSchema),
   orderController.assignShopToAddress,
 );

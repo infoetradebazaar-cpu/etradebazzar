@@ -156,6 +156,19 @@ export const otpLimiter = createRateLimiter({
     failClosed: true,
 });
 
+export const verificationCostLimiter = createRateLimiter({
+    ...getConfig("VERIFICATION_COST", { windowSecs: 60, max: 5 }),
+    keyPrefix: "verification-cost",
+    keyExtractor: getSellerOrIp,
+    failClosed: true,
+});
+
+export const searchLimiter = createRateLimiter({
+    ...getConfig("SEARCH", { windowSecs: 60, max: 60 }),
+    keyPrefix: "search",
+    keyExtractor: getIp,
+});
+
 export const twoFactorLimiter = createRateLimiter({
     ...getConfig("2FA", { windowSecs: 60, max: 5 }),
     keyPrefix: "2fa",

@@ -1,11 +1,21 @@
-export interface AadhaarOtpSession {
+export interface DigilockerInitInput {
+  redirectUrl?: string;
+  prefill?: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+  };
+}
+
+export interface DigilockerSession {
   clientId: string;
-  raw: unknown;
+  url: string;
+  expirySeconds: number;
 }
 
 export interface AadhaarDetails {
   aadhaarNumberMasked: string;
-  fullName: string;
+  fullName?: string;
   dob?: string;
   gender?: string;
   address?: string;
@@ -13,6 +23,6 @@ export interface AadhaarDetails {
 }
 
 export interface AadhaarProvider {
-  generateOtp(aadhaarNumber: string): Promise<AadhaarOtpSession>;
-  submitOtp(clientId: string, otp: string): Promise<AadhaarDetails>;
+  initializeDigilocker(input: DigilockerInitInput): Promise<DigilockerSession>;
+  fetchAadhaarDetails(clientId: string): Promise<AadhaarDetails>;
 }

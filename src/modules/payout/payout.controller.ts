@@ -127,14 +127,31 @@ export const payoutController = {
       const clientErrors = [
         "Seller not found",
         "Seller bank details not found",
-        "No unpaid orders to payout",
+        "No unpaid orders to payout in this period",
         "Net payout amount must be greater than 0",
       ];
       if (
         clientErrors.includes(error.message) ||
-        error.message.includes("Seller bank account is not verified")
+        error.message.includes("Seller bank account is not verified") ||
+        error.message.startsWith("Requested period overlaps an existing payout")
       ) {
         return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async reconcilePayout(req: Request, res: Response) {
+    try {
+      const { payoutId } = req.params;
+      const result = await payoutService.reconcilePayout(payoutId as string);
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Reconcile payout failed");
+      if (error.message === "Payout not found") {
+        return res.status(404).json({ success: false, error: error.message });
       }
       return res
         .status(500)

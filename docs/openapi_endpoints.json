@@ -1,0 +1,872 @@
+[
+  {
+    "module": "addresses",
+    "endpoints": [
+      {
+        "path": "/api/addresses",
+        "method": "GET,POST"
+      },
+      {
+        "path": "/api/addresses/{addressId}",
+        "method": "PATCH,DELETE"
+      }
+    ]
+  },
+  {
+    "module": "analytics",
+    "endpoints": [
+      {
+        "path": "/api/analytics/seller",
+        "method": "GET"
+      },
+      {
+        "path": "/api/analytics/seller/revenue",
+        "method": "GET"
+      },
+      {
+        "path": "/api/analytics/seller/products",
+        "method": "GET"
+      },
+      {
+        "path": "/api/analytics/seller/returns",
+        "method": "GET"
+      },
+      {
+        "path": "/api/analytics/platform",
+        "method": "GET"
+      },
+      {
+        "path": "/api/analytics/platform/sellers",
+        "method": "GET"
+      },
+      {
+        "path": "/api/analytics/refresh",
+        "method": "POST"
+      },
+      {
+        "path": "/api/analytics/refresh/{viewName}",
+        "method": "POST"
+      }
+    ]
+  },
+  {
+    "module": "auth",
+    "endpoints": [
+      {
+        "path": "/api/auth/login",
+        "method": "POST"
+      },
+      {
+        "path": "/api/auth/logout",
+        "method": "POST"
+      },
+      {
+        "path": "/api/auth/refresh",
+        "method": "POST"
+      },
+      {
+        "path": "/api/auth/me",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "module": "cart",
+    "endpoints": [
+      {
+        "path": "/api/cart",
+        "method": "GET,DELETE"
+      },
+      {
+        "path": "/api/cart/items",
+        "method": "POST"
+      },
+      {
+        "path": "/api/cart/items/{itemId}",
+        "method": "PATCH,DELETE"
+      },
+      {
+        "path": "/api/cart/checkout",
+        "method": "POST"
+      }
+    ]
+  },
+  {
+    "module": "categories",
+    "endpoints": [
+      {
+        "path": "/api/categories",
+        "method": "GET,POST"
+      },
+      {
+        "path": "/api/categories/tree",
+        "method": "GET"
+      },
+      {
+        "path": "/api/categories/{categoryId}",
+        "method": "GET,PATCH,DELETE"
+      },
+      {
+        "path": "/api/categories/{categoryId}/attributes",
+        "method": "GET,POST"
+      },
+      {
+        "path": "/api/categories/{categoryId}/attributes/{attributeId}",
+        "method": "PATCH,DELETE"
+      }
+    ]
+  },
+  {
+    "module": "coupons",
+    "endpoints": [
+      {
+        "path": "/api/coupons/validate",
+        "method": "POST"
+      },
+      {
+        "path": "/api/coupons",
+        "method": "POST,GET"
+      },
+      {
+        "path": "/api/coupons/bulk-generate",
+        "method": "POST"
+      },
+      {
+        "path": "/api/coupons/{couponId}",
+        "method": "GET,PATCH"
+      },
+      {
+        "path": "/api/coupons/{couponId}/deactivate",
+        "method": "PATCH"
+      }
+    ]
+  },
+  {
+    "module": "customers",
+    "endpoints": [
+      {
+        "path": "/api/customers/register",
+        "method": "POST"
+      },
+      {
+        "path": "/api/customers/profile",
+        "method": "GET,PUT"
+      },
+      {
+        "path": "/api/customers/phone/link-request",
+        "method": "POST"
+      },
+      {
+        "path": "/api/customers/phone/link-verify",
+        "method": "POST"
+      },
+      {
+        "path": "/api/customers/orders",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "module": "gst",
+    "endpoints": [
+      {
+        "path": "/api/gst/verify",
+        "method": "POST"
+      },
+      {
+        "path": "/api/gst/verify-autofill",
+        "method": "POST"
+      }
+    ]
+  },
+  {
+    "module": "location",
+    "endpoints": [
+      {
+        "path": "/api/location/pincode/{pincode}",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "module": "notifications",
+    "endpoints": [
+      {
+        "path": "/api/notifications",
+        "method": "GET"
+      },
+      {
+        "path": "/api/notifications/stream",
+        "method": "GET"
+      },
+      {
+        "path": "/api/notifications/read",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/notifications/read-all",
+        "method": "PATCH"
+      }
+    ]
+  },
+  {
+    "module": "orders",
+    "endpoints": [
+      {
+        "path": "/api/orders",
+        "method": "POST,GET"
+      },
+      {
+        "path": "/api/orders/bulk",
+        "method": "POST"
+      },
+      {
+        "path": "/api/orders/{orderId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/orders/{orderId}/negotiate",
+        "method": "POST"
+      },
+      {
+        "path": "/api/orders/{orderId}/negotiate/{negotiationId}",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/orders/{orderId}/addresses/{addressId}/assign",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/orders/threshold",
+        "method": "POST"
+      },
+      {
+        "path": "/api/orders/commission",
+        "method": "POST"
+      }
+    ]
+  },
+  {
+    "module": "payments",
+    "endpoints": [
+      {
+        "path": "/api/payments/orders/{orderId}/advance",
+        "method": "POST"
+      },
+      {
+        "path": "/api/payments/orders/{orderId}/final",
+        "method": "POST"
+      },
+      {
+        "path": "/api/payments/verify",
+        "method": "POST"
+      },
+      {
+        "path": "/api/payments/orders/{orderId}/refund",
+        "method": "POST"
+      },
+      {
+        "path": "/api/payments/orders/{orderId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/payments/webhook",
+        "method": "POST"
+      }
+    ]
+  },
+  {
+    "module": "payouts",
+    "endpoints": [
+      {
+        "path": "/api/payouts/me",
+        "method": "GET"
+      },
+      {
+        "path": "/api/payouts/config",
+        "method": "POST"
+      },
+      {
+        "path": "/api/payouts/sellers",
+        "method": "GET"
+      },
+      {
+        "path": "/api/payouts/sellers/{sellerId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/payouts/sellers/{sellerId}/initiate",
+        "method": "POST"
+      },
+      {
+        "path": "/api/payouts/history",
+        "method": "GET"
+      },
+      {
+        "path": "/api/payouts/history/{sellerId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/payouts/{payoutId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/payouts/webhook",
+        "method": "POST"
+      }
+    ]
+  },
+  {
+    "module": "platform",
+    "endpoints": [
+      {
+        "path": "/api/platform/roles",
+        "method": "GET,POST"
+      },
+      {
+        "path": "/api/platform/roles/{roleId}",
+        "method": "PATCH,DELETE"
+      },
+      {
+        "path": "/api/platform/members",
+        "method": "GET,POST"
+      },
+      {
+        "path": "/api/platform/members/{memberId}/role",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/platform/members/{memberId}",
+        "method": "DELETE"
+      },
+      {
+        "path": "/api/platform/audit-logs",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "module": "print-areas",
+    "endpoints": [
+      {
+        "path": "/api/print-areas/{productId}",
+        "method": "GET,PUT,DELETE"
+      }
+    ]
+  },
+  {
+    "module": "products",
+    "endpoints": [
+      {
+        "path": "/api/products/search",
+        "method": "GET"
+      },
+      {
+        "path": "/api/products/bulk/template",
+        "method": "GET"
+      },
+      {
+        "path": "/api/products/bulk",
+        "method": "POST"
+      },
+      {
+        "path": "/api/products/pending",
+        "method": "GET"
+      },
+      {
+        "path": "/api/products",
+        "method": "POST"
+      },
+      {
+        "path": "/api/products/shop/{shopId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/products/{productId}",
+        "method": "GET,PATCH,DELETE"
+      },
+      {
+        "path": "/api/products/{productId}/approve",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/products/{productId}/reject",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/products/{productId}/images",
+        "method": "GET,POST"
+      },
+      {
+        "path": "/api/products/{productId}/images/reorder",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/products/{productId}/images/{imageId}",
+        "method": "DELETE"
+      },
+      {
+        "path": "/api/products/{productId}/variants",
+        "method": "GET,POST"
+      },
+      {
+        "path": "/api/products/{productId}/variants/{optionId}/values",
+        "method": "POST"
+      },
+      {
+        "path": "/api/products/{productId}/variants/{optionId}",
+        "method": "DELETE"
+      },
+      {
+        "path": "/api/products/{productId}/variants/{optionId}/values/{valueId}",
+        "method": "DELETE"
+      },
+      {
+        "path": "/api/products/{productId}/skus",
+        "method": "GET,POST"
+      },
+      {
+        "path": "/api/products/{productId}/skus/{skuId}",
+        "method": "GET,PATCH,DELETE"
+      }
+    ]
+  },
+  {
+    "module": "returns",
+    "endpoints": [
+      {
+        "path": "/api/returns",
+        "method": "POST,GET"
+      },
+      {
+        "path": "/api/returns/my",
+        "method": "GET"
+      },
+      {
+        "path": "/api/returns/{returnId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/returns/{returnId}/approve",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/returns/{returnId}/reject",
+        "method": "PATCH"
+      }
+    ]
+  },
+  {
+    "module": "reviews",
+    "endpoints": [
+      {
+        "path": "/api/reviews/product/{productId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/reviews",
+        "method": "POST"
+      },
+      {
+        "path": "/api/reviews/{reviewId}/helpful",
+        "method": "POST"
+      },
+      {
+        "path": "/api/reviews/seller",
+        "method": "GET"
+      },
+      {
+        "path": "/api/reviews/{reviewId}/reply",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/reviews/pending",
+        "method": "GET"
+      },
+      {
+        "path": "/api/reviews/{reviewId}/moderate",
+        "method": "PATCH"
+      }
+    ]
+  },
+  {
+    "module": "security",
+    "endpoints": [
+      {
+        "path": "/api/security/summary",
+        "method": "GET"
+      },
+      {
+        "path": "/api/security/2fa/setup",
+        "method": "POST"
+      },
+      {
+        "path": "/api/security/2fa/verify",
+        "method": "POST"
+      },
+      {
+        "path": "/api/security/2fa/disable",
+        "method": "POST"
+      },
+      {
+        "path": "/api/security/sessions",
+        "method": "GET"
+      },
+      {
+        "path": "/api/security/sessions/{sessionId}",
+        "method": "DELETE"
+      },
+      {
+        "path": "/api/security/sessions/revoke-all",
+        "method": "POST"
+      }
+    ]
+  },
+  {
+    "module": "seller-profile",
+    "endpoints": [
+      {
+        "path": "/api/seller-profile/profile",
+        "method": "GET,PUT"
+      },
+      {
+        "path": "/api/seller-profile/business",
+        "method": "GET,PUT"
+      },
+      {
+        "path": "/api/seller-profile/verification-badges",
+        "method": "GET"
+      },
+      {
+        "path": "/api/seller-profile/shops/{shopId}/stats",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "module": "sellers",
+    "endpoints": [
+      {
+        "path": "/api/sellers/register",
+        "method": "POST"
+      },
+      {
+        "path": "/api/sellers/invite",
+        "method": "POST"
+      },
+      {
+        "path": "/api/sellers/invite/accept",
+        "method": "POST"
+      },
+      {
+        "path": "/api/sellers/kyc",
+        "method": "POST"
+      },
+      {
+        "path": "/api/sellers/bank",
+        "method": "POST,GET,PATCH"
+      },
+      {
+        "path": "/api/sellers/bank/verify-ifsc",
+        "method": "POST"
+      },
+      {
+        "path": "/api/sellers/members",
+        "method": "POST,GET"
+      },
+      {
+        "path": "/api/sellers/members/invite",
+        "method": "POST"
+      },
+      {
+        "path": "/api/sellers/members/{memberId}",
+        "method": "DELETE"
+      },
+      {
+        "path": "/api/sellers/members/{memberId}/role",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/sellers/roles",
+        "method": "GET,POST"
+      },
+      {
+        "path": "/api/sellers/roles/{roleId}",
+        "method": "PATCH,DELETE"
+      },
+      {
+        "path": "/api/sellers/roles/{roleId}/permissions",
+        "method": "GET,PUT"
+      },
+      {
+        "path": "/api/sellers/permissions",
+        "method": "GET"
+      },
+      {
+        "path": "/api/sellers/invites",
+        "method": "GET"
+      },
+      {
+        "path": "/api/sellers/invites/{inviteId}",
+        "method": "DELETE"
+      },
+      {
+        "path": "/api/sellers/invites/resend",
+        "method": "POST"
+      },
+      {
+        "path": "/api/sellers/invites/accept",
+        "method": "POST"
+      },
+      {
+        "path": "/api/sellers/pending",
+        "method": "GET"
+      },
+      {
+        "path": "/api/sellers/all",
+        "method": "GET"
+      },
+      {
+        "path": "/api/sellers/kyc/pending",
+        "method": "GET"
+      },
+      {
+        "path": "/api/sellers/{sellerId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/sellers/{sellerId}/approve",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/sellers/{sellerId}/reject",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/sellers/{sellerId}/suspend",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/sellers/{sellerId}/reactivate",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/sellers/{sellerId}/kyc/verify",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/sellers/{sellerId}/kyc/reject",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/sellers/{sellerId}/bank/reverify",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/sellers/{sellerId}/bank/override",
+        "method": "PATCH"
+      }
+    ]
+  },
+  {
+    "module": "shipments",
+    "endpoints": [
+      {
+        "path": "/api/shipments",
+        "method": "GET"
+      },
+      {
+        "path": "/api/shipments/with-orders",
+        "method": "GET"
+      },
+      {
+        "path": "/api/shipments/bulk-cancel",
+        "method": "POST"
+      },
+      {
+        "path": "/api/shipments/export",
+        "method": "GET"
+      },
+      {
+        "path": "/api/shipments/serviceability",
+        "method": "GET"
+      },
+      {
+        "path": "/api/shipments/{shipmentId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/shipments/{shipmentId}/with-order",
+        "method": "GET"
+      },
+      {
+        "path": "/api/shipments/{shipmentId}/track",
+        "method": "GET"
+      },
+      {
+        "path": "/api/shipments/{shipmentId}/cancel",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/shipments/webhook",
+        "method": "POST"
+      }
+    ]
+  },
+  {
+    "module": "shops",
+    "endpoints": [
+      {
+        "path": "/api/shops/all",
+        "method": "GET"
+      },
+      {
+        "path": "/api/shops",
+        "method": "POST,GET"
+      },
+      {
+        "path": "/api/shops/{shopId}",
+        "method": "GET,PATCH"
+      },
+      {
+        "path": "/api/shops/access/{memberId}",
+        "method": "PUT,GET"
+      },
+      {
+        "path": "/api/shops/{shopId}/auto-assign",
+        "method": "PATCH"
+      }
+    ]
+  },
+  {
+    "module": "storefront",
+    "endpoints": [
+      {
+        "path": "/api/storefront/shops/{slug}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/storefront/shops/{slug}/products",
+        "method": "GET"
+      },
+      {
+        "path": "/api/storefront/products/{productId}",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "module": "templates",
+    "endpoints": [
+      {
+        "path": "/api/templates/product/{productId}",
+        "method": "GET"
+      },
+      {
+        "path": "/api/templates/{templateId}",
+        "method": "GET,PATCH,DELETE"
+      },
+      {
+        "path": "/api/templates",
+        "method": "GET,POST"
+      }
+    ]
+  },
+  {
+    "module": "upload-asset",
+    "endpoints": [
+      {
+        "path": "/api/upload-asset",
+        "method": "POST,GET"
+      },
+      {
+        "path": "/api/upload-asset/{assetId}",
+        "method": "DELETE"
+      }
+    ]
+  },
+  {
+    "module": "users",
+    "endpoints": [
+      {
+        "path": "/api/users",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "module": "verification",
+    "endpoints": [
+      {
+        "path": "/api/verification/aadhaar/generate-otp",
+        "method": "POST"
+      },
+      {
+        "path": "/api/verification/aadhaar/verify-otp",
+        "method": "POST"
+      },
+      {
+        "path": "/api/verification/government-id",
+        "method": "POST"
+      },
+      {
+        "path": "/api/verification/status",
+        "method": "GET"
+      },
+      {
+        "path": "/api/verification/{sellerId}/aadhaar/verify",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/verification/{sellerId}/aadhaar/reject",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/verification/{sellerId}/government-id/verify",
+        "method": "PATCH"
+      },
+      {
+        "path": "/api/verification/{sellerId}/government-id/reject",
+        "method": "PATCH"
+      }
+    ]
+  },
+  {
+    "module": "wallet",
+    "endpoints": [
+      {
+        "path": "/api/wallet/balance",
+        "method": "GET"
+      },
+      {
+        "path": "/api/wallet/topup",
+        "method": "POST"
+      },
+      {
+        "path": "/api/wallet/transactions",
+        "method": "GET"
+      },
+      {
+        "path": "/api/wallet/topups",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "module": "wishlist",
+    "endpoints": [
+      {
+        "path": "/api/wishlist",
+        "method": "GET"
+      },
+      {
+        "path": "/api/wishlist/items",
+        "method": "POST"
+      },
+      {
+        "path": "/api/wishlist/items/{productId}",
+        "method": "DELETE"
+      }
+    ]
+  }
+]

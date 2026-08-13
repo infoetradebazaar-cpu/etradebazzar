@@ -4,7 +4,6 @@ import {
   assignDefaultRolePermissions,
   seedPlatformPermissions,
 } from "../src/lib/permission/permission.service";
-import { analyticsRegistry } from "../src/lib/analytics/analytics.registry";
 import { generateDisplayId } from "../src/lib/uid/uid.generator";
 import { encrypt } from "../src/utils/encryption";
 import { logger } from "../src/utils/logger";
@@ -901,7 +900,7 @@ async function seedComprehensive() {
         const defs = categoryAttributeDefs[parentCat.name];
         if (!defs) continue;
         for (const def of defs) {
-          const attr = await db.categoryAttribute
+          await db.categoryAttribute
             .create({
               data: {
                 categoryId: parentId,
@@ -910,24 +909,14 @@ async function seedComprehensive() {
                 type: def.type,
                 required: def.required,
                 isVariant: def.isVariant,
+                options: def.options
+                ? { create: def.options.map((value) => ({ value })) }
+                : undefined,
                 unit: def.unit ?? null,
                 sortOrder: def.sortOrder,
               },
             })
-            .catch(() => null);
-          if (attr && def.options?.length) {
-            for (const opt of def.options) {
-              await db.categoryAttributeOption
-                .create({
-                  data: {
-                    categoryAttributeId: attr.id,
-                    value: opt,
-                    status: "APPROVED",
-                  },
-                })
-                .catch(() => {});
-            }
-          }
+            .catch(() => {});
         }
       }
 
@@ -1029,8 +1018,36 @@ async function seedComprehensive() {
       }
 
       await fixSellerPermissions();
-      logger.info("Refreshing analytics views...");
-      await analyticsRegistry.refreshAll();
+
+      // Seed notification preferences for existing users (idempotent)
+      logger.info("Seeding notification preferences...");
+      const existingUsers = await db.user.findMany({ select: { id: true } });
+      const notifCategories = [
+        "ORDER",
+        "SHIPMENT",
+        "PAYOUT",
+        "NEGOTIATION",
+        "PROMOTION",
+        "SECURITY",
+      ] as const;
+      for (const user of existingUsers) {
+        for (const category of notifCategories) {
+          await db.notificationPreference
+            .upsert({
+              where: {
+                userId_category: { userId: user.id, category },
+              },
+              update: {},
+              create: {
+                userId: user.id,
+                category,
+                enabled: category === "SECURITY" ? true : Math.random() > 0.1,
+              },
+            })
+            .catch(() => {});
+        }
+      }
+
       logger.info("✅ Seed completed (product re-seed)!");
       logger.info(`  Products: ${products.length}`);
       return;
@@ -1299,7 +1316,7 @@ async function seedComprehensive() {
         categoryMap.set(sub, child.id);
       }
     }
-
+    
     // 6b. Category Attributes
     logger.info("Seeding category attributes...");
     for (const parentCat of categoryTree) {
@@ -1308,7 +1325,7 @@ async function seedComprehensive() {
       const defs = categoryAttributeDefs[parentCat.name];
       if (!defs) continue;
       for (const def of defs) {
-        const attr = await db.categoryAttribute
+        await db.categoryAttribute
           .create({
             data: {
               categoryId: parentId,
@@ -1317,24 +1334,14 @@ async function seedComprehensive() {
               type: def.type,
               required: def.required,
               isVariant: def.isVariant,
+              options: def.options
+                ? { create: def.options.map((value) => ({ value })) }
+                : undefined,
               unit: def.unit ?? null,
               sortOrder: def.sortOrder,
             },
           })
-          .catch(() => null);
-        if (attr && def.options?.length) {
-          for (const opt of def.options) {
-            await db.categoryAttributeOption
-              .create({
-                data: {
-                  categoryAttributeId: attr.id,
-                  value: opt,
-                  status: "APPROVED",
-                },
-              })
-              .catch(() => {});
-          }
-        }
+          .catch(() => {});
       }
     }
 
@@ -2059,12 +2066,33 @@ async function seedComprehensive() {
       }
     }
 
+    // 22b. Notification Preferences
+    logger.info("Seeding notification preferences...");
+    const notifCategories = [
+      "ORDER",
+      "SHIPMENT",
+      "PAYOUT",
+      "NEGOTIATION",
+      "PROMOTION",
+      "SECURITY",
+    ] as const;
+    for (const user of [...allSellerUsers, ...customers]) {
+      for (const category of notifCategories) {
+        // SECURITY is non-disableable; keep enabled. Others ~90% enabled.
+        const enabled =
+          category === "SECURITY" ? true : Math.random() > 0.1;
+        await db.notificationPreference.create({
+          data: {
+            userId: user.id,
+            category,
+            enabled,
+          },
+        });
+      }
+    }
+
     // 23. Fix Permissions
     await fixSellerPermissions();
-
-    // 24. Refresh analytics materialized views
-    logger.info("Refreshing analytics views...");
-    await analyticsRegistry.refreshAll();
 
     logger.info("✅ Seed completed!");
     logger.info(

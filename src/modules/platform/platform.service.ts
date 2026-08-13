@@ -1,5 +1,7 @@
 import { db } from "../../db/index";
 import { redis, RedisKeys } from "../../db/redis";
+import { isPlatformPermissionKey } from "../../lib/permission/permission.constants";
+import { invalidatePlatformPermissionCache } from "../../middleware/permission";
 
 export const platformService = {
   async createRole(data: { name: string; description?: string }) {
@@ -27,7 +29,12 @@ export const platformService = {
       throw new Error("Cannot rename protected role");
     }
 
-    return db.platformRole.update({ where: { id: roleId }, data });
+    try {
+      return await db.platformRole.update({ where: { id: roleId }, data });
+    } catch (err: any) {
+      if (err?.code === "P2002") throw new Error("A role with this name already exists");
+      throw err;
+    }
   },
 
   async deleteRole(roleId: string) {
@@ -61,6 +68,81 @@ export const platformService = {
       },
       orderBy: { createdAt: "asc" },
     });
+  },
+
+  async listRolePermissions(roleId: string) {
+    const role = await db.platformRole.findUnique({
+      where: { id: roleId },
+      select: {
+        id: true,
+        name: true,
+        permissions: {
+          select: { permission: { select: { id: true, key: true } } },
+        },
+      },
+    });
+    if (!role) throw new Error("Role not found");
+    return role;
+  },
+
+  async updateRolePermissions(actorId: string, roleId: string, permissionKeys: string[]) {
+    const role = await db.platformRole.findUnique({ where: { id: roleId } });
+    if (!role) throw new Error("Role not found");
+
+    const outOfScope = permissionKeys.filter((k) => !isPlatformPermissionKey(k));
+    if (outOfScope.length > 0) {
+      throw new Error(`Not platform-scoped permissions: ${outOfScope.join(", ")}`);
+    }
+
+    const permissions = await db.permission.findMany({
+      where: { key: { in: permissionKeys } },
+      select: { id: true, key: true },
+    });
+
+    const foundKeys = new Set(permissions.map((p) => p.key));
+    const missing = permissionKeys.filter((k) => !foundKeys.has(k));
+    if (missing.length > 0) {
+      throw new Error(`Unknown permissions: ${missing.join(", ")}`);
+    }
+
+    await db.$transaction(async (tx) => {
+      await tx.platformRolePermission.deleteMany({ where: { roleId } });
+
+      if (permissions.length > 0) {
+        await tx.platformRolePermission.createMany({
+          data: permissions.map((p) => ({ roleId, permissionId: p.id })),
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          actorType: "platform",
+          action: "PLATFORM_ROLE_PERMISSIONS_UPDATED",
+          entityType: "platform_role",
+          entityId: roleId,
+          metadata: { permissions: permissionKeys },
+        },
+      });
+    });
+
+    const members = await db.platformMember.findMany({
+      where: { roleId },
+      select: { userId: true },
+    });
+    for (const member of members) {
+      await invalidatePlatformPermissionCache(member.userId);
+    }
+
+    return { roleId, permissions: permissionKeys };
+  },
+
+  async listPlatformPermissions() {
+    const all = await db.permission.findMany({
+      select: { id: true, key: true, description: true },
+      orderBy: { key: "asc" },
+    });
+    return all.filter((p) => isPlatformPermissionKey(p.key));
   },
 
   async addMember(actorId: string, data: { email: string; roleId: string }) {
@@ -120,6 +202,7 @@ export const platformService = {
     });
 
     await redis.del(RedisKeys.userRoles(member.userId, "platform"));
+    await invalidatePlatformPermissionCache(member.userId);
 
     await db.auditLog.create({
       data: {
@@ -151,6 +234,7 @@ export const platformService = {
 
     await db.platformMember.delete({ where: { id: memberId } });
     await redis.del(RedisKeys.userRoles(member.userId, "platform"));
+    await invalidatePlatformPermissionCache(member.userId);
 
     await db.auditLog.create({
       data: {

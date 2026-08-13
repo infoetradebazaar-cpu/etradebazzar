@@ -2,7 +2,8 @@ import { Router } from "express";
 import { returnController } from "./return.controller";
 import { protect } from "../../middleware/auth";
 import { resolveTenant } from "../../middleware/tenant";
-import { requireSellerRole } from "../../middleware/rbac";
+import { requirePermission, requirePlatformPermission } from "../../middleware/permission";
+import { PERMISSIONS, PLATFORM_PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
 import { sellerLimiter, publicLimiter } from "../../middleware/rate-limit";
 import {
@@ -30,13 +31,33 @@ router.get(
     returnController.listCustomerReturns
 );
 
+// Platform admin - platform-wide, not seller-scoped. Registered before the
+// seller "/" and "/:returnId" routes below so "/all" and "/all/:returnId"
+// aren't shadowed by "/:returnId" matching "all" as a param value.
+router.get(
+    "/all",
+    protect,
+    requirePlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_RETURNS_VIEW),
+    sellerLimiter,
+    returnController.listAllReturnRequests
+);
+
+router.get(
+    "/all/:returnId",
+    protect,
+    requirePlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_RETURNS_VIEW),
+    sellerLimiter,
+    validate(returnParamSchema),
+    returnController.getReturnRequestForAdmin
+);
+
 // Seller
 router.get(
     "/",
     protect,
     sellerLimiter,
     resolveTenant,
-    requireSellerRole("owner", "manager", "staff"),
+    requirePermission(PERMISSIONS.RETURNS_VIEW),
     returnController.listReturnRequests
 );
 
@@ -45,7 +66,7 @@ router.get(
     protect,
     resolveTenant,
     publicLimiter,
-    requireSellerRole("owner", "manager", "staff"),
+    requirePermission(PERMISSIONS.RETURNS_VIEW),
     validate(returnParamSchema),
     returnController.getReturnRequest
 );
@@ -55,7 +76,7 @@ router.patch(
     protect,
     sellerLimiter,
     resolveTenant,
-    requireSellerRole("owner", "manager"),
+    requirePermission(PERMISSIONS.RETURNS_MANAGE),
     validate(reviewReturnSchema),
     returnController.approveReturn
 );
@@ -65,7 +86,7 @@ router.patch(
     protect,
     sellerLimiter,
     resolveTenant,
-    requireSellerRole("owner", "manager"),
+    requirePermission(PERMISSIONS.RETURNS_MANAGE),
     validate(rejectReturnSchema),
     returnController.rejectReturn
 );

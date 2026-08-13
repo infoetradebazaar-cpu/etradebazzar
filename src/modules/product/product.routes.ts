@@ -5,15 +5,19 @@ import { productImageController } from "./product-image.controller";
 import { productVariantController } from "./product-variant.controller";
 import { productSearchController } from "./product-search.controller";
 import { productBulkController } from "./product-bulk.controller";
+import { commissionNegotiationController } from "./commission-negotiation.controller";
+import { productModel3dController } from "./product-model3d.controller";
+import { productModel3DParamSchema } from "./product-model3d.schema";
 import { protect } from "../../middleware/auth";
-import { resolveTenant, requirePlatformAdmin } from "../../middleware/tenant";
-import { requirePermission } from "../../middleware/permission";
-import { PERMISSIONS } from "../../lib/permission/permission.constants";
+import { resolveTenant } from "../../middleware/tenant";
+import { requirePermission, requirePlatformAdminAndPermission } from "../../middleware/permission";
+import { PERMISSIONS, PLATFORM_PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
 import {
   sellerLimiter,
   uploadLimiter,
   publicLimiter,
+  searchLimiter,
 } from "../../middleware/rate-limit";
 import {
   createProductSchema,
@@ -23,6 +27,7 @@ import {
   rejectProductSchema,
   listProductsSchema,
   bulkProductActionSchema,
+  submitForReviewSchema,
 } from "./product.schema";
 import {
   productImageParamSchema,
@@ -37,20 +42,38 @@ import {
   createSKUSchema,
   updateSKUSchema,
   skuParamSchema,
+  createPriceTierSchema,
+  updatePriceTierSchema,
+  priceTierParamSchema,
 } from "./product-variant.schema";
-import { searchProductsSchema } from "./product-search.schema";
+import { searchProductsSchema, facetsQuerySchema } from "./product-search.schema";
+import {
+  proposeCommissionSchema,
+  respondCommissionProposalSchema,
+  listCommissionProposalsSchema,
+} from "./commission-negotiation.schema";
 
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
+const upload3d = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
 
 router.get(
   "/search",
-  publicLimiter,
+  searchLimiter,
   validate(searchProductsSchema),
   productSearchController.searchProducts,
+);
+router.get(
+  "/search/facets",
+  searchLimiter,
+  validate(facetsQuerySchema),
+  productSearchController.getFacets,
 );
 router.get(
   "/bulk/template",
@@ -70,23 +93,38 @@ router.get(
   "/pending",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "product_reviewer"),
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_VIEW]),
   productController.listPendingProducts,
 );
 router.get(
   "/all",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "product_reviewer"),
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_VIEW]),
   productController.listAllProducts,
+);
+
+router.get(
+  "/commission-proposals/pending",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_VIEW]),
+  commissionNegotiationController.listPendingForAdmin,
 );
 router.get(
   "/details/:productId",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "product_reviewer"),
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_VIEW]),
   validate(productParamSchema),
   productController.getProductById,
+);
+router.get(
+  "/search/reconcile",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_VIEW]),
+  productSearchController.reconcileIndex,
 );
 
 // Platform Admin
@@ -94,7 +132,7 @@ router.patch(
   "/:productId/approve",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "product_reviewer"),
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_APPROVE]),
   validate(reviewProductSchema),
   productController.approveProduct,
 );
@@ -102,9 +140,33 @@ router.patch(
   "/:productId/reject",
   protect,
   sellerLimiter,
-  requirePlatformAdmin("super_admin", "product_reviewer"),
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_REJECT]),
   validate(rejectProductSchema),
   productController.rejectProduct,
+);
+router.post(
+  "/:productId/commission-proposals/admin",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_SET_COMMISSION]),
+  validate(proposeCommissionSchema),
+  commissionNegotiationController.proposeAsAdmin,
+);
+router.patch(
+  "/:productId/commission-proposals/:proposalId/respond/admin",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_SET_COMMISSION]),
+  validate(respondCommissionProposalSchema),
+  commissionNegotiationController.respondAsAdmin,
+);
+router.get(
+  "/:productId/commission-proposals/admin",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_VIEW]),
+  validate(listCommissionProposalsSchema),
+  commissionNegotiationController.listAsAdmin,
 );
 
 // Public: Product detail (for customers)
@@ -151,6 +213,42 @@ router.patch(
   requirePermission(PERMISSIONS.PRODUCTS_UPDATE),
   validate(updateProductSchema),
   productController.updateProduct,
+);
+router.patch(
+  "/:productId/submit-for-review",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_UPDATE),
+  validate(submitForReviewSchema),
+  productController.submitForReview,
+);
+router.post(
+  "/:productId/commission-proposals",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_UPDATE),
+  validate(proposeCommissionSchema),
+  commissionNegotiationController.proposeAsSeller,
+);
+router.patch(
+  "/:productId/commission-proposals/:proposalId/respond",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_UPDATE),
+  validate(respondCommissionProposalSchema),
+  commissionNegotiationController.respondAsSeller,
+);
+router.get(
+  "/:productId/commission-proposals",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_VIEW),
+  validate(listCommissionProposalsSchema),
+  commissionNegotiationController.listAsSeller,
 );
 router.delete(
   "/:productId",
@@ -214,6 +312,33 @@ router.delete(
   requirePermission(PERMISSIONS.PRODUCTS_IMAGES),
   validate(deleteImageSchema),
   productImageController.deleteImage,
+);
+
+// Product 3D Model
+router.get(
+  "/:productId/model3d",
+  publicLimiter,
+  validate(productModel3DParamSchema),
+  productModel3dController.get,
+);
+router.post(
+  "/:productId/model3d",
+  protect,
+  uploadLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_IMAGES),
+  upload3d.single("file"),
+  validate(productModel3DParamSchema),
+  productModel3dController.upload,
+);
+router.delete(
+  "/:productId/model3d",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_IMAGES),
+  validate(productModel3DParamSchema),
+  productModel3dController.delete,
 );
 
 // Product Variants
@@ -299,6 +424,50 @@ router.delete(
   requirePermission(PERMISSIONS.PRODUCTS_VARIANTS),
   validate(skuParamSchema),
   productVariantController.deleteSKU,
+);
+
+// SKU Price Tiers
+router.get(
+  "/:productId/skus/:skuId/tiers",
+  publicLimiter,
+  validate(skuParamSchema),
+  productVariantController.listPriceTiers,
+);
+router.get(
+  "/:productId/skus/:skuId/tiers/seller",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_VARIANTS),
+  validate(skuParamSchema),
+  productVariantController.listPriceTiersForSeller,
+);
+router.post(
+  "/:productId/skus/:skuId/tiers",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_VARIANTS),
+  validate(createPriceTierSchema),
+  productVariantController.createPriceTier,
+);
+router.patch(
+  "/:productId/skus/:skuId/tiers/:tierId",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_VARIANTS),
+  validate(updatePriceTierSchema),
+  productVariantController.updatePriceTier,
+);
+router.delete(
+  "/:productId/skus/:skuId/tiers/:tierId",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_VARIANTS),
+  validate(priceTierParamSchema),
+  productVariantController.deletePriceTier,
 );
 
 export default router;

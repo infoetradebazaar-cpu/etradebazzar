@@ -1,14 +1,21 @@
 import { db } from "../../db/index";
 import { StorageFactory } from "../../lib/storage/storage.factory";
+import { detectFileSignature, DetectedFileType } from "../../lib/storage/file-signature";
 import { randomUUID } from "crypto";
 
-const ALLOWED_TYPES: Record<string, string> = {
+const EXT_BY_TYPE: Record<DetectedFileType, string> = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
     "application/pdf": ".pdf",
+    "model/gltf-binary": ".glb",
+    "model/gltf+json": ".gltf",
 };
+
+const DEFAULT_ALLOWED_TYPES: readonly DetectedFileType[] = [
+    "image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf",
+];
 
 const ALLOWED_CATEGORIES = ["customer-uploads", "shop-assets", "kyc-documents"] as const;
 type AssetCategory = (typeof ALLOWED_CATEGORIES)[number];
@@ -20,40 +27,67 @@ const CATEGORY_MAX_SIZE: Record<AssetCategory, number> = {
     "kyc-documents": 5 * 1024 * 1024, // 5MB
 };
 
-function assertSafeFile(file: Express.Multer.File, category: AssetCategory): string {
-    const ext = ALLOWED_TYPES[file.mimetype];
-    if (!ext) {
-        throw new Error(
-            `Invalid file type. Allowed: ${Object.keys(ALLOWED_TYPES).join(", ")}`
-        );
-    }
+function assertSafeSize(file: Express.Multer.File, category: AssetCategory): void {
     const maxSize = CATEGORY_MAX_SIZE[category] ?? DEFAULT_MAX_SIZE;
     if (file.size > maxSize) {
         throw new Error(`File too large. Max size: ${maxSize / 1024 / 1024}MB`);
     }
-    return ext;
 }
 
 export const uploadAssetService = {
-    async uploadAsset(userId: string, file: Express.Multer.File, category: AssetCategory = "customer-uploads") {
+    async uploadAsset(
+        userId: string,
+        file: Express.Multer.File,
+        category: AssetCategory = "customer-uploads",
+        productId?: string,
+    ) {
         if (!ALLOWED_CATEGORIES.includes(category)) {
             throw new Error(`Invalid category. Allowed: ${ALLOWED_CATEGORIES.join(", ")}`);
         }
+        assertSafeSize(file, category);
 
-        const ext = assertSafeFile(file, category);
-        const safeKey = `${category}/${userId}/${Date.now()}-${randomUUID()}${ext}`;
+        let allowedTypes: readonly DetectedFileType[] = DEFAULT_ALLOWED_TYPES;
+        if (productId) {
+            const product = await db.product.findUnique({
+                where: { id: productId },
+                select: { customizationEnabled: true, customizationAcceptedFormats: true },
+            });
+            if (!product) throw new Error("Product not found");
+            if (!product.customizationEnabled) {
+                throw new Error("Customization is not enabled for this product");
+            }
+            if (product.customizationAcceptedFormats.length === 0) {
+                throw new Error("This product has no accepted customization formats configured");
+            }
+            allowedTypes = product.customizationAcceptedFormats as DetectedFileType[];
+        }
+
+        const detected = detectFileSignature(file.buffer);
+        if (!detected || !allowedTypes.includes(detected)) {
+            throw new Error(
+                `File content does not match an allowed type. Allowed: ${allowedTypes.join(", ")}`,
+            );
+        }
+
+        const safeKey = `${category}/${userId}/${Date.now()}-${randomUUID()}${EXT_BY_TYPE[detected]}`;
 
         const storage = StorageFactory.get();
         const upload = await storage.upload({
             key: safeKey,
             buffer: file.buffer,
-            mimeType: file.mimetype,
+            mimeType: detected,
             size: file.size,
             contentDisposition: "attachment",
         });
 
         return db.customerUploadAsset.create({
-            data: { userId, url: upload.url, key: upload.key, fileType: file.mimetype },
+            data: {
+                userId,
+                productId: productId ?? null,
+                url: upload.url,
+                key: upload.key,
+                fileType: detected,
+            },
         });
     },
 

@@ -2,8 +2,9 @@ import { Router } from "express";
 import multer from "multer";
 import { reviewController } from "./review.controller";
 import { protect } from "../../middleware/auth";
-import { resolveTenant, requirePlatformAdmin } from "../../middleware/tenant";
-import { requireSellerRole } from "../../middleware/rbac";
+import { resolveTenant } from "../../middleware/tenant";
+import { requirePlatformAdminAndPermission, requirePermission } from "../../middleware/permission";
+import { PLATFORM_PERMISSIONS, PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
 import { publicLimiter, sellerLimiter, uploadLimiter } from "../../middleware/rate-limit";
 import {
@@ -49,7 +50,7 @@ router.get(
     protect,
     sellerLimiter,
     resolveTenant,
-    requireSellerRole("owner", "manager", "staff"),
+    requirePermission(PERMISSIONS.REVIEWS_VIEW),
     reviewController.getSellerReviews
 );
 
@@ -58,7 +59,7 @@ router.patch(
     protect,
     sellerLimiter,
     resolveTenant,
-    requireSellerRole("owner", "manager"),
+    requirePermission(PERMISSIONS.REVIEWS_MANAGE),
     validate(replyReviewSchema),
     reviewController.replyToReview
 );
@@ -68,7 +69,7 @@ router.get(
     "/pending",
     protect,
     sellerLimiter,
-    requirePlatformAdmin("super_admin", "product_reviewer"),
+    requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_REVIEWS_MODERATE]),
     reviewController.listPendingReviews
 );
 
@@ -76,7 +77,7 @@ router.patch(
     "/:reviewId/moderate",
     protect,
     sellerLimiter,
-    requirePlatformAdmin("super_admin", "product_reviewer"),
+    requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_REVIEWS_MODERATE]),
     validate(moderateReviewSchema),
     reviewController.moderateReview
 );

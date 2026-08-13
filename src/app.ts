@@ -28,14 +28,19 @@ import walletRoutes from "./modules/wallet/wallet.routes";
 import gstRoutes from "./modules/gst/gst.routes";
 import templateRoutes from "./modules/template/template.routes";
 import printAreaRoutes from "./modules/print-area/print-area.routes";
+import customizationOptionRoutes from "./modules/customization-option/customization-option.routes";
 import userRoutes from "./modules/user/user.routes";
 import customerRoutes from "./modules/customer/customer.routes";
 import cartRoutes from "./modules/cart/cart.routes";
 import wishlistRoutes from "./modules/wishlist/wishlist.routes";
+import savedDesignRoutes from "./modules/saved-design/saved-design.routes";
 import uploadAssetRoutes from "./modules/upload-asset/upload-asset.routes";
 import notificationRoutes from "./modules/notification/notification.routes";
+import adminNotificationRoutes from "./modules/notification/admin-notification.routes";
 import addressRoutes from "./modules/address/address.routes";
 import locationRoutes from "./modules/location/location.routes";
+import negotiationRoutes from "./modules/negotiation/negotiation.routes";
+import { invoiceRoutes, purchaseOrderRoutes } from "./modules/invoicing/invoicing.routes";
 
 
 declare global {
@@ -75,8 +80,15 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-app.use(express.json({ limit: "100kb" }));
-app.use(express.urlencoded({ extended: true, limit: "100kb" }));
+const RAW_BODY_WEBHOOK_PATHS = new Set(["/api/v1/payments/webhook", "/api/v1/shipments/webhook"]);
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (RAW_BODY_WEBHOOK_PATHS.has(req.path)) return next();
+  return express.json({ limit: "100kb" })(req, res, next);
+});
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (RAW_BODY_WEBHOOK_PATHS.has(req.path)) return next();
+  return express.urlencoded({ extended: true, limit: "100kb" })(req, res, next);
+});
 
 app.get("/health", (req: Request, res: Response) => {
   res.json({
@@ -117,14 +129,20 @@ app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/gst", gstRoutes);
 app.use("/api/v1/templates", templateRoutes);
 app.use("/api/v1/print-areas", printAreaRoutes);
+app.use("/api/v1/customization-options", customizationOptionRoutes);
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/customers", customerRoutes);
 app.use("/api/v1/cart", cartRoutes);
 app.use("/api/v1/wishlist", wishlistRoutes);
+app.use("/api/v1/saved-designs", savedDesignRoutes);
 app.use("/api/v1/upload-asset", uploadAssetRoutes);
+app.use("/api/v1/notifications/admin", adminNotificationRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/addresses", addressRoutes);
 app.use("/api/v1/location", locationRoutes);
+app.use("/api/v1/negotiations", negotiationRoutes);
+app.use("/api/v1/invoices", invoiceRoutes);
+app.use("/api/v1/purchase-orders", purchaseOrderRoutes);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({

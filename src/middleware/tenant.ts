@@ -20,6 +20,27 @@ export async function invalidateSellerStatusCache(sellerId: string) {
   await redis.del(RedisKeys.sellerStatus(sellerId));
 }
 
+export async function platformRoleCheckPasses(userId: string, roles: string[]): Promise<boolean> {
+  const cacheKey = RedisKeys.userRoles(userId, "platform");
+  const cached = await redis.get(cacheKey);
+
+  let platformRole: string | null = null;
+  if (cached) {
+    platformRole = cached;
+  } else {
+    const member = await db.platformMember.findUnique({
+      where: { userId },
+      select: { role: { select: { name: true } } },
+    });
+    platformRole = member?.role.name ?? null;
+    if (platformRole) {
+      await redis.setex(cacheKey, 300, platformRole);
+    }
+  }
+
+  return !!platformRole && roles.includes(platformRole);
+}
+
 export const resolveTenant = async (req: Request, res: Response, next: NextFunction) => {
   const sellerId = req.user?.sellerId;
 
@@ -61,6 +82,7 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
   }
 };
 
+/** @deprecated use requirePlatformAdmin(...roles) instead **/
 export const requirePlatformAdmin = (...roles: string[]) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
@@ -101,8 +123,7 @@ export const requirePlatformAdmin = (...roles: string[]) => {
   };
 };
 
-/** @deprecated use requirePlatformAdmin(...roles) instead
- */
+/** @deprecated use requirePlatformAdmin(...roles) instead **/
 export const setPlatformAdmin = (req: Request, res: Response, next: NextFunction) => {
   logger.warn({ path: req.originalUrl }, "DEPRECATED setPlatformAdmin used - migrate to requirePlatformAdmin");
   runWithTenantContext({ isPlatformAdmin: true }, next);

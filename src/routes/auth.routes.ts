@@ -10,6 +10,8 @@ import { authLimiter, otpLimiter } from "../middleware/rate-limit";
 import bcrypt from "bcryptjs";
 import { ah } from "../utils/async-handler";
 import { otpService } from "../lib/otp/otp.service";
+import { checkLockout, recordFailedLogin, resetFailedLogins } from "../lib/auth/account-lockout";
+import { EmailFactory } from "../lib/notifications/email/email.factory";
 
 const router: Router = Router();
 
@@ -94,6 +96,17 @@ async function issueSession(
 router.post("/login", authLimiter, validate(loginSchema),
   ah(async (req, res) => {
     const { email, password } = req.body;
+    const lockoutId = String(email).trim().toLowerCase();
+
+    const existingLock = await checkLockout(lockoutId);
+    if (existingLock.locked) {
+      res.setHeader("Retry-After", existingLock.retryAfterSecs!);
+      return res.status(429).json({
+        success: false,
+        error: "Too many failed sign-in attempts please try again later",
+        retryAfter: existingLock.retryAfterSecs,
+      });
+    }
 
     const user = await db.user.findUnique({
       where: { email },
@@ -109,8 +122,31 @@ router.post("/login", authLimiter, validate(loginSchema),
     const passwordValid = await bcrypt.compare(password, user?.password ?? DUMMY_HASH);
 
     if (!user || !passwordValid) {
+      const failure = await recordFailedLogin(lockoutId);
+
+      if (failure.justLocked) {
+        if (user) {
+          EmailFactory.get()
+            .send({
+              to: user.email,
+              template: "account-locked",
+              subject: "Your account was temporarily locked",
+              data: { name: user.name || "there", retryAfterMinutes: Math.ceil(failure.retryAfterSecs! / 60) },
+            })
+            .catch((err: any) => logger.error({ err: err.message }, "Failed to send account-locked email"));
+        }
+        res.setHeader("Retry-After", failure.retryAfterSecs!);
+        return res.status(429).json({
+          success: false,
+          error: "Too many failed sign-in attempts please try again later",
+          retryAfter: failure.retryAfterSecs,
+        });
+      }
+
       return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
+
+    await resetFailedLogins(lockoutId);
 
     if (!user.isActive) {
       return res.status(403).json({ success: false, error: "Account disabled" });

@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { shipmentController } from "./shipment.controller";
 import { protect } from "../../middleware/auth";
-import { resolveTenant, requirePlatformAdmin } from "../../middleware/tenant";
-import { requireSellerRole } from "../../middleware/rbac";
+import { resolveTenant } from "../../middleware/tenant";
+import { requirePlatformAdminAndPermission, requirePermission } from "../../middleware/permission";
+import { PLATFORM_PERMISSIONS, PERMISSIONS } from "../../lib/permission/permission.constants";
 import { sellerLimiter, publicLimiter } from "../../middleware/rate-limit";
 import express from "express";
 import { validate } from "../../utils/validate";
@@ -19,7 +20,7 @@ router.get(
     "/with-orders",
     protect,
     sellerLimiter,
-    requirePlatformAdmin("super_admin"),
+    requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_SHIPMENTS_VIEW]),
     shipmentController.listShipmentsWithOrders
 );
 
@@ -27,7 +28,7 @@ router.get(
     "/",
     protect,
     sellerLimiter,
-    requirePlatformAdmin("super_admin"),
+    requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_SHIPMENTS_VIEW]),
     validate(listAllShipmentsSchema),
     shipmentController.listShipments
 );
@@ -37,7 +38,7 @@ router.get(
     protect,
     sellerLimiter,
     resolveTenant,
-    requireSellerRole("owner", "manager", "staff"),
+    requirePermission(PERMISSIONS.SHIPMENTS_VIEW),
     validate(serviceabilitySchema),
     shipmentController.checkServiceability
 );
@@ -46,7 +47,7 @@ router.get(
     "/:shipmentId/with-order",
     protect,
     sellerLimiter,
-    requirePlatformAdmin("super_admin"),
+    requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_SHIPMENTS_VIEW]),
     validate(shipmentParamSchema),
     shipmentController.getShipmentWithOrder
 );
@@ -55,7 +56,7 @@ router.get(
     "/:shipmentId",
     protect,
     sellerLimiter,
-    requirePlatformAdmin("super_admin"),
+    requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_SHIPMENTS_VIEW]),
     validate(shipmentParamSchema),
     shipmentController.getShipment
 );
@@ -74,7 +75,7 @@ router.patch(
     protect,
     sellerLimiter,
     resolveTenant,
-    requireSellerRole("owner", "manager"),
+    requirePermission(PERMISSIONS.SHIPMENTS_MANAGE),
     validate(shipmentParamSchema),
     shipmentController.cancelShipment
 );
@@ -84,7 +85,7 @@ router.post(
     protect,
     sellerLimiter,
     resolveTenant,
-    requireSellerRole("owner", "manager"),
+    requirePermission(PERMISSIONS.SHIPMENTS_MANAGE),
     validate(bulkCancelShipmentsSchema),
     shipmentController.bulkCancel
 );
@@ -93,7 +94,7 @@ router.get(
     "/export",
     protect,
     sellerLimiter,
-    requirePlatformAdmin("super_admin"),
+    requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_SHIPMENTS_VIEW]),
     shipmentController.exportShipmentsCsv
 );
 

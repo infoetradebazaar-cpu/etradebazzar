@@ -7,7 +7,7 @@ export const storefrontService = {
             select: {
                 id: true, displayId: true, name: true, slug: true, description: true,
                 category: true, logo: true, banner: true, returnPolicy: true, status: true,
-                _count: { select: { products: { where: { status: "APPROVED" } } } },
+                _count: { select: { products: { where: { status: "LIVE" } } } },
             },
         });
         if (!shop || shop.status !== "APPROVED") throw new Error("Shop not found");
@@ -24,7 +24,7 @@ export const storefrontService = {
         const page = filters.page ?? 1;
         const limit = Math.min(filters.limit ?? 20, 100);
 
-        const where: any = { shopId: shop.id, status: "APPROVED" };
+        const where: any = { shopId: shop.id, status: "LIVE" };
         if (filters.categoryId) where.categoryId = filters.categoryId;
         if (filters.search) where.name = { contains: filters.search, mode: "insensitive" };
 
@@ -57,7 +57,7 @@ export const storefrontService = {
                 category: { select: { id: true, name: true } },
             },
         });
-        if (!product || product.status !== "APPROVED") throw new Error("Product not found");
+        if (!product || product.status !== "LIVE") throw new Error("Product not found");
         return product;
     },
 };

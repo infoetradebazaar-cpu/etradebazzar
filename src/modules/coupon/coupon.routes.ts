@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { couponController } from "./coupon.controller";
 import { protect } from "../../middleware/auth";
-import { requirePlatformAdmin } from "../../middleware/tenant";
+import { requirePlatformAdminAndPermission } from "../../middleware/permission";
+import { PLATFORM_PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
 import { sellerLimiter, publicLimiter } from "../../middleware/rate-limit";
 import {
@@ -24,7 +25,7 @@ router.post(
 router.post(
     "/",
     protect,
-    requirePlatformAdmin("super_admin"),
+    requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_COUPONS_MANAGE]),
     sellerLimiter,
     validate(createCouponSchema),
     couponController.createCoupon
@@ -33,7 +34,7 @@ router.post(
 router.post(
     "/bulk-generate",
     protect,
-    requirePlatformAdmin("super_admin"),
+    requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_COUPONS_MANAGE]),
     sellerLimiter,
     validate(bulkGenerateCouponSchema),
     couponController.bulkGenerateCoupons
@@ -42,7 +43,7 @@ router.post(
 router.get(
     "/",
     protect,
-    requirePlatformAdmin("super_admin", "onboarding_manager"),
+    requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_COUPONS_VIEW]),
     sellerLimiter,
     validate(listCouponsSchema),
     couponController.listCoupons
@@ -51,7 +52,7 @@ router.get(
 router.get(
     "/:couponId",
     protect,
-    requirePlatformAdmin("super_admin", "onboarding_manager"),
+    requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_COUPONS_VIEW]),
     sellerLimiter,
     validate(couponParamSchema),
     couponController.getCoupon
@@ -60,7 +61,7 @@ router.get(
 router.patch(
     "/:couponId",
     protect,
-    requirePlatformAdmin("super_admin"),
+    requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_COUPONS_MANAGE]),
     sellerLimiter,
     validate(updateCouponSchema),
     couponController.updateCoupon
@@ -69,7 +70,7 @@ router.patch(
 router.patch(
     "/:couponId/deactivate",
     protect,
-    requirePlatformAdmin("super_admin"),
+    requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_COUPONS_MANAGE]),
     sellerLimiter,
     validate(couponParamSchema),
     couponController.deactivateCoupon

@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { db } from '../../db';
 import { decrypt, encrypt } from '../../utils/encryption';
 import { redis, RedisKeys } from '../../db/redis';
+import { getLocationFromIp } from '../../utils/geo';
 
 const ACCESS_TOKEN_TTL_SECS = 15 * 60;
 function isValidResult(result: any): boolean {
@@ -83,10 +84,15 @@ export const securityService = {
         }).catch(() => null);
     },
     async listSessions(userId: string) {
-        return db.session.findMany({
+        const sessions = await db.session.findMany({
             where: { userId, revoked: false },
             orderBy: { lastActiveAt: "desc" },
         });
+
+        return sessions.map((session) => ({
+            ...session,
+            location: getLocationFromIp(session.ipAddress ?? undefined),
+        }));
     },
     async revokeSession(userId: string, sessionId: string) {
         const session = await db.session.findFirst({ where: { id: sessionId, userId } });

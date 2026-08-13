@@ -4,6 +4,7 @@ export const createReturnSchema = z.object({
     body: z.object({
         orderId: z.string(),
         reason: z.string().min(10),
+        imageAssetIds: z.array(z.string()).max(6).optional(),
     }),
 });
 

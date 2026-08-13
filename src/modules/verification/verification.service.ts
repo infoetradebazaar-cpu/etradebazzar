@@ -4,10 +4,7 @@ import { PanFactory } from "../../lib/pan/pan.factory";
 import { encrypt } from "../../utils/encryption";
 
 export const verificationService = {
-  async requestAadhaarOtp(sellerId: string, aadhaarNumber: string) {
-    if (!/^\d{12}$/.test(aadhaarNumber))
-      throw new Error("Aadhaar number must be 12 digits");
-
+  async initializeAadhaarDigilocker(sellerId: string, redirectUrl?: string) {
     const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
     if (!kyc) throw new Error("KYC record not found - complete KYC first");
 
@@ -15,31 +12,39 @@ export const verificationService = {
       throw new Error("Aadhaar already verified, contact support to change it");
     }
 
+    const seller = await db.seller.findUnique({
+      where: { id: sellerId },
+      select: { name: true, email: true, phone: true },
+    });
+    if (!seller) throw new Error("Seller not found");
+
     const provider = AadhaarFactory.get();
-    const session = await provider.generateOtp(aadhaarNumber);
+    const session = await provider.initializeDigilocker({
+      redirectUrl,
+      prefill: { fullName: seller.name, email: seller.email, phone: seller.phone },
+    });
 
     await db.sellerKyc.update({
       where: { sellerId },
       data: {
-        aadharNumber: encrypt(aadhaarNumber, sellerId),
         aadhaarStatus: "PENDING",
         aadhaarRejectedReason: null,
-        aadhaarOtpClientId: session.clientId,
+        aadhaarDigilockerClientId: session.clientId,
       },
     });
 
-    return { otpSent: true };
+    return { url: session.url, expirySeconds: session.expirySeconds };
   },
 
-  async confirmAadhaarOtp(sellerId: string, otp: string) {
+  async confirmAadhaarDigilocker(sellerId: string) {
     const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
-    if (!kyc) throw new Error("KYC record not found complete KYC first");
-    if (!kyc.aadhaarOtpClientId) {
-      throw new Error("No pending Aadhaar OTP request request an OTP first");
+    if (!kyc) throw new Error("KYC record not found - complete KYC first");
+    if (!kyc.aadhaarDigilockerClientId) {
+      throw new Error("No pending Aadhaar DigiLocker session - start verification first");
     }
 
     const provider = AadhaarFactory.get();
-    const details = await provider.submitOtp(kyc.aadhaarOtpClientId, otp);
+    const details = await provider.fetchAadhaarDetails(kyc.aadhaarDigilockerClientId);
 
     return db.$transaction(async (tx) => {
       const updated = await tx.sellerKyc.update({
@@ -47,7 +52,7 @@ export const verificationService = {
         data: {
           aadhaarStatus: "VERIFIED",
           aadhaarVerifiedAt: new Date(),
-          aadhaarOtpClientId: null,
+          aadhaarDigilockerClientId: null,
           aadhaarVerifiedName: details.fullName || null,
           aadhaarVerificationMeta: details.raw as any,
         },
@@ -57,7 +62,7 @@ export const verificationService = {
         data: {
           sellerId, actorId: sellerId, actorType: "system",
           action: "AADHAAR_VERIFIED", entityType: "seller_kyc", entityId: sellerId,
-          metadata: { via: "surepass_otp", verifiedName: details.fullName },
+          metadata: { via: "surepass_digilocker", verifiedName: details.fullName },
         },
       });
 

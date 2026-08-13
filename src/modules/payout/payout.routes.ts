@@ -2,7 +2,9 @@ import { Router } from "express";
 import express from "express";
 import { payoutController } from "./payout.controller";
 import { protect } from "../../middleware/auth";
-import { resolveTenant, requirePlatformAdmin } from "../../middleware/tenant";
+import { resolveTenant } from "../../middleware/tenant";
+import { requirePlatformAdminAndPermission } from "../../middleware/permission";
+import { PLATFORM_PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
 import { paymentLimiter, sellerLimiter } from "../../middleware/rate-limit";
 import {
@@ -51,7 +53,7 @@ router.post(
 router.post(
   "/config",
   protect,
-  requirePlatformAdmin("super_admin"),
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_CONFIG]),
   sellerLimiter,
   validate(setPlatformConfigSchema),
   payoutController.setPlatformConfig,
@@ -60,7 +62,7 @@ router.post(
 router.get(
   "/sellers",
   protect,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_VIEW]),
   sellerLimiter,
   payoutController.listAllSellersSummary,
 );
@@ -68,7 +70,7 @@ router.get(
 router.get(
   "/sellers/:sellerId",
   protect,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_VIEW]),
   sellerLimiter,
   validate(sellerPayoutParamSchema),
   payoutController.getSellerPayoutSummary,
@@ -77,7 +79,7 @@ router.get(
 router.post(
   "/sellers/:sellerId/initiate",
   protect,
-  requirePlatformAdmin("super_admin"),
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_INITIATE]),
   paymentLimiter,
   validate(initiatePayoutSchema),
   payoutController.initiatePayout,
@@ -87,7 +89,7 @@ router.post(
 router.get(
   "/history",
   protect,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_VIEW]),
   sellerLimiter,
   payoutController.getPayoutHistory,
 );
@@ -95,7 +97,7 @@ router.get(
 router.get(
   "/history/:sellerId",
   protect,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_VIEW]),
   sellerLimiter,
   validate(sellerPayoutParamSchema),
   payoutController.getSellerPayoutHistory,
@@ -104,16 +106,25 @@ router.get(
 router.get(
   "/:payoutId",
   protect,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_VIEW]),
   sellerLimiter,
   validate(payoutParamSchema),
   payoutController.getPayoutById,
 );
 
 router.get(
+  "/:payoutId/reconcile",
+  protect,
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_VIEW]),
+  sellerLimiter,
+  validate(payoutParamSchema),
+  payoutController.reconcilePayout,
+);
+
+router.get(
   "/config",
   protect,
-  requirePlatformAdmin("super_admin"),
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_CONFIG]),
   sellerLimiter,
   payoutController.getPayoutConfig,
 );
@@ -121,7 +132,7 @@ router.get(
 router.get(
   "/sellers/:sellerId/export",
   protect,
-  requirePlatformAdmin("super_admin", "onboarding_manager"),
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_VIEW]),
   sellerLimiter,
   payoutController.exportPayoutsCsv,
 );

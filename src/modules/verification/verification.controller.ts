@@ -1,42 +1,45 @@
 import { Request, Response } from "express";
 import { verificationService } from "./verification.service";
+import { PanFactory } from "../../lib/pan/pan.factory";
 import { logger } from "../../utils/logger";
 
-const clientErrors = [
-    "Aadhaar number must be 12 digits",
-    "KYC record not found!complete KYC first",
-    "KYC record not found",
-    "Aadhaar already verified, contact support to change it",
-    "Government ID already verified, contact support to change it",
-    "PAN number format is invalid",
-    "No pending Aadhaar OTP request - request an OTP first",
-    "Aadhaar OTP request failed - invalid Aadhaar or service error",
-    "Aadhaar OTP verification failed - incorrect OTP or expired session",
-];
+function isClientError(error: any): boolean {
+    if (error?.name === "VerificationRejectedError") return true;
+    const msg: string = error?.message ?? "";
+    return (
+        msg.startsWith("KYC record not found") ||
+        msg.includes("already verified") ||
+        msg === "PAN number format is invalid" ||
+        msg.startsWith("PAN verification failed") ||
+        msg.startsWith("No pending Aadhaar DigiLocker session") ||
+        msg.startsWith("Aadhaar DigiLocker initialization failed") ||
+        msg.startsWith("Aadhaar verification failed") ||
+        msg.startsWith("Invalid Aadhaar number")
+    );
+}
 
 export const verificationController = {
-    async requestAadhaarOtp(req: Request, res: Response) {
+    async initializeAadhaarDigilocker(req: Request, res: Response) {
         try {
             const sellerId = req.seller!.id;
-            const { aadhaarNumber } = req.body;
-            const result = await verificationService.requestAadhaarOtp(sellerId, aadhaarNumber);
+            const { redirectUrl } = req.body;
+            const result = await verificationService.initializeAadhaarDigilocker(sellerId, redirectUrl);
             return res.json({ success: true, data: result });
         } catch (error: any) {
-            logger.error({ err: error.message }, "Request aadhaar OTP failed");
-            if (clientErrors.includes(error.message)) return res.status(400).json({ success: false, error: error.message });
+            logger.error({ err: error.message }, "Initialize aadhaar digilocker failed");
+            if (isClientError(error)) return res.status(400).json({ success: false, error: error.message });
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },
 
-    async confirmAadhaarOtp(req: Request, res: Response) {
+    async confirmAadhaarDigilocker(req: Request, res: Response) {
         try {
             const sellerId = req.seller!.id;
-            const { otp } = req.body;
-            const result = await verificationService.confirmAadhaarOtp(sellerId, otp);
+            const result = await verificationService.confirmAadhaarDigilocker(sellerId);
             return res.json({ success: true, data: result });
         } catch (error: any) {
-            logger.error({ err: error.message }, "Confirm aadhaar OTP failed");
-            if (clientErrors.includes(error.message)) return res.status(400).json({ success: false, error: error.message });
+            logger.error({ err: error.message }, "Confirm aadhaar digilocker failed");
+            if (isClientError(error)) return res.status(400).json({ success: false, error: error.message });
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },
@@ -48,7 +51,7 @@ export const verificationController = {
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Submit govt id failed");
-            if (clientErrors.includes(error.message)) return res.status(400).json({ success: false, error: error.message });
+            if (isClientError(error)) return res.status(400).json({ success: false, error: error.message });
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },
@@ -135,6 +138,40 @@ export const verificationController = {
             if (error.message.startsWith("Cannot reject")) {
                 return res.status(400).json({ success: false, error: error.message });
             }
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
+    /** Standalone PAN verification — calls PanFactory directly, no KYC record needed */
+    async verifyPan(req: Request, res: Response) {
+        try {
+            const { panNumber } = req.body;
+            const provider = PanFactory.get();
+            const result = await provider.verifyPan(panNumber);
+            return res.json({ success: true, data: result });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Standalone PAN verify failed");
+            if (isClientError(error)) {
+                return res.status(400).json({ success: false, error: error.message });
+            }
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
+    /** Standalone Aadhaar verification — validates 12-digit format (real verification via DigiLocker later) */
+    async verifyAadhaarNumber(req: Request, res: Response) {
+        try {
+            const { aadhaarNumber } = req.body;
+            return res.json({
+                success: true,
+                data: {
+                    aadhaarNumber: aadhaarNumber.replace(/(\d{4})\d{4}(\d{4})/, "$1XXXX$2"),
+                    valid: true,
+                    message: "Aadhaar number format is valid",
+                },
+            });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Standalone Aadhaar verify failed");
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },

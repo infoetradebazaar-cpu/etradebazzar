@@ -45,6 +45,15 @@ export const platformRoleParamSchema = z.object({
   }),
 });
 
+export const updatePlatformRolePermissionsSchema = z.object({
+  params: z.object({
+    roleId: z.string(),
+  }),
+  body: z.object({
+    permissionKeys: z.array(z.string()),
+  }),
+});
+
 export const getAuditLogsSchema = z.object({
   query: z.object({
     sellerId: z.string().optional(),

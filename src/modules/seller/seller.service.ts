@@ -7,6 +7,8 @@ import {
   lookupIfsc,
 } from "../../lib/bank/bank.validator";
 import { assignDefaultRolePermissions } from "../../lib/permission/permission.service";
+import { isPlatformPermissionKey } from "../../lib/permission/permission.constants";
+import { verifyGstAtRegistration, verifyPanAtRegistration } from "./registration-verification";
 import { PincodeFactory } from "../../lib/location/pincode.factory";
 import { logger } from "../../utils/logger";
 import bcrypt from "bcryptjs";
@@ -14,6 +16,8 @@ import { StorageFactory } from "../../lib/storage/storage.factory";
 import { BankVerificationFactory } from "../../lib/bank-verification/bank-verification.factory";
 import { computeNameMatchScore, NAME_MATCH_THRESHOLD } from "../../lib/bank-verification/name-match";
 import { maskAccountNumber } from "../../utils/mask";
+import { config } from "../../../config/config";
+import { EmailFactory } from "../../lib/notifications/email/email.factory";
 
 const DEFAULT_SELLER_ROLES = ["owner", "manager", "staff"];
 
@@ -73,6 +77,17 @@ async function runBankVerification(
   };
 }
 
+function toClientBankDetail<
+  T extends { accountNumber: string; verificationStatus: string; fundAccountId?: string | null },
+>(detail: T): Omit<T, "fundAccountId"> & { isVerified: boolean } {
+  const { fundAccountId: _fundAccountId, ...rest } = detail;
+  return {
+    ...rest,
+    accountNumber: decrypt(detail.accountNumber),
+    isVerified: detail.verificationStatus === "VERIFIED",
+  };
+}
+
 async function resolveKycDocumentUrls(kyc: { documents: string[] } | null) {
   if (!kyc || !kyc.documents?.length) return kyc;
   const storage = StorageFactory.get();
@@ -122,6 +137,8 @@ export const sellerService = {
     businessName: string;
     businessType: "INDIVIDUAL" | "COMPANY" | "PARTNERSHIP";
     address: { street: string; city?: string; state?: string; pincode: string };
+    gstin?: string;
+    pan?: string;
   }) {
     const existing = await db.user.findUnique({ where: { email: data.email } });
     if (existing) throw new Error("Email already registered");
@@ -129,7 +146,7 @@ export const sellerService = {
     const address = await resolveAddressCityState(data.address);
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
-    return db.$transaction(async (tx) => {
+    const registered = await db.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: { name: data.name, email: data.email, password: hashedPassword },
         select: {
@@ -183,6 +200,30 @@ export const sellerService = {
 
       return { user, seller };
     });
+    const kycUpdate: Record<string, any> = {};
+
+    if (data.gstin) {
+      const gstResult = await verifyGstAtRegistration(data.gstin);
+      kycUpdate.gstin = data.gstin;
+      kycUpdate.gstVerificationStatus = gstResult.status;
+      kycUpdate.gstVerifiedAt = gstResult.status === "VERIFIED" ? new Date() : null;
+      kycUpdate.gstVerificationMeta = gstResult.raw ?? { failureReason: gstResult.failureReason };
+    }
+
+    if (data.pan) {
+      const panResult = await verifyPanAtRegistration(data.pan);
+      kycUpdate.pan = data.pan;
+      kycUpdate.panVerificationStatus = panResult.status;
+      kycUpdate.panVerifiedAt = panResult.status === "VERIFIED" ? new Date() : null;
+      kycUpdate.panVerificationMeta = panResult.raw ?? { failureReason: panResult.failureReason };
+    }
+
+    if (Object.keys(kycUpdate).length === 0) {
+      return registered;
+    }
+
+    const updatedSeller = await db.seller.update({ where: { id: registered.seller.id }, data: kycUpdate });
+    return { user: registered.user, seller: updatedSeller };
   },
 
   async completeKyc(
@@ -248,7 +289,7 @@ export const sellerService = {
 
     const verification = await runBankVerification(seller, data);
 
-    return db.sellerBankDetail.create({
+    const created = await db.sellerBankDetail.create({
       data: {
         sellerId,
         accountHolderName: data.accountHolderName,
@@ -258,6 +299,8 @@ export const sellerService = {
         ...verification,
       },
     });
+
+    return toClientBankDetail(created);
   },
 
   async updateBankDetail(
@@ -330,7 +373,8 @@ export const sellerService = {
       }
     }
 
-    return db.sellerBankDetail.update({ where: { sellerId }, data: updateData });
+    const updated = await db.sellerBankDetail.update({ where: { sellerId }, data: updateData });
+    return toClientBankDetail(updated);
   },
 
   async getBankDetail(sellerId: string) {
@@ -338,8 +382,7 @@ export const sellerService = {
       where: { sellerId },
     });
     if (!detail) return null;
-    const { fundAccountId: _fundAccountId, ...rest } = detail;
-    return { ...rest, accountNumber: decrypt(detail.accountNumber) };
+    return toClientBankDetail(detail);
   },
 
   async inviteSeller(actorId: string, email: string) {
@@ -779,6 +822,14 @@ export const sellerService = {
         pincode: true,
         status: true,
         createdAt: true,
+        gstin: true,
+        pan: true,
+        gstVerificationStatus: true,
+        gstVerifiedAt: true,
+        gstVerificationMeta: true,
+        panVerificationStatus: true,
+        panVerifiedAt: true,
+        panVerificationMeta: true,
         kyc: {
           select: {
             id: true,
@@ -901,6 +952,89 @@ export const sellerService = {
     return updated;
   },
 
+  async reverifyGstPan(sellerId: string, actorId: string) {
+    const seller = await db.seller.findUnique({ where: { id: sellerId } });
+    if (!seller) throw new Error("Seller not found");
+    if (!seller.gstin && !seller.pan) {
+      throw new Error("No GSTIN or PAN on file to reverify");
+    }
+
+    const update: Record<string, any> = {};
+
+    if (seller.gstin) {
+      const gstResult = await verifyGstAtRegistration(seller.gstin);
+      update.gstVerificationStatus = gstResult.status;
+      update.gstVerifiedAt = gstResult.status === "VERIFIED" ? new Date() : null;
+      update.gstVerificationMeta = gstResult.raw ?? { failureReason: gstResult.failureReason };
+    }
+
+    if (seller.pan) {
+      const panResult = await verifyPanAtRegistration(seller.pan);
+      update.panVerificationStatus = panResult.status;
+      update.panVerifiedAt = panResult.status === "VERIFIED" ? new Date() : null;
+      update.panVerificationMeta = panResult.raw ?? { failureReason: panResult.failureReason };
+    }
+
+    const updated = await db.seller.update({ where: { id: sellerId }, data: update });
+
+    await db.auditLog.create({
+      data: {
+        sellerId,
+        actorId,
+        actorType: "platform",
+        action: "SELLER_GST_PAN_REVERIFIED",
+        entityType: "seller",
+        entityId: sellerId,
+        metadata: {
+          gstVerificationStatus: update.gstVerificationStatus,
+          panVerificationStatus: update.panVerificationStatus,
+        },
+      },
+    });
+
+    return updated;
+  },
+
+  async overrideGstPanVerification(
+    sellerId: string,
+    actorId: string,
+    data: { field: "gst" | "pan"; status: "VERIFIED" | "FAILED"; reason: string },
+  ) {
+    const seller = await db.seller.findUnique({ where: { id: sellerId } });
+    if (!seller) throw new Error("Seller not found");
+    if (data.field === "gst" && !seller.gstin) throw new Error("No GSTIN on file to override");
+    if (data.field === "pan" && !seller.pan) throw new Error("No PAN on file to override");
+
+    const update: Record<string, any> =
+      data.field === "gst"
+        ? {
+            gstVerificationStatus: data.status,
+            gstVerifiedAt: data.status === "VERIFIED" ? new Date() : null,
+            gstVerificationMeta: { manualOverride: true, reason: data.reason },
+          }
+        : {
+            panVerificationStatus: data.status,
+            panVerifiedAt: data.status === "VERIFIED" ? new Date() : null,
+            panVerificationMeta: { manualOverride: true, reason: data.reason },
+          };
+
+    const updated = await db.seller.update({ where: { id: sellerId }, data: update });
+
+    await db.auditLog.create({
+      data: {
+        sellerId,
+        actorId,
+        actorType: "platform",
+        action: "SELLER_GST_PAN_VERIFICATION_OVERRIDDEN",
+        entityType: "seller",
+        entityId: sellerId,
+        metadata: { field: data.field, status: data.status, reason: data.reason },
+      },
+    });
+
+    return updated;
+  },
+
   async verifyKyc(sellerId: string, actorId: string) {
     const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
     if (!kyc) throw new Error("KYC not found");
@@ -951,6 +1085,11 @@ export const sellerService = {
           title: "KYC verified",
           message: "Your KYC has been verified successfully.",
           channels: ["email", "sse"],
+          emailTemplate: "kyc-verified",
+          emailData: {
+            sellerName: seller.name,
+            dashboardUrl: `${config.appUrl}/dashboard`,
+          },
         })
         .catch(() => null);
     }
@@ -999,6 +1138,12 @@ export const sellerService = {
           title: "KYC rejected",
           message: `Your KYC was rejected. Reason: ${reason}`,
           channels: ["email", "sse"],
+          emailTemplate: "kyc-rejected",
+          emailData: {
+            sellerName: seller.name,
+            reason,
+            dashboardUrl: `${config.appUrl}/dashboard`,
+          },
         })
         .catch(() => null);
     }
@@ -1074,17 +1219,36 @@ export const sellerService = {
       select: { businessName: true },
     });
 
-    notificationService
-      .notify({
-        userId: existingUser?.id ?? "",
-        email: data.email,
-        type: "TEAM_INVITE" as any,
-        title: "You've been invited to join a team",
-        message: `You've been invited to join ${seller?.businessName ?? "a seller"} on ETradeBazaar as ${role.name}.`,
-        channels: ["email"],
-        data: { token: invite.token },
-      })
-      .catch(() => null);
+    const inviteUrl = `${config.appUrl}/team/accept-invite?token=${invite.token}`;
+    const teamInviteEmailData = {
+      businessName: seller?.businessName ?? "a seller",
+      roleName: role.name,
+      inviteUrl,
+    };
+    if (existingUser) {
+      notificationService
+        .notify({
+          userId: existingUser.id,
+          email: data.email,
+          type: "TEAM_INVITE" as any,
+          title: "You've been invited to join a team",
+          message: `You've been invited to join ${seller?.businessName ?? "a seller"} on ETradeBazaar as ${role.name}.`,
+          channels: ["email", "sse"],
+          emailTemplate: "team-invite",
+          emailData: teamInviteEmailData,
+          data: { token: invite.token },
+        })
+        .catch(() => null);
+    } else {
+      EmailFactory.get()
+        .send({
+          to: data.email,
+          subject: "You've been invited to join a team",
+          template: "team-invite",
+          data: teamInviteEmailData,
+        })
+        .catch((err: any) => logger.error({ err: err.message }, "Team invite email failed"));
+    }
 
     await db.auditLog.create({
       data: {
@@ -1184,7 +1348,13 @@ export const sellerService = {
     if (["owner", "manager", "staff"].includes(role.name))
       throw new Error("Cannot modify default roles");
 
-    const updated = await db.sellerRole.update({ where: { id: roleId }, data });
+    let updated;
+    try {
+      updated = await db.sellerRole.update({ where: { id: roleId }, data });
+    } catch (err: any) {
+      if (err?.code === "P2002") throw new Error("Role with this name already exists");
+      throw err;
+    }
 
     await db.auditLog.create({
       data: {
@@ -1277,21 +1447,41 @@ export const sellerService = {
       data: { expiresAt },
     });
 
-    const seller = await db.seller.findUnique({
-      where: { id: sellerId },
-      select: { businessName: true },
-    });
-    notificationService
-      .notify({
-        userId: "",
-        email: invite.email,
-        type: "TEAM_INVITE" as any,
-        title: "Reminder: You've been invited to join a team",
-        message: `Reminder — you've been invited to join ${seller?.businessName ?? "a seller"} as ${(invite as any).role?.name ?? "a member"}.`,
-        channels: ["email"],
-        data: { token: invite.token },
-      })
-      .catch(() => null);
+    const [seller, existingUser] = await Promise.all([
+      db.seller.findUnique({ where: { id: sellerId }, select: { businessName: true } }),
+      db.user.findUnique({ where: { email: invite.email } }),
+    ]);
+    const reminderInviteUrl = `${config.appUrl}/team/accept-invite?token=${invite.token}`;
+    const reminderEmailData = {
+      businessName: seller?.businessName ?? "a seller",
+      roleName: (invite as any).role?.name ?? "a member",
+      inviteUrl: reminderInviteUrl,
+      isReminder: true,
+    };
+    if (existingUser) {
+      notificationService
+        .notify({
+          userId: existingUser.id,
+          email: invite.email,
+          type: "TEAM_INVITE" as any,
+          title: "Reminder: You've been invited to join a team",
+          message: `Reminder — you've been invited to join ${seller?.businessName ?? "a seller"} as ${(invite as any).role?.name ?? "a member"}.`,
+          channels: ["email", "sse"],
+          emailTemplate: "team-invite",
+          emailData: reminderEmailData,
+          data: { token: invite.token },
+        })
+        .catch(() => null);
+    } else {
+      EmailFactory.get()
+        .send({
+          to: invite.email,
+          subject: "Reminder: You've been invited to join a team",
+          template: "team-invite",
+          data: reminderEmailData,
+        })
+        .catch((err: any) => logger.error({ err: err.message }, "Team invite reminder email failed"));
+    }
 
     return updated;
   },
@@ -1364,6 +1554,11 @@ export const sellerService = {
     if (!role) throw new Error("Role not found");
     if (role.name === "owner")
       throw new Error("Cannot modify owner role permissions");
+
+    const outOfScope = permissionKeys.filter((k) => isPlatformPermissionKey(k));
+    if (outOfScope.length > 0) {
+      throw new Error(`Not seller-scoped permissions: ${outOfScope.join(", ")}`);
+    }
 
     const permissions = await db.permission.findMany({
       where: { key: { in: permissionKeys } },

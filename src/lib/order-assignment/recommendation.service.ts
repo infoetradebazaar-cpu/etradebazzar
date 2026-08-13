@@ -49,7 +49,7 @@ export const recommendationService = {
                     const sibling = await db.product.findFirst({
                         where: {
                             shopId: shop.id,
-                            status: "APPROVED",
+                            status: "LIVE",
                             OR: [
                                 ...(orderedProduct.sku ? [{ sku: orderedProduct.sku }] : []),
                                 { name: orderedProduct.name, categoryId: orderedProduct.categoryId },

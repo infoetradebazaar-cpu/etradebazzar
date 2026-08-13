@@ -2,6 +2,7 @@ import { db } from "../../db";
 import { redis } from "../../db/redis";
 import { notificationService } from "../../modules/notification/notification.service";
 import { logger } from "../../utils/logger";
+import { config } from "../../../config/config";
 
 const DEFAULT_LOW_STOCK_THRESHOLD = Number(
   process.env.LOW_STOCK_THRESHOLD ?? 10,
@@ -47,7 +48,7 @@ export async function checkLowStock(
         role: { name: "owner" },
         isActive: true,
       },
-      select: { userId: true, user: { select: { email: true } } },
+      select: { userId: true, user: { select: { email: true, name: true } } },
     });
     if (!owner) return;
 
@@ -61,6 +62,14 @@ export async function checkLowStock(
       title: "Low stock alert",
       message: `${product.name}  ${label} is low. ${stockLabel}.`,
       channels: ["email", "sse"],
+      emailTemplate: "low-stock",
+      emailData: {
+        sellerName: owner.user.name ?? "there",
+        productName: product.name,
+        currStock,
+        threshold,
+        productUrl: `${config.appUrl}/products/${productId}`,
+      },
       data: { productId, skuId, currStock, threshold },
     });
     logger.info(

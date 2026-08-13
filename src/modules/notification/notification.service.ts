@@ -4,8 +4,17 @@ import { SmsFactory } from "../../lib/notifications/sms/sms.factory";
 import { sseManager } from "../../lib/notifications/sse/sse.manager";
 import { logger } from "../../utils/logger";
 import { config } from "../../../config/config";
+import {
+    ALL_CATEGORIES,
+    NON_DISABLEABLE_CATEGORIES,
+} from "./notification.constants";
+import { TYPE_TO_CATEGORY } from "./notification.catalog";
+import { adminNotificationService } from "./admin-notification.service";
+import { interpolateTemplate } from "../../lib/notifications/template-interpolation";
+import { computeNextRetryAt } from "../../lib/notifications/retry-backoff";
+import { NotificationCategory, NotificationDeliveryChannel } from "../../../prisma/generated/client";
 
-type NotifyChannel = "email" | "sms" | "sse";
+export type NotifyChannel = "email" | "sms" | "sse";
 
 interface NotifyInput {
     userId: string;
@@ -23,7 +32,31 @@ interface NotifyInput {
 }
 
 export const notificationService = {
+    async isCategoryEnabled(userId: string, category: NotificationCategory): Promise<boolean> {
+        if (NON_DISABLEABLE_CATEGORIES.includes(category)) return true;
+        const pref = await db.notificationPreference.findUnique({
+            where: { userId_category: { userId, category } },
+        });
+        return pref?.enabled ?? true;
+    },
+
     async notify(input: NotifyInput) {
+        const category = TYPE_TO_CATEGORY[input.type as keyof typeof TYPE_TO_CATEGORY];
+        if (category) {
+            const enabled = await this.isCategoryEnabled(input.userId, category);
+            if (!enabled) {
+                logger.info({ userId: input.userId, type: input.type, category }, "Notification suppressed by user preference");
+                return null;
+            }
+        }
+
+        if (input.channels.includes("email") && !input.emailTemplate) {
+            logger.warn(
+                { type: input.type, userId: input.userId },
+                "notify() called with 'email' in channels but no emailTemplate - email will not be sent",
+            );
+        }
+
         const notification = await db.notification.create({
             data: {
                 userId: input.userId,
@@ -34,36 +67,99 @@ export const notificationService = {
             },
         });
 
-        const results = await Promise.allSettled([
-            input.channels.includes("email") && input.email && input.emailTemplate
-                ? EmailFactory.get().send({
-                    to: input.email,
-                    subject: input.title,
-                    template: input.emailTemplate as any,
-                    data: input.emailData ?? {},
-                })
-                : Promise.resolve(),
+        const trackDelivery = async (
+            channel: NotificationDeliveryChannel,
+            payload: Record<string, any>,
+            send: () => Promise<any>,
+        ) => {
+            const delivery = await db.notificationDelivery.create({
+                data: { notificationId: notification.id, channel, status: "PENDING", payload },
+            });
+            try {
+                const result = await send();
+                await db.notificationDelivery.update({
+                    where: { id: delivery.id },
+                    data: { status: "SENT", attempts: 1, lastAttemptAt: new Date() },
+                });
+                return result;
+            } catch (err: any) {
+                await db.notificationDelivery.update({
+                    where: { id: delivery.id },
+                    data: {
+                        status: "FAILED",
+                        attempts: 1,
+                        lastAttemptAt: new Date(),
+                        lastError: String(err.message ?? err).slice(0, 500),
+                        nextRetryAt: channel === "SSE" ? null : computeNextRetryAt(1),
+                    },
+                });
+                throw err;
+            }
+        };
 
-            input.channels.includes("sms") && input.phone && input.smsTemplateId
-                ? SmsFactory.get().send({
-                    to: input.phone,
-                    templateId: input.smsTemplateId,
+        const sendEmail = async () => {
+            if (!(input.channels.includes("email") && input.email && input.emailTemplate)) return;
+
+            const override = await adminNotificationService.getActiveOverride(input.type as any).catch(() => null);
+
+            const emailPayload = {
+                email: input.email,
+                emailTemplate: input.emailTemplate,
+                emailData: input.emailData ?? {},
+                title: input.title,
+                type: input.type,
+            };
+
+            return trackDelivery("EMAIL", emailPayload, () =>
+                override
+                    ? EmailFactory.get().send({
+                        to: input.email!,
+                        subject: interpolateTemplate(override.subject, input.emailData ?? {}),
+                        template: input.emailTemplate as any,
+                        data: input.emailData ?? {},
+                        html: interpolateTemplate(override.bodyHtml, input.emailData ?? {}),
+                    })
+                    : EmailFactory.get().send({
+                        to: input.email!,
+                        subject: input.title,
+                        template: input.emailTemplate as any,
+                        data: input.emailData ?? {},
+                    }),
+            );
+        };
+
+        const sendSms = async () => {
+            if (!(input.channels.includes("sms") && input.phone && input.smsTemplateId)) return;
+            const smsPayload = {
+                phone: input.phone,
+                smsTemplateId: input.smsTemplateId,
+                smsVariables: input.smsVariables ?? {},
+            };
+            return trackDelivery("SMS", smsPayload, () =>
+                SmsFactory.get().send({
+                    to: input.phone!,
+                    templateId: input.smsTemplateId!,
                     variables: input.smsVariables,
                     type: "TRANSACTIONAL",
-                })
-                : Promise.resolve(),
+                }),
+            );
+        };
 
-            input.channels.includes("sse")
-                ? sseManager.publish(input.userId, {
+        const sendSse = async () => {
+            if (!input.channels.includes("sse")) return;
+            return trackDelivery("SSE", {}, () =>
+                sseManager.publish(input.userId, {
                     id: notification.id,
                     type: input.type,
                     title: input.title,
                     message: input.message,
                     data: input.data,
                     createdAt: notification.createdAt.toISOString(),
-                })
-                : Promise.resolve(),
-        ]);
+                }),
+            );
+        };
+
+        const results = await Promise.allSettled([sendEmail(), sendSms(), sendSse()]);
 
         results.forEach((result, i) => {
             if (result.status === "rejected") {
@@ -172,6 +268,58 @@ export const notificationService = {
         });
     },
 
+    async negotiationExpiredNudge(params: {
+        userId: string;
+        email: string;
+        customerName: string;
+        productName: string;
+        quantity: number;
+        lastOfferedPrice: number;
+        sessionId: string;
+    }) {
+        return this.notify({
+            userId: params.userId,
+            email: params.email,
+            type: "NEGOTIATION_NUDGE",
+            title: "Still interested? Talk directly with the seller",
+            message: `Our best automated offer for ${params.productName} didn't work out you can negotiate directly with the seller instead.`,
+            channels: ["email", "sse"],
+            emailTemplate: "negotiation-nudge",
+            emailData: {
+                customerName: params.customerName,
+                productName: params.productName,
+                quantity: params.quantity,
+                lastOfferedPrice: params.lastOfferedPrice,
+                negotiationUrl: `${config.appUrl}/negotiations/${params.sessionId}`,
+            },
+        });
+    },
+
+    async manualNegotiationStarted(params: {
+        userId: string;
+        email: string;
+        sellerName: string;
+        productName: string;
+        quantity: number;
+        sessionId: string;
+    }) {
+        return this.notify({
+            userId: params.userId,
+            email: params.email,
+            type: "MANUAL_NEGOTIATION_STARTED",
+            title: "New negotiation request",
+            message: `A buyer wants to negotiate a bulk price on ${params.productName} (qty ${params.quantity}).`,
+            channels: ["email", "sse"],
+            emailTemplate: "manual-negotiation-started",
+            emailData: {
+                sellerName: params.sellerName,
+                productName: params.productName,
+                quantity: params.quantity,
+                negotiationUrl: `${config.appUrl}/negotiations/manual/${params.sessionId}`,
+            },
+        });
+    },
+
     async orderConfirmed(params: { userId: string; email: string; customerName: string; orderId: string; finalAmount: number }) {
         return this.notify({
             userId: params.userId,
@@ -260,5 +408,36 @@ export const notificationService = {
             where: { userId, isRead: false },
             data: { isRead: true },
         });
+    },
+
+    async getPreferences(userId: string) {
+        const rows = await db.notificationPreference.findMany({ where: { userId } });
+        const byCategory = new Map(rows.map((r) => [r.category, r.enabled]));
+        return ALL_CATEGORIES.map((category) => ({
+            category,
+            enabled: NON_DISABLEABLE_CATEGORIES.includes(category)
+                ? true
+                : byCategory.get(category) ?? true,
+            locked: NON_DISABLEABLE_CATEGORIES.includes(category),
+        }));
+    },
+
+    async updatePreferences(
+        userId: string,
+        updates: { category: NotificationCategory; enabled: boolean }[],
+    ) {
+        const writable = updates.filter(
+            (u) => !NON_DISABLEABLE_CATEGORIES.includes(u.category),
+        );
+        await db.$transaction(
+            writable.map((u) =>
+                db.notificationPreference.upsert({
+                    where: { userId_category: { userId, category: u.category } },
+                    update: { enabled: u.enabled },
+                    create: { userId, category: u.category, enabled: u.enabled },
+                }),
+            ),
+        );
+        return this.getPreferences(userId);
     },
 };

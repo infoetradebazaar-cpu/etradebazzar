@@ -5,13 +5,8 @@ import { seedPlatformPermissions } from "../lib/permission/permission.service";
 import crypto from "crypto";
 
 async function seed() {
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.ALLOW_PROD_MIGRATE !== "true"
-  ) {
-    logger.error(
-      "Refusing to run seed.ts with NODE_ENV=production without ALLOW_PROD_MIGRATE=true",
-    );
+  if (process.env.NODE_ENV === "production") {
+    logger.error("Refusing to run seed.ts with NODE_ENV=production");
     process.exit(1);
   }
 
@@ -30,48 +25,45 @@ async function seed() {
   const generatedPassword = crypto.randomBytes(12).toString("base64url");
   const password = await bcrypt.hash(generatedPassword, 12);
 
-  await db.$transaction(
-    async (tx) => {
-      await seedPlatformPermissions(tx);
+  await db.$transaction(async (tx) => {
+    await seedPlatformPermissions(tx);
 
-      const role = await tx.platformRole.upsert({
-        where: { name: "super_admin" },
-        update: {},
-        create: { name: "super_admin", description: "Full platform access" },
-      });
+    const role = await tx.platformRole.upsert({
+      where: { name: "super_admin" },
+      update: {},
+      create: { name: "super_admin", description: "Full platform access" },
+    });
 
-      await tx.platformRole.upsert({
-        where: { name: "onboarding_manager" },
-        update: {},
-        create: {
-          name: "onboarding_manager",
-          description: "Manages seller onboarding",
-        },
-      });
+    await tx.platformRole.upsert({
+      where: { name: "onboarding_manager" },
+      update: {},
+      create: {
+        name: "onboarding_manager",
+        description: "Manages seller onboarding",
+      },
+    });
 
-      await tx.platformRole.upsert({
-        where: { name: "product_reviewer" },
-        update: {},
-        create: {
-          name: "product_reviewer",
-          description: "Reviews and approves products",
-        },
-      });
+    await tx.platformRole.upsert({
+      where: { name: "product_reviewer" },
+      update: {},
+      create: {
+        name: "product_reviewer",
+        description: "Reviews and approves products",
+      },
+    });
 
-      const user = await tx.user.create({
-        data: {
-          name: "Super Admin",
-          email: "admin@etradebazaar.com",
-          password,
-        },
-      });
+    const user = await tx.user.create({
+      data: {
+        name: "Super Admin",
+        email: "admin@etradebazaar.com",
+        password,
+      },
+    });
 
-      await tx.platformMember.create({
-        data: { userId: user.id, roleId: role.id },
-      });
-    },
-    { timeout: 60000, maxWait: 60000 },
-  );
+    await tx.platformMember.create({
+      data: { userId: user.id, roleId: role.id },
+    });
+  });
 
   console.log("super_admin created");
   console.log("  email:    admin@etradebazaar.com");

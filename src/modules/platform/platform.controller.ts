@@ -28,7 +28,11 @@ export const platformController = {
       return res.json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "Update role failed");
-      const clientErrors = ["Role not found", "Cannot rename protected role"];
+      const clientErrors = [
+        "Role not found",
+        "Cannot rename protected role",
+        "A role with this name already exists",
+      ];
       if (clientErrors.includes(error.message)) {
         return res.status(400).json({ success: false, error: error.message });
       }
@@ -65,6 +69,60 @@ export const platformController = {
       return res.json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "List roles failed");
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async listRolePermissions(req: Request, res: Response) {
+    try {
+      const { roleId } = req.params;
+      const result = await platformService.listRolePermissions(roleId as string);
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "List platform role permissions failed");
+      if (error.message === "Role not found") {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async updateRolePermissions(req: Request, res: Response) {
+    try {
+      const actorId = req.user!.id;
+      const { roleId } = req.params;
+      const { permissionKeys } = req.body;
+      const result = await platformService.updateRolePermissions(
+        actorId,
+        roleId as string,
+        permissionKeys,
+      );
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Update platform role permissions failed");
+      if (
+        error.message === "Role not found" ||
+        error.message.startsWith("Not platform-scoped permissions") ||
+        error.message.startsWith("Unknown permissions")
+      ) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async listPlatformPermissions(req: Request, res: Response) {
+    try {
+      const result = await platformService.listPlatformPermissions();
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "List platform permissions failed");
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });

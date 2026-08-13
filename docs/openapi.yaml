@@ -51,6 +51,48 @@ tags:
     description: In-app notifications with SSE streaming.
   - name: Platform
     description: Platform role and member management, and audit logs.
+  - name: Address
+    description: Customer saved delivery addresses (address book).
+  - name: Cart
+    description: Customer shopping cart, line items, and checkout.
+  - name: Coupons
+    description: Platform admin coupon management and customer-facing coupon validation.
+  - name: Customers
+    description: Customer registration, profile, phone linking, and order history.
+  - name: GST
+    description: GSTIN verification and seller KYC autofill.
+  - name: Location
+    description: Pincode lookup for address autofill and serviceability checks.
+  - name: Print Areas
+    description: Seller-configured print/design area dimensions for print-on-demand products.
+  - name: Reviews
+    description: Customer product reviews, seller replies, helpfulness voting, and platform admin moderation.
+  - name: Security
+    description: Two-factor authentication (TOTP), active session management, and account security summary for the authenticated user.
+  - name: Seller Profile
+    description: Seller personal profile, business details, verification badges, and per-shop statistics. Distinct from the broader Sellers onboarding/KYC/member endpoints.
+  - name: Storefront
+    description: |
+      Public storefront browsing by shop slug: shop details, product listing, and product detail.
+
+      ⚠ NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as of this writing —
+      these endpoints are unreachable until it is wired up.
+  - name: Templates
+    description: Seller-created design templates for print-on-demand products, with public browsing by product.
+  - name: Upload Assets
+    description: Generic authenticated file uploads (customer uploads, shop assets, KYC documents) to object storage.
+  - name: Users
+    description: Platform admin user directory search and listing.
+  - name: Verification
+    description: |
+      Seller Aadhaar and government ID (PAN and others) verification submission, status, and platform admin review.
+
+      ⚠ NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as of this writing —
+      these endpoints are unreachable until it is wired up.
+  - name: Wallet
+    description: Authenticated user platform wallet balance, credit top-ups, and transaction history.
+  - name: Wishlist
+    description: Customer product wishlist management.
 
 security:
   - BearerAuth: []
@@ -94,6 +136,13 @@ components:
       schema:
         type: string
       description: CUID of the category.
+    attributeId:
+      name: attributeId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: CUID of the category attribute.
     orderId:
       name: orderId
       in: path
@@ -150,6 +199,13 @@ components:
       schema:
         type: string
       description: CUID of the role.
+    inviteId:
+      name: inviteId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: CUID of the team invite.
     optionId:
       name: optionId
       in: path
@@ -191,6 +247,62 @@ components:
           - platform_daily_stats
           - platform_seller_stats
       description: Name of the materialized view to refresh.
+    customerAddressId:
+      name: addressId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: CUID of the customer's saved address (address book entry).
+    itemId:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: CUID of the cart item.
+    couponId:
+      name: couponId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: CUID of the coupon.
+    reviewId:
+      name: reviewId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: CUID of the review.
+    sessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: CUID of the session record.
+    shopSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+      description: URL slug of the shop (storefront-facing, distinct from the shop's CUID).
+    templateId:
+      name: templateId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: CUID of the template.
+    assetId:
+      name: assetId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: CUID of the uploaded asset.
 
   schemas:
     SuccessEnvelope:
@@ -276,6 +388,102 @@ components:
               format: double
               example: 72.5714
 
+    CustomerAddress:
+      description: A customer's saved delivery address (address book entry).
+      allOf:
+        - $ref: "#/components/schemas/DeliveryAddress"
+        - type: object
+          properties:
+            id:
+              type: string
+              example: clxaddr1234abcd
+            userId:
+              type: string
+            label:
+              type: string
+              nullable: true
+              example: Home
+            isDefault:
+              type: boolean
+              example: true
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    PincodeDetails:
+      type: object
+      required:
+        - pincode
+        - city
+        - state
+      properties:
+        pincode:
+          type: string
+          example: "380001"
+        city:
+          type: string
+          example: Ahmedabad
+        state:
+          type: string
+          example: Gujarat
+        district:
+          type: string
+          nullable: true
+        taluka:
+          type: string
+          nullable: true
+        division:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        circle:
+          type: string
+          nullable: true
+        deliveryStatus:
+          type: string
+          nullable: true
+        divisionName:
+          type: string
+          nullable: true
+        regionName:
+          type: string
+          nullable: true
+        circleName:
+          type: string
+          nullable: true
+
+    GstDetails:
+      type: object
+      properties:
+        gstin:
+          type: string
+          example: "24AAACT2727Q1ZW"
+        legalName:
+          type: string
+          example: Test Business Pvt Ltd
+        tradeName:
+          type: string
+          example: Test Business
+        status:
+          type: string
+          example: Active
+        address:
+          type: string
+          example: 123 Test Street, Test City, Test State 000000
+        registrationDate:
+          type: string
+          example: 01/01/2020
+        businessType:
+          type: string
+          example: Private Limited Company
+        raw:
+          description: Raw response payload from the upstream GST verification provider.
+
     User:
       type: object
       properties:
@@ -293,6 +501,36 @@ components:
         isActive:
           type: boolean
           example: true
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CustomerProfile:
+      description: A customer-facing subset of the User record.
+      type: object
+      properties:
+        id:
+          type: string
+          example: clxyz1234abcd
+        name:
+          type: string
+          nullable: true
+          example: Rahul Mehta
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        phone:
+          type: string
+          nullable: true
+          example: "9876543210"
         lastLoginAt:
           type: string
           format: date-time
@@ -566,6 +804,50 @@ components:
           type: string
           format: date-time
 
+    CategoryAttribute:
+      type: object
+      description: |
+        Admin-defined custom field on a category. Non-variant attributes (isVariant: false)
+        are validated against Product.attributes at product-creation time; variant attributes
+        (isVariant: true, e.g. size/color) are instead modeled via VariantOption/ProductSKU.
+      properties:
+        id:
+          type: string
+        categoryId:
+          type: string
+        key:
+          type: string
+          description: Machine key used as the property name in Product.attributes.
+          example: ram_gb
+        label:
+          type: string
+          example: RAM (GB)
+        type:
+          type: string
+          enum: [TEXT, NUMBER, ENUM, BOOLEAN]
+        required:
+          type: boolean
+        isVariant:
+          type: boolean
+          description: If true, this attribute is a variant axis (e.g. size/color) rather than a plain product spec.
+        options:
+          type: array
+          items:
+            type: string
+          description: Allowed values. Required when type is ENUM, disallowed otherwise.
+        unit:
+          type: string
+          nullable: true
+          example: GB
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
     Order:
       type: object
       properties:
@@ -631,6 +913,145 @@ components:
         selectedOptions:
           type: object
           nullable: true
+
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        skuId:
+          type: string
+          nullable: true
+        productName:
+          type: string
+        image:
+          type: string
+          nullable: true
+          description: URL of the product's primary image, if any.
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+          format: double
+        lineTotal:
+          type: number
+          format: double
+        availableStock:
+          type: integer
+        options:
+          type: object
+          nullable: true
+          description: Selected SKU variant options, if this line item is for a specific SKU.
+        weightGrams:
+          type: integer
+          example: 500
+
+    Cart:
+      type: object
+      description: The customer's cart, its line items, and computed subtotal.
+      properties:
+        cart:
+          type: object
+          properties:
+            id:
+              type: string
+            userId:
+              type: string
+            sellerId:
+              type: string
+              nullable: true
+              description: All items in a cart belong to a single seller. Null when the cart is empty.
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CartItem"
+        subtotal:
+          type: number
+          format: double
+        sellerId:
+          type: string
+          nullable: true
+
+    Coupon:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+          example: WELCOME10
+        type:
+          type: string
+          enum: [PERCENTAGE, FIXED]
+        value:
+          type: number
+          format: double
+          example: 10
+        currency:
+          type: string
+          example: INR
+        minOrder:
+          type: number
+          format: double
+          nullable: true
+        maxUses:
+          type: integer
+          nullable: true
+        usedCount:
+          type: integer
+        perUserLimit:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        isActive:
+          type: boolean
+        isStackable:
+          type: boolean
+        scopeType:
+          type: string
+          enum: [ALL, CATEGORY, PRODUCT, USER_SEGMENT]
+        scopeIds:
+          type: array
+          items:
+            type: string
+        firstTimeOnly:
+          type: boolean
+        userSegment:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        _count:
+          type: object
+          description: Present on list responses.
+          properties:
+            usages:
+              type: integer
+
+    CouponUsage:
+      type: object
+      properties:
+        userId:
+          type: string
+        orderId:
+          type: string
+        discount:
+          type: number
+          format: double
+        createdAt:
+          type: string
+          format: date-time
 
     OrderNegotiation:
       type: object
@@ -848,9 +1269,143 @@ components:
           example: SBIN0001234
         bankName:
           type: string
+        verificationStatus:
+          $ref: "#/components/schemas/BankVerificationStatus"
+        verifiedAccountHolderName:
+          type: string
+          nullable: true
+          description: Account holder name as returned by the bank verification provider.
+        verifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+        verificationProvider:
+          type: string
+          nullable: true
+          example: sandbox
+        nameMatchScore:
+          type: number
+          nullable: true
+          description: Similarity score between the submitted and verified account holder names.
         createdAt:
           type: string
           format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SellerMember:
+      type: object
+      description: A platform user's membership on a seller's team.
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        sellerId:
+          type: string
+        roleId:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        user:
+          type: object
+          description: Present on list responses.
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+              format: email
+        role:
+          type: object
+          description: Present on list responses.
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+
+    SellerRole:
+      type: object
+      description: A custom or default (owner/manager/staff) role scoped to a seller.
+      properties:
+        id:
+          type: string
+        sellerId:
+          type: string
+        name:
+          type: string
+          example: staff
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        _count:
+          type: object
+          description: Present on list responses.
+          properties:
+            members:
+              type: integer
+
+    Permission:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+          example: seller.bank.manage
+        description:
+          type: string
+          nullable: true
+
+    TeamInvite:
+      type: object
+      description: A pending invite for a platform user to join a seller's team with a specific role.
+      properties:
+        id:
+          type: string
+        sellerId:
+          type: string
+        email:
+          type: string
+          format: email
+        roleId:
+          type: string
+        invitedBy:
+          type: string
+        token:
+          type: string
+        status:
+          $ref: "#/components/schemas/InviteStatus"
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        role:
+          type: object
+          description: Present on list responses.
+          properties:
+            id:
+              type: string
+            name:
+              type: string
 
     PlatformRole:
       type: object
@@ -955,6 +1510,10 @@ components:
       type: string
       enum: [PENDING, ACCEPTED, EXPIRED, REVOKED]
 
+    BankVerificationStatus:
+      type: string
+      enum: [PENDING, VERIFIED, NAME_MISMATCH, FAILED]
+
     OrderType:
       type: string
       enum: [STANDARD, HIGH_TICKET, SAMPLE, BULK]
@@ -1033,6 +1592,296 @@ components:
         - PAYOUT_PAID
         - PAYOUT_FAILED
         - PRODUCT_LOW_STOCK
+
+    PrintArea:
+      description: Print/design area dimensions configured for a print-on-demand product.
+      type: object
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        widthCm:
+          type: number
+          format: double
+          example: 25.5
+        heightCm:
+          type: number
+          format: double
+          example: 35.0
+        safetyMarginCm:
+          type: number
+          format: double
+          default: 0.5
+          example: 0.5
+        bleedMarginCm:
+          type: number
+          format: double
+          default: 0.3
+          example: 0.3
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ReviewStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED]
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+        orderId:
+          type: string
+        productId:
+          type: string
+        customerId:
+          type: string
+        sellerId:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        comment:
+          type: string
+          nullable: true
+          example: Great print quality, exactly as pictured.
+        mediaUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+        helpfulCount:
+          type: integer
+          example: 0
+        isVerifiedPurchase:
+          type: boolean
+          example: true
+        status:
+          $ref: "#/components/schemas/ReviewStatus"
+        reviewedBy:
+          type: string
+          nullable: true
+        reply:
+          type: string
+          nullable: true
+        repliedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Session:
+      description: A login session for the authenticated user, used for device/session management.
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        deviceInfo:
+          type: string
+          nullable: true
+        ipAddress:
+          type: string
+          nullable: true
+        userAgent:
+          type: string
+          nullable: true
+        lastActiveAt:
+          type: string
+          format: date-time
+        revoked:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        sellerId:
+          type: string
+        name:
+          type: string
+          example: Minimalist Birthday Card
+        industry:
+          type: string
+          nullable: true
+        style:
+          type: string
+          nullable: true
+        thumbnailUrl:
+          type: string
+        thumbnailKey:
+          type: string
+        canvasState:
+          type: object
+          description: Opaque JSON canvas/design state for the template editor.
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UploadAsset:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        url:
+          type: string
+        key:
+          type: string
+        fileType:
+          type: string
+          example: image/png
+        createdAt:
+          type: string
+          format: date-time
+
+    Wallet:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        balance:
+          type: number
+          format: double
+          example: 1500.00
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WalletTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+        walletId:
+          type: string
+        type:
+          type: string
+          enum: [CREDIT, DEBIT]
+        amount:
+          type: number
+          format: double
+        reason:
+          type: string
+          example: TOPUP
+        referenceId:
+          type: string
+          nullable: true
+        balanceAfter:
+          type: number
+          format: double
+        createdAt:
+          type: string
+          format: date-time
+
+    WalletTopup:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        walletId:
+          type: string
+        amount:
+          type: number
+          format: double
+        method:
+          type: string
+          enum: [NEFT, RTGS, UPI, IMPS]
+        utrReference:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    WishlistItem:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        productId:
+          type: string
+        skuId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        product:
+          type: object
+          description: Present when returned from the list endpoint.
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            price:
+              type: number
+              format: double
+              nullable: true
+            stock:
+              type: integer
+              nullable: true
+            sellerId:
+              type: string
+            images:
+              type: array
+              maxItems: 1
+              items:
+                $ref: "#/components/schemas/ProductImage"
+        sku:
+          type: object
+          nullable: true
+          description: Present when returned from the list endpoint and the item has a SKU.
+          properties:
+            id:
+              type: string
+            sku:
+              type: string
+            price:
+              type: number
+              format: double
+            stock:
+              type: integer
+            options:
+              type: object
+              additionalProperties:
+                type: string
 
   responses:
     Unauthorized:
@@ -1587,6 +2436,94 @@ paths:
                     $ref: "#/components/schemas/SellerBankDetail"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Sellers]
+      summary: Update bank details
+      description: |
+        All fields are optional. Changing the account number or IFSC code re-runs
+        bank account verification with the configured provider.
+
+        Required permission: SELLER_BANK.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                accountHolderName:
+                  type: string
+                accountNumber:
+                  type: string
+                  pattern: '^\d{9,18}$'
+                ifscCode:
+                  type: string
+                  pattern: "^[A-Z]{4}0[A-Z0-9]{6}$"
+                  example: SBIN0001234
+                bankName:
+                  type: string
+      responses:
+        "200":
+          description: Bank details updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/SellerBankDetail"
+        "400":
+          description: Bank detail not found, seller not found, or bank account verification failed.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/sellers/bank/verify-ifsc:
+    post:
+      tags: [Sellers]
+      summary: Verify an IFSC code
+      description: "Looks up bank and branch details for an IFSC code. Required permission: SELLER_BANK."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ifscCode]
+              properties:
+                ifscCode:
+                  type: string
+                  pattern: "^[A-Z]{4}0[A-Z0-9]{6}$"
+                  example: SBIN0001234
+      responses:
+        "200":
+          description: IFSC lookup result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      verified:
+                        type: boolean
+                      bankName:
+                        type: string
+                      branch:
+                        type: string
+                      message:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/sellers/members:
     post:
@@ -1619,6 +2556,107 @@ paths:
         "400":
           description: User not found, role not found, or user already a member.
           $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Sellers]
+      summary: List seller team members
+      description: "Required permission: SELLER_MEMBERS_VIEW."
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Filter by member name or email (case-insensitive).
+        - name: role
+          in: query
+          schema:
+            type: string
+          description: Filter by role name.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Seller team members.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SellerMember"
+                  meta:
+                    type: object
+                    description: Pagination metadata.
+
+  /api/sellers/members/invite:
+    post:
+      tags: [Sellers]
+      summary: Invite a new team member
+      description: |
+        Invites a user (who may or may not already have a platform account) to join
+        the seller's team with the specified role. The invitee accepts via
+        POST /api/sellers/invites/accept.
+
+        Required permission: SELLER_MEMBERS_MANAGE.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, roleId]
+              properties:
+                email:
+                  type: string
+                  format: email
+                roleId:
+                  type: string
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Invite created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/TeamInvite"
+        "400":
+          description: Role not found, user already a member, or invite already pending for this email.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/sellers/members/{memberId}:
+    delete:
+      tags: [Sellers]
+      summary: Remove a seller team member
+      description: "Required permission: SELLER_MEMBERS_MANAGE."
+      parameters:
+        - $ref: "#/components/parameters/memberId"
+      responses:
+        "200":
+          description: Member removed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "400":
+          description: Member not found, or cannot remove the owner.
+          $ref: "#/components/responses/BadRequest"
 
   /api/sellers/members/{memberId}/role:
     patch:
@@ -1645,6 +2683,348 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuccessEnvelope"
         "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/sellers/roles:
+    get:
+      tags: [Sellers]
+      summary: List seller roles
+      description: "Required permission: SELLER_ROLES_MANAGE."
+      responses:
+        "200":
+          description: Roles defined for the seller, including the default owner/manager/staff roles.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SellerRole"
+    post:
+      tags: [Sellers]
+      summary: Create a custom seller role
+      description: "Required permission: SELLER_ROLES_MANAGE."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 30
+                description:
+                  type: string
+      responses:
+        "201":
+          description: Role created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/SellerRole"
+        "400":
+          description: A role with this name already exists.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/sellers/roles/{roleId}:
+    patch:
+      tags: [Sellers]
+      summary: Update a seller role
+      description: |
+        Default roles (owner, manager, staff) cannot be modified.
+
+        Required permission: SELLER_ROLES_MANAGE.
+      parameters:
+        - $ref: "#/components/parameters/roleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 30
+                description:
+                  type: string
+      responses:
+        "200":
+          description: Role updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/SellerRole"
+        "400":
+          description: Role not found, or cannot modify default roles.
+          $ref: "#/components/responses/BadRequest"
+    delete:
+      tags: [Sellers]
+      summary: Delete a seller role
+      description: |
+        Default roles cannot be deleted, and a role with active members cannot be deleted.
+
+        Required permission: SELLER_ROLES_MANAGE.
+      parameters:
+        - $ref: "#/components/parameters/roleId"
+      responses:
+        "200":
+          description: Role deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "400":
+          description: Role not found, cannot delete default roles, or role has active members.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/sellers/roles/{roleId}/permissions:
+    get:
+      tags: [Sellers]
+      summary: List a role's permissions
+      description: "Required permission: SELLER_ROLES_MANAGE."
+      parameters:
+        - $ref: "#/components/parameters/roleId"
+      responses:
+        "200":
+          description: Role with its assigned permissions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      name:
+                        type: string
+                      permissions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            permission:
+                              $ref: "#/components/schemas/Permission"
+        "400":
+          description: Role not found.
+          $ref: "#/components/responses/BadRequest"
+    put:
+      tags: [Sellers]
+      summary: Replace a role's permissions
+      description: |
+        Replaces the full set of permissions assigned to the role. The owner role's
+        permissions cannot be modified.
+
+        Required permission: SELLER_ROLES_MANAGE.
+      parameters:
+        - $ref: "#/components/parameters/roleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permissions:
+                  type: array
+                  description: Permission keys to assign to the role (replaces existing assignments).
+                  items:
+                    type: string
+                    example: seller.bank.manage
+      responses:
+        "200":
+          description: Role permissions updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      roleId:
+                        type: string
+                      permissions:
+                        type: array
+                        items:
+                          type: string
+        "400":
+          description: Role not found, or cannot modify owner role permissions.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/sellers/permissions:
+    get:
+      tags: [Sellers]
+      summary: List all available permissions
+      description: "Required permission: SELLER_ROLES_MANAGE."
+      responses:
+        "200":
+          description: All permissions that can be assigned to a role.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Permission"
+
+  /api/sellers/invites:
+    get:
+      tags: [Sellers]
+      summary: List pending team invites
+      description: "Required permission: SELLER_INVITES_MANAGE."
+      responses:
+        "200":
+          description: Pending team invites for the seller.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TeamInvite"
+
+  /api/sellers/invites/{inviteId}:
+    delete:
+      tags: [Sellers]
+      summary: Revoke a team invite
+      description: "Required permission: SELLER_INVITES_MANAGE."
+      parameters:
+        - $ref: "#/components/parameters/inviteId"
+      responses:
+        "200":
+          description: Invite revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/TeamInvite"
+        "400":
+          description: Invite not found, or already used or expired.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/sellers/invites/resend:
+    post:
+      tags: [Sellers]
+      summary: Resend a team invite
+      description: |
+        Extends the invite's expiry by 7 days and re-sends the invite email.
+
+        Required permission: SELLER_INVITES_MANAGE.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inviteId]
+              properties:
+                inviteId:
+                  type: string
+      responses:
+        "200":
+          description: Invite resent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/TeamInvite"
+        "400":
+          description: Invite not found, or already used or expired.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/sellers/invites/accept:
+    post:
+      tags: [Sellers]
+      summary: Accept a team invite
+      security: []
+      description: |
+        Completes joining a seller's team using the token from a team invite email.
+        If no platform account exists for the invited email, one is created.
+        No authentication required — the invitee may not have an account yet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, name, password]
+              properties:
+                token:
+                  type: string
+                name:
+                  type: string
+                  minLength: 2
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        "201":
+          description: Team invite accepted; membership created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          name:
+                            type: string
+                          email:
+                            type: string
+                            format: email
+                      member:
+                        $ref: "#/components/schemas/SellerMember"
+        "400":
+          description: Invalid invite token, invite already used or revoked, or invite expired.
           $ref: "#/components/responses/BadRequest"
 
   /api/sellers/pending:
@@ -1805,6 +3185,24 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /api/sellers/{sellerId}/reactivate:
+    patch:
+      tags: [Sellers]
+      summary: Reactivate a suspended seller
+      description: "Required platform role: super_admin."
+      parameters:
+        - $ref: "#/components/parameters/sellerId"
+      responses:
+        "200":
+          description: Seller reactivated (status set back to APPROVED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "400":
+          description: Seller not found, or seller is not suspended.
+          $ref: "#/components/responses/BadRequest"
+
   /api/sellers/{sellerId}/kyc/verify:
     patch:
       tags: [Sellers]
@@ -1850,6 +3248,119 @@ paths:
                 $ref: "#/components/schemas/SuccessEnvelope"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /api/sellers/{sellerId}/bank/reverify:
+    patch:
+      tags: [Sellers]
+      summary: Re-run bank verification for a seller
+      description: |
+        Re-submits the seller's existing bank details to the bank verification provider.
+
+        Required platform role: super_admin or onboarding_manager.
+      parameters:
+        - $ref: "#/components/parameters/sellerId"
+      responses:
+        "200":
+          description: Bank detail reverified.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/SellerBankDetail"
+        "400":
+          description: Bank detail not found, seller not found, or bank account verification failed.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/sellers/{sellerId}/bank/override:
+    patch:
+      tags: [Sellers]
+      summary: Manually override a seller's bank verification status
+      description: |
+        Sets the bank detail's verification status directly, bypassing the automated
+        provider check. Intended for support/ops use when automated verification is
+        inconclusive.
+
+        Required platform role: super_admin or onboarding_manager.
+      parameters:
+        - $ref: "#/components/parameters/sellerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [verificationStatus, reason]
+              properties:
+                verificationStatus:
+                  type: string
+                  enum: [VERIFIED, NAME_MISMATCH, FAILED]
+                reason:
+                  type: string
+                  minLength: 5
+      responses:
+        "200":
+          description: Bank verification status overridden.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/SellerBankDetail"
+        "400":
+          description: Bank detail not found.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/shops/all:
+    get:
+      tags: [Shops]
+      summary: List all shops (platform admin)
+      description: "Required platform role: super_admin."
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Filter by shop name or slug (case-insensitive).
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, pending, inactive]
+          description: Filter by shop status (active=APPROVED, pending=PENDING, inactive=REJECTED).
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Shops across all sellers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Shop"
+                  meta:
+                    type: object
+                    description: Pagination metadata.
 
   /api/shops:
     post:
@@ -2027,6 +3538,133 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /api/shops/access/{memberId}:
+    put:
+      tags: [Shops]
+      summary: Set a team member's shop access
+      description: |
+        Restricts the member to the given list of shops. Members with the owner or
+        manager role always have access to all shops and cannot be restricted.
+
+        Required seller role: owner or manager.
+      parameters:
+        - $ref: "#/components/parameters/memberId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shopIds]
+              properties:
+                shopIds:
+                  type: array
+                  items:
+                    type: string
+                  description: CUIDs of shops the member may access. An empty array revokes all shop access.
+      responses:
+        "200":
+          description: Shop access updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    description: The member's resulting shop access grants.
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        memberId:
+                          type: string
+                        shopId:
+                          type: string
+                        createdAt:
+                          type: string
+                          format: date-time
+                        shop:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            name:
+                              type: string
+        "400":
+          description: Member not found, owner/manager roles already have access to all shops, or one or more shops not found.
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Shops]
+      summary: Get a team member's shop access
+      description: "Required seller role: owner or manager."
+      parameters:
+        - $ref: "#/components/parameters/memberId"
+      responses:
+        "200":
+          description: The member's shop access.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      unrestricted:
+                        type: boolean
+                        description: True if the member's role (owner/manager) grants access to all shops.
+                      shops:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            name:
+                              type: string
+        "404":
+          description: Member not found.
+          $ref: "#/components/responses/NotFound"
+
+  /api/shops/{shopId}/auto-assign:
+    patch:
+      tags: [Shops]
+      summary: Enable or disable order auto-assignment for a shop
+      description: "Required seller role: owner."
+      parameters:
+        - $ref: "#/components/parameters/shopId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Auto-assign setting updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Shop"
+        "404":
+          description: Shop not found.
+          $ref: "#/components/responses/NotFound"
+
   /api/categories:
     get:
       tags: [Categories]
@@ -2178,6 +3816,153 @@ paths:
                 $ref: "#/components/schemas/MessageEnvelope"
         "400":
           description: Category not found, has subcategories, or has products.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/categories/{categoryId}/attributes:
+    get:
+      tags: [Categories]
+      summary: List custom attributes for a category
+      security: []
+      description: |
+        Returns the admin-defined custom field schema for this category, ordered by sortOrder.
+        Sellers use this to render the dynamic product-creation form; Product.attributes is
+        validated against this schema when a product is created.
+      parameters:
+        - $ref: "#/components/parameters/categoryId"
+      responses:
+        "200":
+          description: List of category attributes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CategoryAttribute"
+        "404":
+          description: Category not found.
+          $ref: "#/components/responses/BadRequest"
+    post:
+      tags: [Categories]
+      summary: Define a custom attribute on a category
+      description: "Required platform role: super_admin."
+      parameters:
+        - $ref: "#/components/parameters/categoryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, label, type, required, isVariant, sortOrder]
+              properties:
+                key:
+                  type: string
+                  example: ram_gb
+                label:
+                  type: string
+                  example: RAM (GB)
+                type:
+                  type: string
+                  enum: [TEXT, NUMBER, ENUM, BOOLEAN]
+                required:
+                  type: boolean
+                isVariant:
+                  type: boolean
+                options:
+                  type: array
+                  items:
+                    type: string
+                  description: Required when type is ENUM, disallowed otherwise.
+                unit:
+                  type: string
+                sortOrder:
+                  type: integer
+      responses:
+        "201":
+          description: Attribute created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/CategoryAttribute"
+        "400":
+          description: Category not found or attribute key already exists for this category.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/categories/{categoryId}/attributes/{attributeId}:
+    patch:
+      tags: [Categories]
+      summary: Update a category attribute
+      description: "Required platform role: super_admin."
+      parameters:
+        - $ref: "#/components/parameters/categoryId"
+        - $ref: "#/components/parameters/attributeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                type:
+                  type: string
+                  enum: [TEXT, NUMBER, ENUM, BOOLEAN]
+                required:
+                  type: boolean
+                isVariant:
+                  type: boolean
+                options:
+                  type: array
+                  items:
+                    type: string
+                unit:
+                  type: string
+                sortOrder:
+                  type: integer
+      responses:
+        "200":
+          description: Attribute updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/CategoryAttribute"
+        "400":
+          description: |
+            Attribute not found, or options is required when type is ENUM,
+            or options is only allowed when type is ENUM.
+          $ref: "#/components/responses/BadRequest"
+    delete:
+      tags: [Categories]
+      summary: Delete a category attribute
+      description: "Required platform role: super_admin."
+      parameters:
+        - $ref: "#/components/parameters/categoryId"
+        - $ref: "#/components/parameters/attributeId"
+      responses:
+        "200":
+          description: Attribute deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageEnvelope"
+        "400":
+          description: Attribute not found.
           $ref: "#/components/responses/BadRequest"
 
   /api/products/search:
@@ -3418,7 +5203,42 @@ paths:
     get:
       tags: [Shipments]
       summary: List shipments
-      description: "Returns all shipments for the authenticated seller. Required seller role: owner, manager, or staff."
+      description: "Returns paginated, filterable shipments for the authenticated seller. Required seller role: owner, manager, or staff."
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: shopId
+          in: query
+          schema:
+            type: string
+        - name: courierPartner
+          in: query
+          schema:
+            type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
       responses:
         "200":
           description: Shipments.
@@ -3433,43 +5253,62 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Shipment"
+                  meta:
+                    type: object
+                    description: Pagination metadata.
+
+  /api/shipments/with-orders:
+    get:
+      tags: [Shipments]
+      summary: List shipments with their order details
+      description: "Returns all shipments for the authenticated seller, each joined with its order. Required seller role: owner, manager, or staff."
+      responses:
+        "200":
+          description: Shipments with order details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+
+  /api/shipments/bulk-cancel:
     post:
       tags: [Shipments]
-      summary: Create a shipment
-      description: |
-        Books a Shiprocket shipment for a confirmed order.
-
-        Required seller role: owner or manager.
+      summary: Cancel multiple shipments
+      description: "Required seller role: owner or manager."
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [orderId, shopId]
+              required: [shipmentIds]
               properties:
-                orderId:
-                  type: string
-                shopId:
-                  type: string
-                orderAddressId:
-                  type: string
-                  description: Required for bulk orders where each address ships independently.
+                shipmentIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
       responses:
-        "201":
-          description: Shipment booked.
+        "200":
+          description: Per-shipment cancellation results.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  data:
-                    $ref: "#/components/schemas/Shipment"
-        "400":
-          description: Order not found, not confirmed, shop not found, or address not found.
-          $ref: "#/components/responses/BadRequest"
+                $ref: "#/components/schemas/SuccessEnvelope"
+
+  /api/shipments/export:
+    get:
+      tags: [Shipments]
+      summary: Export shipments as CSV
+      description: "Required seller role: owner or manager."
+      responses:
+        "200":
+          description: CSV file (shipmentId, orderId, status, courier, awb, createdAt columns).
+          content:
+            text/csv:
+              schema:
+                type: string
 
   /api/shipments/serviceability:
     get:
@@ -3510,6 +5349,45 @@ paths:
         "400":
           description: Missing required query parameters.
           $ref: "#/components/responses/BadRequest"
+
+  /api/shipments/{shipmentId}:
+    get:
+      tags: [Shipments]
+      summary: Get a shipment
+      description: "Required seller role: owner, manager, or staff."
+      parameters:
+        - $ref: "#/components/parameters/shipmentId"
+      responses:
+        "200":
+          description: Shipment record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Shipment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/shipments/{shipmentId}/with-order:
+    get:
+      tags: [Shipments]
+      summary: Get a shipment with its order details
+      description: "Required seller role: owner, manager, or staff."
+      parameters:
+        - $ref: "#/components/parameters/shipmentId"
+      responses:
+        "200":
+          description: Shipment joined with order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/shipments/{shipmentId}/track:
     get:
@@ -4445,3 +6323,3370 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/AuditLog"
+
+  # ---- Address ----
+  /api/addresses:
+    get:
+      tags: [Address]
+      summary: List saved addresses
+      description: Returns the authenticated customer's saved addresses, default address first.
+      responses:
+        "200":
+          description: Customer addresses.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CustomerAddress"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Address]
+      summary: Create a saved address
+      description: |
+        Adds a new address to the authenticated customer's address book. If `city`
+        or `state` is omitted, they are auto-filled from a pincode lookup. The
+        first address created for a customer is automatically marked default.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [receiverName, phone, street, pincode]
+              properties:
+                label:
+                  type: string
+                  example: Home
+                receiverName:
+                  type: string
+                  minLength: 2
+                  example: Rahul Mehta
+                phone:
+                  type: string
+                  pattern: '^\+?[6-9]\d{9}$'
+                  example: "9876543210"
+                street:
+                  type: string
+                  minLength: 5
+                city:
+                  type: string
+                  minLength: 2
+                state:
+                  type: string
+                  minLength: 2
+                pincode:
+                  type: string
+                  pattern: '^\d{6}$'
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+                isDefault:
+                  type: boolean
+      responses:
+        "201":
+          description: Address created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/CustomerAddress"
+        "400":
+          description: City/state could not be determined from the provided pincode and were not supplied.
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/addresses/{addressId}:
+    patch:
+      tags: [Address]
+      summary: Update a saved address
+      description: Partially updates one of the authenticated customer's addresses.
+      parameters:
+        - $ref: "#/components/parameters/customerAddressId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                receiverName:
+                  type: string
+                  minLength: 2
+                phone:
+                  type: string
+                  pattern: '^\+?[6-9]\d{9}$'
+                street:
+                  type: string
+                  minLength: 5
+                city:
+                  type: string
+                  minLength: 2
+                state:
+                  type: string
+                  minLength: 2
+                pincode:
+                  type: string
+                  pattern: '^\d{6}$'
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+                isDefault:
+                  type: boolean
+      responses:
+        "200":
+          description: Address updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/CustomerAddress"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Address]
+      summary: Delete a saved address
+      description: |
+        Deletes one of the authenticated customer's addresses. If the deleted
+        address was the default, the next-oldest remaining address (if any) is
+        promoted to default.
+      parameters:
+        - $ref: "#/components/parameters/customerAddressId"
+      responses:
+        "200":
+          description: Address deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+                        example: true
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ---- Cart ----
+  /api/cart:
+    get:
+      tags: [Cart]
+      summary: Get the current cart
+      description: Returns the authenticated customer's cart, creating an empty one if none exists yet.
+      responses:
+        "200":
+          description: Cart with line items and subtotal.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Cart"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Cart]
+      summary: Clear the cart
+      description: Removes all items from the authenticated customer's cart and unassigns its seller.
+      responses:
+        "200":
+          description: Cart cleared.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      cleared:
+                        type: boolean
+                        example: true
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/cart/items:
+    post:
+      tags: [Cart]
+      summary: Add an item to the cart
+      description: |
+        Adds a product (optionally a specific SKU) to the cart. A cart may only
+        hold items from a single seller at a time  adding a product from a
+        different seller clears the existing items and re-assigns the cart's
+        seller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, quantity]
+              properties:
+                productId:
+                  type: string
+                skuId:
+                  type: string
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        "201":
+          description: Item added. Returns the full updated cart.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Cart"
+        "400":
+          description: Product not found, product not approved, or insufficient stock.
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/cart/items/{itemId}:
+    patch:
+      tags: [Cart]
+      summary: Update a cart item's quantity
+      parameters:
+        - $ref: "#/components/parameters/itemId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Item updated. Returns the full updated cart.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Cart"
+        "400":
+          description: Quantity must be greater than 0, cart item not found, or insufficient stock.
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Cart]
+      summary: Remove an item from the cart
+      description: |
+        Removes a single line item. If it was the last item in the cart, the
+        cart's seller assignment is cleared as well.
+      parameters:
+        - $ref: "#/components/parameters/itemId"
+      responses:
+        "200":
+          description: Item removed. Returns the full updated cart.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Cart"
+        "400":
+          description: Cart item not found.
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/cart/checkout:
+    post:
+      tags: [Cart]
+      summary: Checkout the cart into an order
+      description: |
+        Converts the authenticated customer's cart into an order. Requires either
+        `addressId` (an existing saved address) or `newAddress` (an inline delivery
+        address). If `couponCode` is supplied it is validated and applied
+        atomically with order creation. For Cash on Delivery, seller-to-customer
+        serviceability is checked before the order is created. The cart is
+        emptied once the order is created.
+
+        `idempotencyKey` must be a UUID; retrying the same key while a prior
+        request is still in flight returns a 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idempotencyKey]
+              properties:
+                idempotencyKey:
+                  type: string
+                  format: uuid
+                addressId:
+                  type: string
+                  description: CUID of a saved address. Mutually exclusive with `newAddress`; one of the two is required.
+                newAddress:
+                  type: object
+                  description: Inline delivery address. Mutually exclusive with `addressId`; one of the two is required.
+                  required: [receiverName, phone, street, city, state, pincode]
+                  properties:
+                    receiverName:
+                      type: string
+                      minLength: 2
+                    phone:
+                      type: string
+                    street:
+                      type: string
+                      minLength: 5
+                    city:
+                      type: string
+                      minLength: 2
+                    state:
+                      type: string
+                      minLength: 2
+                    pincode:
+                      type: string
+                      pattern: '^\d{6}$'
+                    latitude:
+                      type: number
+                    longitude:
+                      type: number
+                couponCode:
+                  type: string
+                paymentMethod:
+                  type: string
+                  enum: [ONLINE, COD]
+                  default: ONLINE
+      responses:
+        "201":
+          description: Order created from the cart.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Order"
+        "400":
+          description: |
+            Cart is empty, cart has no seller assigned, address not found, delivery
+            address required, Cash on Delivery not available for this address, or
+            an invalid/inapplicable coupon.
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Duplicate order submission with the same idempotency key detected while a prior request was still processing.
+          $ref: "#/components/responses/Conflict"
+
+  # ---- Coupons ----
+  /api/coupons/validate:
+    post:
+      tags: [Coupons]
+      summary: Validate a coupon code
+      description: |
+        Validates a coupon code against the authenticated customer, order amount,
+        and (optionally) the product/category ids in the cart, and returns the
+        computed discount. Does not consume the coupon  use during checkout to
+        preview pricing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, orderAmount]
+              properties:
+                code:
+                  type: string
+                  minLength: 3
+                orderAmount:
+                  type: number
+                  exclusiveMinimum: 0
+                productIds:
+                  type: array
+                  items:
+                    type: string
+                categoryIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Coupon is valid. Returns the computed discount.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      coupon:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          code:
+                            type: string
+                          type:
+                            type: string
+                            enum: [PERCENTAGE, FIXED]
+                          value:
+                            type: number
+                            format: double
+                      discount:
+                        type: number
+                        format: double
+                      finalAmount:
+                        type: number
+                        format: double
+        "400":
+          description: |
+            Invalid coupon code, coupon not active/expired, usage limit reached,
+            already used by this customer, first-time-buyers-only, or not
+            applicable to the given products/categories.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/coupons:
+    post:
+      tags: [Coupons]
+      summary: Create a coupon
+      description: |
+        Creates a single coupon code.
+
+        Required platform role: super_admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, type, value]
+              properties:
+                code:
+                  type: string
+                  minLength: 3
+                  maxLength: 30
+                type:
+                  type: string
+                  enum: [PERCENTAGE, FIXED]
+                value:
+                  type: number
+                  exclusiveMinimum: 0
+                  description: Percentage points (0-100) when type is PERCENTAGE, or a fixed amount otherwise.
+                currency:
+                  type: string
+                  default: INR
+                minOrder:
+                  type: number
+                  exclusiveMinimum: 0
+                maxUses:
+                  type: integer
+                  minimum: 1
+                perUserLimit:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                expiresAt:
+                  type: string
+                  format: date-time
+                isStackable:
+                  type: boolean
+                  default: false
+                scopeType:
+                  type: string
+                  enum: [ALL, CATEGORY, PRODUCT, USER_SEGMENT]
+                  default: ALL
+                scopeIds:
+                  type: array
+                  items:
+                    type: string
+                firstTimeOnly:
+                  type: boolean
+                  default: false
+                userSegment:
+                  type: string
+      responses:
+        "201":
+          description: Coupon created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Coupon"
+        "400":
+          description: Coupon code already exists, or percentage discount exceeds 100%.
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Coupons]
+      summary: List coupons
+      description: |
+        Lists non-bulk coupons, optionally filtered.
+
+        Required platform role: super_admin or onboarding_manager.
+      parameters:
+        - name: isActive
+          in: query
+          schema:
+            type: string
+            enum: ["true", "false"]
+        - name: scopeType
+          in: query
+          schema:
+            type: string
+            enum: [ALL, CATEGORY, PRODUCT, USER_SEGMENT]
+      responses:
+        "200":
+          description: Coupons.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Coupon"
+
+  /api/coupons/bulk-generate:
+    post:
+      tags: [Coupons]
+      summary: Bulk-generate coupon codes
+      description: |
+        Generates up to 1000 unique single-use coupon codes sharing a prefix and
+        the same discount configuration, grouped under a `bulkGroupId`.
+
+        Required platform role: super_admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prefix, count, type, value]
+              properties:
+                prefix:
+                  type: string
+                  minLength: 2
+                  maxLength: 15
+                count:
+                  type: integer
+                  minimum: 1
+                  maximum: 1000
+                type:
+                  type: string
+                  enum: [PERCENTAGE, FIXED]
+                value:
+                  type: number
+                  exclusiveMinimum: 0
+                currency:
+                  type: string
+                  default: INR
+                minOrder:
+                  type: number
+                  exclusiveMinimum: 0
+                expiresAt:
+                  type: string
+                  format: date-time
+                scopeType:
+                  type: string
+                  enum: [ALL, CATEGORY, PRODUCT, USER_SEGMENT]
+                scopeIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "201":
+          description: Coupons generated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      bulkGroupId:
+                        type: string
+                      generated:
+                        type: integer
+                      prefix:
+                        type: string
+        "400":
+          description: Count exceeds 1000, or percentage discount exceeds 100%.
+          $ref: "#/components/responses/BadRequest"
+
+  /api/coupons/{couponId}:
+    get:
+      tags: [Coupons]
+      summary: Get a coupon
+      description: |
+        Returns a coupon along with its 50 most recent usage records.
+
+        Required platform role: super_admin or onboarding_manager.
+      parameters:
+        - $ref: "#/components/parameters/couponId"
+      responses:
+        "200":
+          description: Coupon record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Coupon"
+                      - type: object
+                        properties:
+                          usages:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/CouponUsage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Coupons]
+      summary: Update a coupon
+      description: |
+        Updates mutable fields of a coupon.
+
+        Required platform role: super_admin.
+      parameters:
+        - $ref: "#/components/parameters/couponId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isActive:
+                  type: boolean
+                expiresAt:
+                  type: string
+                  format: date-time
+                maxUses:
+                  type: integer
+                  minimum: 1
+                minOrder:
+                  type: number
+                  exclusiveMinimum: 0
+      responses:
+        "200":
+          description: Coupon updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Coupon"
+        "400":
+          description: Coupon not found (returned as a 400 by this endpoint, not a 404).
+          $ref: "#/components/responses/BadRequest"
+
+  /api/coupons/{couponId}/deactivate:
+    patch:
+      tags: [Coupons]
+      summary: Deactivate a coupon
+      description: |
+        Sets `isActive` to false. Writes a `COUPON_DEACTIVATED` audit log entry.
+
+        Required platform role: super_admin.
+      parameters:
+        - $ref: "#/components/parameters/couponId"
+      responses:
+        "200":
+          description: Coupon deactivated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Coupon"
+        "400":
+          description: Coupon not found (returned as a 400 by this endpoint, not a 404).
+          $ref: "#/components/responses/BadRequest"
+
+  # ---- Customers ----
+  /api/customers/register:
+    post:
+      tags: [Customers]
+      summary: Register a customer
+      security: []
+      description: |
+        Creates a new customer account (User) with an initial default saved
+        address, awards an onboarding credit bonus asynchronously, and returns
+        an authenticated session (access + refresh tokens).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, phone, address]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                  format: password
+                phone:
+                  type: string
+                  minLength: 10
+                  maxLength: 15
+                address:
+                  type: object
+                  required: [street, city, state, pincode]
+                  properties:
+                    street:
+                      type: string
+                      minLength: 3
+                    city:
+                      type: string
+                      minLength: 2
+                    state:
+                      type: string
+                      minLength: 2
+                    pincode:
+                      type: string
+                      minLength: 6
+                      maxLength: 10
+      responses:
+        "201":
+          description: Customer registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: "#/components/schemas/CustomerProfile"
+                      accessToken:
+                        type: string
+                        description: JWT access token. Short-lived.
+                      refreshToken:
+                        type: string
+                        description: JWT refresh token. Valid for 7 days.
+        "409":
+          description: Email already registered.
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/customers/profile:
+    get:
+      tags: [Customers]
+      summary: Get the current customer's profile
+      responses:
+        "200":
+          description: Customer profile.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/CustomerProfile"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags: [Customers]
+      summary: Update the current customer's profile
+      description: Also triggers an asynchronous profile-completion credit check.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+      responses:
+        "200":
+          description: Profile updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/CustomerProfile"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/customers/phone/link-request:
+    post:
+      tags: [Customers]
+      summary: Request an OTP to link a phone number
+      description: |
+        Sends an OTP to the given phone number to verify ownership before
+        linking it to the authenticated customer's account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  minLength: 10
+                  maxLength: 15
+      responses:
+        "200":
+          description: OTP sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      sent:
+                        type: boolean
+                        example: true
+        "409":
+          description: Phone number already linked to another account.
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/customers/phone/link-verify:
+    post:
+      tags: [Customers]
+      summary: Verify an OTP and link a phone number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, otp]
+              properties:
+                phone:
+                  type: string
+                  minLength: 10
+                  maxLength: 15
+                otp:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+      responses:
+        "200":
+          description: Phone linked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      phone:
+                        type: string
+                      phoneVerifiedAt:
+                        type: string
+                        format: date-time
+        "400":
+          description: Invalid or expired OTP.
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Phone number already linked to another account.
+          $ref: "#/components/responses/Conflict"
+        "429":
+          description: Too many OTP verification attempts; request a new OTP.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                success: false
+                error: Too many attempts, request a new OTP
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/customers/orders:
+    get:
+      tags: [Customers]
+      summary: List the current customer's orders
+      description: Returns paginated orders placed by the authenticated customer, with items, seller, and shipment summaries.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Customer's orders.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Order"
+                  meta:
+                    type: object
+                    description: Pagination metadata.
+                    properties:
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      totalPages:
+                        type: integer
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ---- GST ----
+  /api/gst/verify:
+    post:
+      tags: [GST]
+      summary: Verify a GSTIN
+      description: |
+        Looks up a GSTIN against the configured GST verification provider (or a
+        mock response when `GST_MOCK=true`). Available to any authenticated user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [gstin]
+              properties:
+                gstin:
+                  type: string
+                  minLength: 15
+                  maxLength: 15
+      responses:
+        "200":
+          description: GST details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/GstDetails"
+        "400":
+          description: Invalid GSTIN format.
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/gst/verify-autofill:
+    post:
+      tags: [GST]
+      summary: Verify a GSTIN and autofill seller KYC
+      description: |
+        Verifies a GSTIN and, if the registration is active, writes it onto the
+        authenticated seller's KYC record.
+
+        Required seller role: owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [gstin]
+              properties:
+                gstin:
+                  type: string
+                  minLength: 15
+                  maxLength: 15
+      responses:
+        "200":
+          description: GST details. The seller's KYC record has been updated with the GSTIN.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/GstDetails"
+        "400":
+          description: Invalid GSTIN format, GST registration is not active, or no KYC record exists yet for this seller.
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ---- Location ----
+  /api/location/pincode/{pincode}:
+    get:
+      tags: [Location]
+      summary: Look up a pincode
+      security: []
+      description: Resolves an Indian pincode to city/state/district and postal circle details, for address autofill.
+      parameters:
+        - name: pincode
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{6}$'
+          description: 6-digit Indian postal pincode.
+      responses:
+        "200":
+          description: Pincode details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/PincodeDetails"
+        "404":
+          description: No location found for the provided pincode.
+          $ref: "#/components/responses/NotFound"
+        "502":
+          description: The upstream pincode lookup service is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                success: false
+                error: Pincode lookup service unavailable
+
+
+  # ---- Print Areas ----
+  /api/print-areas/{productId}:
+    get:
+      tags: [Print Areas]
+      summary: Get a product's print area
+      security: []
+      description: Public endpoint. Returns the configured print/design area dimensions for a product.
+      parameters:
+        - $ref: "#/components/parameters/productId"
+      responses:
+        "200":
+          description: Print area configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/PrintArea"
+        "404":
+          description: Print area not configured for this product.
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    put:
+      tags: [Print Areas]
+      summary: Set (create or update) a product's print area
+      description: |
+        Upserts the print area for a product owned by the caller's seller tenant. If no
+        print area exists yet, one is created (defaulting safetyMarginCm to 0.5 and
+        bleedMarginCm to 0.3 when omitted); otherwise the existing record is updated.
+
+        Required seller role: owner or manager.
+      parameters:
+        - $ref: "#/components/parameters/productId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [widthCm, heightCm]
+              properties:
+                widthCm:
+                  type: number
+                  format: double
+                  exclusiveMinimum: 0
+                  example: 25.5
+                heightCm:
+                  type: number
+                  format: double
+                  exclusiveMinimum: 0
+                  example: 35.0
+                safetyMarginCm:
+                  type: number
+                  format: double
+                  minimum: 0
+                  example: 0.5
+                bleedMarginCm:
+                  type: number
+                  format: double
+                  minimum: 0
+                  example: 0.3
+      responses:
+        "200":
+          description: Print area created or updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/PrintArea"
+        "400":
+          description: Product not found (or not owned by the caller's seller).
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags: [Print Areas]
+      summary: Delete a product's print area
+      description: |
+        Removes the print area configuration for a product owned by the caller's seller
+        tenant. Idempotent: returns { deleted: false } if no print area existed.
+
+        Required seller role: owner or manager.
+      parameters:
+        - $ref: "#/components/parameters/productId"
+      responses:
+        "200":
+          description: Deletion result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+        "400":
+          description: Product not found (or not owned by the caller's seller).
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  # ---- Reviews ----
+  /api/reviews/product/{productId}:
+    get:
+      tags: [Reviews]
+      summary: List approved reviews for a product
+      security: []
+      description: Public endpoint. Returns paginated approved reviews for a product, plus rating breakdown and average.
+      parameters:
+        - $ref: "#/components/parameters/productId"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: rating
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+          description: Filter to a single star rating.
+      responses:
+        "200":
+          description: Approved reviews for the product.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      reviews:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Review"
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      avgRating:
+                        type: number
+                        format: double
+                      totalRatings:
+                        type: integer
+                      breakdown:
+                        type: object
+                        description: Count of approved reviews per star rating (1-5), keyed by rating.
+                        additionalProperties:
+                          type: integer
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/reviews:
+    post:
+      tags: [Reviews]
+      summary: Create a review for a delivered order item
+      description: |
+        Customer submits a review for a product they purchased. The order must belong to
+        the caller, be DELIVERED, and include the product; only one review per
+        (order, product, customer) is allowed. Accepts up to 5 image attachments
+        (JPEG/PNG/WEBP/GIF, 5MB each) via multipart/form-data field "media".
+
+        Rate limit: upload limiter (20 per minute per user).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [orderId, productId, rating]
+              properties:
+                orderId:
+                  type: string
+                productId:
+                  type: string
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                comment:
+                  type: string
+                  minLength: 10
+                  maxLength: 2000
+                media:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Up to 5 image files, 5MB max each.
+      responses:
+        "201":
+          description: Review created (status PENDING, pending platform moderation).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Review"
+        "400":
+          description: |
+            Order not found, order not delivered, product not in order, duplicate review,
+            invalid rating, or an invalid/oversized media file.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/reviews/{reviewId}/helpful:
+    post:
+      tags: [Reviews]
+      summary: Toggle "helpful" vote on a review
+      description: |
+        Marks (or, if already marked, unmarks) the review as helpful for the calling user.
+        Only approved reviews can be voted on, and users cannot vote on their own review.
+      parameters:
+        - $ref: "#/components/parameters/reviewId"
+      responses:
+        "200":
+          description: Updated review with adjusted helpfulCount.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Review"
+        "400":
+          description: Review not found, review not available (not approved), or cannot vote on your own review.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/reviews/seller:
+    get:
+      tags: [Reviews]
+      summary: List reviews for the seller's products
+      description: "Required seller role: owner, manager, or staff."
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ReviewStatus"
+          description: Filter by moderation status.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Seller's product reviews.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Review"
+                  meta:
+                    type: object
+                    description: Pagination metadata.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/reviews/{reviewId}/reply:
+    patch:
+      tags: [Reviews]
+      summary: Reply to a review
+      description: |
+        Adds the seller's public reply to an approved review on one of their products.
+        Only one reply is allowed per review.
+
+        Required seller role: owner or manager.
+      parameters:
+        - $ref: "#/components/parameters/reviewId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reply]
+              properties:
+                reply:
+                  type: string
+                  minLength: 5
+                  maxLength: 1000
+      responses:
+        "200":
+          description: Review with the seller's reply attached.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Review"
+        "400":
+          description: Review not found, review not approved, or already replied to.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/reviews/pending:
+    get:
+      tags: [Reviews]
+      summary: List reviews pending moderation
+      description: "Required platform role: super_admin or product_reviewer."
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Reviews awaiting moderation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Review"
+                        - type: object
+                          properties:
+                            product:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                name:
+                                  type: string
+                  meta:
+                    type: object
+                    description: Pagination metadata.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/reviews/{reviewId}/moderate:
+    patch:
+      tags: [Reviews]
+      summary: Approve or reject a pending review
+      description: "Required platform role: super_admin or product_reviewer."
+      parameters:
+        - $ref: "#/components/parameters/reviewId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [APPROVED, REJECTED]
+      responses:
+        "200":
+          description: Moderated review.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Review"
+        "400":
+          description: Review not found or already moderated.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  # ---- Security ----
+  /api/security/summary:
+    get:
+      tags: [Security]
+      summary: Get account security summary
+      description: Returns 2FA status, password last-changed date, last login, last active device, and active session count for the authenticated user.
+      responses:
+        "200":
+          description: Security summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      twoFactorEnabled:
+                        type: boolean
+                      passwordLastChanged:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      lastLogin:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      lastActiveDevice:
+                        type: string
+                        nullable: true
+                      activeSessionCount:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/security/2fa/setup:
+    post:
+      tags: [Security]
+      summary: Begin two-factor authentication setup
+      description: |
+        Generates a new TOTP secret and QR code for the authenticated user to scan into
+        an authenticator app. If 2FA is already enabled, a valid currentToken must be
+        supplied to re-enroll (issue a new secret). The new secret is stored but 2FA is
+        not enabled until confirmed via POST /api/security/2fa/verify.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentToken:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+                  description: Required only when re-enrolling a user who already has 2FA enabled.
+      responses:
+        "200":
+          description: TOTP secret and QR code generated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      qrCodeDataUrl:
+                        type: string
+                        description: Data URL (PNG) of the TOTP enrollment QR code.
+                      secret:
+                        type: string
+                        description: Base32 TOTP secret (also encoded in the QR code).
+        "400":
+          description: Current 2FA code required to re-enroll, or the supplied current code is invalid.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/security/2fa/verify:
+    post:
+      tags: [Security]
+      summary: Confirm setup and enable two-factor authentication
+      description: |
+        Verifies a TOTP code against the pending secret from /2fa/setup and, if valid,
+        enables 2FA on the account.
+
+        Rate limit: 2FA limiter (5 per minute per user).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+      responses:
+        "200":
+          description: Two-factor authentication enabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      twoFactorEnabled:
+                        type: boolean
+                        example: true
+        "400":
+          description: 2FA setup not initiated, or the supplied code is invalid.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/security/2fa/disable:
+    post:
+      tags: [Security]
+      summary: Disable two-factor authentication
+      description: |
+        Verifies a TOTP code and, if valid, disables 2FA and clears the stored secret.
+
+        Rate limit: 2FA limiter (5 per minute per user).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+      responses:
+        "200":
+          description: Two-factor authentication disabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      twoFactorEnabled:
+                        type: boolean
+                        example: false
+        "400":
+          description: Invalid 2FA code.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/security/sessions:
+    get:
+      tags: [Security]
+      summary: List active sessions
+      description: Returns all non-revoked login sessions for the authenticated user, most recently active first.
+      responses:
+        "200":
+          description: Active sessions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/security/sessions/{sessionId}:
+    delete:
+      tags: [Security]
+      summary: Revoke a session
+      description: |
+        Revokes the given session (must belong to the caller) and blacklists any access
+        token issued for it for the remainder of its natural TTL.
+      parameters:
+        - $ref: "#/components/parameters/sessionId"
+      responses:
+        "200":
+          description: Session revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/security/sessions/revoke-all:
+    post:
+      tags: [Security]
+      summary: Revoke all other sessions
+      description: |
+        Revokes all of the authenticated user's non-revoked sessions except the one tied
+        to the current request (when identifiable from the auth context), and blacklists
+        their access tokens. Takes no request body.
+      responses:
+        "200":
+          description: Bulk revoke result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                        description: Number of sessions revoked.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  # ---- Seller Profile ----
+  /api/seller-profile/profile:
+    get:
+      tags: [Seller Profile]
+      summary: Get seller profile
+      description: "Required seller role: owner or manager."
+      responses:
+        "200":
+          description: Seller profile subset.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      name:
+                        type: string
+                      email:
+                        type: string
+                        format: email
+                      phone:
+                        type: string
+                      alternatePhone:
+                        type: string
+                        nullable: true
+                      profileImage:
+                        type: string
+                        nullable: true
+                      status:
+                        $ref: "#/components/schemas/SellerStatus"
+                      createdAt:
+                        type: string
+                        format: date-time
+                      updatedAt:
+                        type: string
+                        format: date-time
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    put:
+      tags: [Seller Profile]
+      summary: Update seller profile
+      description: "Required seller role: owner or manager."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                alternatePhone:
+                  type: string
+                  minLength: 10
+                  maxLength: 15
+                profileImage:
+                  type: string
+                  format: uri
+      responses:
+        "200":
+          description: Updated seller record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Seller"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/seller-profile/business:
+    get:
+      tags: [Seller Profile]
+      summary: Get seller business details
+      description: "Required seller role: owner or manager."
+      responses:
+        "200":
+          description: Business profile details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      businessName:
+                        type: string
+                        nullable: true
+                      businessType:
+                        $ref: "#/components/schemas/BusinessType"
+                      businessLogo:
+                        type: string
+                        nullable: true
+                      businessDescription:
+                        type: string
+                        nullable: true
+                      industryCategory:
+                        type: string
+                        nullable: true
+                      yearOfEstablishment:
+                        type: integer
+                        nullable: true
+                      street:
+                        type: string
+                      city:
+                        type: string
+                      state:
+                        type: string
+                      pincode:
+                        type: string
+                      pickupAddress:
+                        type: object
+                        nullable: true
+                        description: Structured pickup address override (street, city, state, pincode).
+                      billingAddress:
+                        type: object
+                        nullable: true
+                        description: Structured billing address override (street, city, state, pincode).
+                      socialLinks:
+                        type: object
+                        nullable: true
+                        properties:
+                          website:
+                            type: string
+                            format: uri
+                          instagram:
+                            type: string
+                            format: uri
+                          facebook:
+                            type: string
+                            format: uri
+                      kyc:
+                        type: object
+                        nullable: true
+                        properties:
+                          panNumber:
+                            type: string
+                          gstNumber:
+                            type: string
+                            nullable: true
+                          status:
+                            $ref: "#/components/schemas/KycStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    put:
+      tags: [Seller Profile]
+      summary: Update seller business details
+      description: "Required seller role: owner or manager."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                businessName:
+                  type: string
+                  minLength: 2
+                businessLogo:
+                  type: string
+                  format: uri
+                businessDescription:
+                  type: string
+                  maxLength: 2000
+                industryCategory:
+                  type: string
+                yearOfEstablishment:
+                  type: integer
+                  minimum: 1900
+                pickupAddress:
+                  $ref: "#/components/schemas/Address"
+                billingAddress:
+                  $ref: "#/components/schemas/Address"
+                socialLinks:
+                  type: object
+                  properties:
+                    website:
+                      type: string
+                      format: uri
+                    instagram:
+                      type: string
+                      format: uri
+                    facebook:
+                      type: string
+                      format: uri
+      responses:
+        "200":
+          description: Updated seller record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Seller"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/seller-profile/verification-badges:
+    get:
+      tags: [Seller Profile]
+      summary: Get seller verification badge statuses
+      description: "Required seller role: owner or manager."
+      responses:
+        "200":
+          description: Verification badge statuses.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      approvalStatus:
+                        $ref: "#/components/schemas/SellerStatus"
+                      kycStatus:
+                        $ref: "#/components/schemas/KycStatus"
+                      aadhaarStatus:
+                        $ref: "#/components/schemas/KycStatus"
+                      governmentIdStatus:
+                        $ref: "#/components/schemas/KycStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/seller-profile/shops/{shopId}/stats:
+    get:
+      tags: [Seller Profile]
+      summary: Get statistics for one of the seller's shops
+      description: "Required seller role: owner or manager."
+      parameters:
+        - $ref: "#/components/parameters/shopId"
+      responses:
+        "200":
+          description: Shop performance statistics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalRevenue:
+                        type: number
+                        format: double
+                        description: Sum of finalAmount (falling back to totalAmount) for all DELIVERED orders assigned to the shop.
+                      totalOrders:
+                        type: integer
+                      averageRating:
+                        type: number
+                        format: double
+                        description: Average rating across approved reviews for the shop's products.
+                      responseRate:
+                        type: number
+                        format: double
+                        description: Currently always 0 - not yet implemented.
+                      monthlyRevenue:
+                        type: number
+                        format: double
+                        description: Same as totalRevenue, scoped to the current calendar month.
+                      monthlyOrders:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  # ---- Storefront ----
+  # NOTE: NOT CURRENTLY MOUNTED. src/modules/storefront/storefront.routes.ts exists but is never
+  # imported/registered in src/app.ts (every other module is wired up there via
+  # `app.use("/api/v1/<prefix>", ...Routes)` - there is no such line for storefront). The paths
+  # below are dead code in the running app until that registration is added. Documented here for
+  # completeness based on the module's own internal routing structure and naming convention.
+  /api/storefront/shops/{slug}:
+    get:
+      tags: [Storefront]
+      summary: Get a shop's public storefront details
+      security: []
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Public endpoint. Returns a subset of shop fields for an APPROVED shop, looked up by slug.
+      parameters:
+        - $ref: "#/components/parameters/shopSlug"
+      responses:
+        "200":
+          description: Public shop details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      displayId:
+                        type: string
+                      name:
+                        type: string
+                      slug:
+                        type: string
+                      description:
+                        type: string
+                        nullable: true
+                      category:
+                        type: string
+                      logo:
+                        type: string
+                        nullable: true
+                      banner:
+                        type: string
+                        nullable: true
+                      returnPolicy:
+                        type: string
+                        nullable: true
+                      status:
+                        $ref: "#/components/schemas/ApprovalStatus"
+                      _count:
+                        type: object
+                        properties:
+                          products:
+                            type: integer
+                            description: Count of APPROVED products in the shop.
+        "404":
+          description: Shop not found, or not in APPROVED status.
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/storefront/shops/{slug}/products:
+    get:
+      tags: [Storefront]
+      summary: List a shop's public products
+      security: []
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Public endpoint. Lists APPROVED products for an APPROVED shop, with optional search
+        and category filtering.
+      parameters:
+        - $ref: "#/components/parameters/shopSlug"
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+          description: Case-insensitive substring match on product name.
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated public product listing.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        displayId:
+                          type: string
+                        name:
+                          type: string
+                        price:
+                          type: number
+                          format: double
+                          nullable: true
+                        compareAtPrice:
+                          type: number
+                          format: double
+                          nullable: true
+                        stock:
+                          type: integer
+                          nullable: true
+                        images:
+                          type: array
+                          maxItems: 1
+                          description: The product's first image, ordered by its display order.
+                          items:
+                            $ref: "#/components/schemas/ProductImage"
+                        category:
+                          type: object
+                          nullable: true
+                          properties:
+                            id:
+                              type: string
+                            name:
+                              type: string
+                  meta:
+                    type: object
+                    description: Pagination metadata.
+        "404":
+          description: Shop not found, or not in APPROVED status.
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/storefront/products/{productId}:
+    get:
+      tags: [Storefront]
+      summary: Get a public product's full detail
+      security: []
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Public endpoint. Returns full product detail (images, variants, SKUs, shop, category)
+        for an APPROVED product.
+      parameters:
+        - $ref: "#/components/parameters/productId"
+      responses:
+        "200":
+          description: Public product detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Product"
+                      - type: object
+                        properties:
+                          images:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/ProductImage"
+                          variants:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/VariantOption"
+                          skus:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/ProductSKU"
+                          shop:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                              name:
+                                type: string
+                              slug:
+                                type: string
+                              logo:
+                                type: string
+                                nullable: true
+                          category:
+                            type: object
+                            nullable: true
+                            properties:
+                              id:
+                                type: string
+                              name:
+                                type: string
+        "404":
+          description: Product not found, or not in APPROVED status.
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  # ---- Templates ----
+  /api/templates/product/{productId}:
+    get:
+      tags: [Templates]
+      summary: List active templates for a product
+      security: []
+      description: Public endpoint. Returns active templates associated with a product, newest first.
+      parameters:
+        - $ref: "#/components/parameters/productId"
+      responses:
+        "200":
+          description: List of active templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Template"
+
+  /api/templates/{templateId}:
+    get:
+      tags: [Templates]
+      summary: Get a template
+      security: []
+      description: Public endpoint. Returns a single active template by ID.
+      parameters:
+        - $ref: "#/components/parameters/templateId"
+      responses:
+        "200":
+          description: Template record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Template"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Templates]
+      summary: Update a template
+      description: |
+        Required seller role: owner or manager.
+
+        Updates name, industry, style, canvasState, and/or isActive for a template owned by the
+        authenticated seller.
+      parameters:
+        - $ref: "#/components/parameters/templateId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                industry:
+                  type: string
+                style:
+                  type: string
+                canvasState:
+                  type: object
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated template.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Template"
+        "400":
+          description: Validation failure, or template not found for this seller.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      tags: [Templates]
+      summary: Delete a template
+      description: |
+        Required seller role: owner or manager.
+
+        Deletes the template record and its thumbnail from object storage.
+      parameters:
+        - $ref: "#/components/parameters/templateId"
+      responses:
+        "200":
+          description: Template deleted.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deleted:
+                            type: boolean
+                            example: true
+        "400":
+          description: Template not found for this seller.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/templates:
+    get:
+      tags: [Templates]
+      summary: List the authenticated seller's templates
+      description: |
+        Required seller role: owner, manager, or staff.
+
+        Includes each template's associated product (id and name only).
+      responses:
+        "200":
+          description: Seller's templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Template"
+                        - type: object
+                          properties:
+                            product:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                name:
+                                  type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Templates]
+      summary: Create a template
+      description: |
+        Required seller role: owner or manager.
+
+        Multipart upload. The product must belong to the authenticated seller. The thumbnail is
+        uploaded to object storage; JPEG, PNG, and WEBP are accepted, up to 5MB. `canvasState` may
+        be sent as a JSON-encoded string or a JSON object.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [productId, name, thumbnail]
+              properties:
+                productId:
+                  type: string
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                industry:
+                  type: string
+                style:
+                  type: string
+                canvasState:
+                  type: string
+                  description: JSON-encoded canvas/design state.
+                thumbnail:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Created template.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Template"
+        "400":
+          description: Missing thumbnail file, product not found for this seller, or invalid thumbnail file type.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  # ---- Upload Assets ----
+  /api/upload-asset:
+    post:
+      tags: [Upload Assets]
+      summary: Upload a generic asset
+      description: |
+        Any authenticated user. Multipart upload of a single file to object storage. Allowed MIME
+        types: image/jpeg, image/png, image/webp, image/gif, application/pdf. `category` selects the
+        storage bucket/prefix and the max file size: customer-uploads (10MB, default), shop-assets
+        (10MB), kyc-documents (5MB).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                category:
+                  type: string
+                  enum: [customer-uploads, shop-assets, kyc-documents]
+                  default: customer-uploads
+      responses:
+        "201":
+          description: Uploaded asset record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/UploadAsset"
+        "400":
+          description: File required, invalid file type, invalid category, or file too large for the given category.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    get:
+      tags: [Upload Assets]
+      summary: List the authenticated user's recent uploads
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: string
+            pattern: "^\\d+$"
+          description: Max records to return, capped at 100. Defaults to 20.
+      responses:
+        "200":
+          description: Recent uploaded assets, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UploadAsset"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/upload-asset/{assetId}:
+    delete:
+      tags: [Upload Assets]
+      summary: Delete an uploaded asset
+      description: Deletes an asset owned by the authenticated user, both its database record and its object storage file.
+      parameters:
+        - $ref: "#/components/parameters/assetId"
+      responses:
+        "200":
+          description: Asset deleted.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deleted:
+                            type: boolean
+                            example: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---- Users ----
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List platform users
+      description: |
+        Required platform role: super_admin.
+
+        Searches by name/email and filters by active status. Each user's `role` is derived: their
+        platform role name if they're a platform member, else "seller" if they have any seller
+        membership, else "user".
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive substring match on name or email.
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated user directory listing.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        email:
+                          type: string
+                          format: email
+                        role:
+                          type: string
+                          example: seller
+                        isActive:
+                          type: boolean
+                        createdAt:
+                          type: string
+                          format: date-time
+                  meta:
+                    type: object
+                    description: Pagination metadata (total, page, limit, totalPages, hasNext, hasPrev).
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ---- Verification ----
+  # NOTE: NOT CURRENTLY MOUNTED. src/modules/verification/verification.routes.ts exists but is never
+  # imported/registered in src/app.ts (every other module is wired up there via
+  # `app.use("/api/v1/<prefix>", ...Routes)` - there is no such line for verification). The paths
+  # below are dead code in the running app until that registration is added. Documented here for
+  # completeness based on the module's own internal routing structure and naming convention.
+  /api/verification/aadhaar/generate-otp:
+    post:
+      tags: [Verification]
+      summary: Request an Aadhaar OTP for seller KYC
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Required seller role: owner.
+
+        Requires an existing SellerKyc record (created during KYC submission). Generates an OTP
+        against the Aadhaar verification provider and stores the provider's session client ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [aadhaarNumber]
+              properties:
+                aadhaarNumber:
+                  type: string
+                  pattern: "^\\d{12}$"
+                  example: "123456789012"
+      responses:
+        "200":
+          description: OTP sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      otpSent:
+                        type: boolean
+                        example: true
+        "400":
+          description: Invalid Aadhaar number, no KYC record, Aadhaar already verified, or provider error.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/verification/aadhaar/verify-otp:
+    post:
+      tags: [Verification]
+      summary: Confirm an Aadhaar OTP for seller KYC
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Required seller role: owner.
+
+        Submits the OTP to the Aadhaar verification provider against the pending session from
+        generate-otp. On success, marks the KYC record's Aadhaar status VERIFIED and writes an
+        audit log entry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [otp]
+              properties:
+                otp:
+                  type: string
+                  minLength: 4
+                  maxLength: 8
+      responses:
+        "200":
+          description: Aadhaar verified. Updated KYC record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    description: The updated SellerKyc record, including aadhaarStatus=VERIFIED.
+        "400":
+          description: No KYC record, no pending OTP request, or OTP verification failed.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/verification/government-id:
+    post:
+      tags: [Verification]
+      summary: Submit a government ID for seller KYC
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Required seller role: owner.
+
+        Requires an existing SellerKyc record. For govtIdType=PAN, the number is validated and
+        checked synchronously against the PAN verification provider, immediately setting status to
+        VERIFIED or REJECTED. Other ID types are stored as PENDING for manual platform admin review.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [govtIdType, govtIdNumber]
+              properties:
+                govtIdType:
+                  type: string
+                  enum: [PAN, PASSPORT, VOTER_ID, DRIVING_LICENSE]
+                govtIdNumber:
+                  type: string
+                  minLength: 4
+                  maxLength: 30
+                  example: ABCDE1234F
+      responses:
+        "200":
+          description: Updated KYC record with the new government ID status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    description: The updated SellerKyc record.
+        "400":
+          description: No KYC record, government ID already verified, or invalid PAN format.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/verification/status:
+    get:
+      tags: [Verification]
+      summary: Get the authenticated seller's verification status
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Required seller role: owner or manager.
+      responses:
+        "200":
+          description: Aadhaar and government ID verification status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        $ref: "#/components/schemas/KycStatus"
+                      aadhaarStatus:
+                        type: string
+                      aadhaarRejectedReason:
+                        type: string
+                        nullable: true
+                      aadhaarVerifiedAt:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      govtIdType:
+                        type: string
+                        nullable: true
+                      govtIdStatus:
+                        type: string
+                      govtIdRejectedReason:
+                        type: string
+                        nullable: true
+                      govtIdVerifiedAt:
+                        type: string
+                        format: date-time
+                        nullable: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No KYC record found for this seller.
+          $ref: "#/components/responses/NotFound"
+
+  /api/verification/{sellerId}/aadhaar/verify:
+    patch:
+      tags: [Verification]
+      summary: Platform admin - approve a seller's pending Aadhaar verification
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Required platform role: super_admin or onboarding_manager.
+
+        Fails unless the seller's Aadhaar status is currently PENDING. Writes an audit log entry.
+      parameters:
+        - $ref: "#/components/parameters/sellerId"
+      responses:
+        "200":
+          description: Updated KYC record with aadhaarStatus=VERIFIED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        "400":
+          description: Aadhaar status is not currently PENDING.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/verification/{sellerId}/aadhaar/reject:
+    patch:
+      tags: [Verification]
+      summary: Platform admin - reject a seller's Aadhaar verification
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Required platform role: super_admin or onboarding_manager.
+
+        Allowed when Aadhaar status is currently PENDING or VERIFIED. Writes an audit log entry
+        with the rejection reason.
+      parameters:
+        - $ref: "#/components/parameters/sellerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 5
+      responses:
+        "200":
+          description: Updated KYC record with aadhaarStatus=REJECTED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        "400":
+          description: Aadhaar status is neither PENDING nor VERIFIED.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/verification/{sellerId}/government-id/verify:
+    patch:
+      tags: [Verification]
+      summary: Platform admin - approve a seller's pending government ID verification
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Required platform role: super_admin or onboarding_manager.
+
+        Fails unless the seller's government ID status is currently PENDING. Writes an audit log entry.
+      parameters:
+        - $ref: "#/components/parameters/sellerId"
+      responses:
+        "200":
+          description: Updated KYC record with govtIdStatus=VERIFIED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        "400":
+          description: Government ID status is not currently PENDING.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/verification/{sellerId}/government-id/reject:
+    patch:
+      tags: [Verification]
+      summary: Platform admin - reject a seller's government ID verification
+      description: |
+        WARNING - NOT CURRENTLY MOUNTED: this module's router is not registered in src/app.ts as
+        of this writing - this endpoint is unreachable until it is wired up.
+
+        Required platform role: super_admin or onboarding_manager.
+
+        Allowed when government ID status is currently PENDING or VERIFIED. Writes an audit log
+        entry with the rejection reason.
+      parameters:
+        - $ref: "#/components/parameters/sellerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 5
+      responses:
+        "200":
+          description: Updated KYC record with govtIdStatus=REJECTED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        "400":
+          description: Government ID status is neither PENDING nor VERIFIED.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---- Wallet ----
+  /api/wallet/balance:
+    get:
+      tags: [Wallet]
+      summary: Get the authenticated user's wallet balance
+      description: Creates the wallet on first access if it doesn't already exist.
+      responses:
+        "200":
+          description: Current wallet balance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      balance:
+                        type: number
+                        format: double
+                        example: 1500.00
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/wallet/topup:
+    post:
+      tags: [Wallet]
+      summary: Record a wallet top-up
+      description: |
+        Records a manual bank transfer top-up (NEFT/RTGS/UPI/IMPS with a UTR reference) and credits
+        the amount to the wallet balance in the same transaction. The UTR reference must be unique
+        across all top-ups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, method, utrReference]
+              properties:
+                amount:
+                  type: number
+                  format: double
+                  exclusiveMinimum: 0
+                method:
+                  type: string
+                  enum: [NEFT, RTGS, UPI, IMPS]
+                utrReference:
+                  type: string
+                  minLength: 5
+                  maxLength: 50
+      responses:
+        "201":
+          description: Top-up recorded and wallet credited.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      topup:
+                        $ref: "#/components/schemas/WalletTopup"
+                      wallet:
+                        $ref: "#/components/schemas/Wallet"
+        "400":
+          description: Amount not positive, or this UTR reference has already been used.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/wallet/transactions:
+    get:
+      tags: [Wallet]
+      summary: List the authenticated user's wallet transactions
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: string
+            pattern: "^\\d+$"
+        - name: limit
+          in: query
+          schema:
+            type: string
+            pattern: "^\\d+$"
+          description: Capped at 100. Defaults to 20.
+      responses:
+        "200":
+          description: Paginated wallet transaction ledger, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      transactions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/WalletTransaction"
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      balance:
+                        type: number
+                        format: double
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/wallet/topups:
+    get:
+      tags: [Wallet]
+      summary: List the authenticated user's top-up history
+      responses:
+        "200":
+          description: All top-ups for the user, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WalletTopup"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ---- Wishlist ----
+  /api/wishlist:
+    get:
+      tags: [Wishlist]
+      summary: List the authenticated user's wishlist
+      description: Includes each item's product (a lightweight select) and SKU, if any.
+      responses:
+        "200":
+          description: Wishlist items, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WishlistItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/wishlist/items:
+    post:
+      tags: [Wishlist]
+      summary: Add an item to the wishlist
+      description: |
+        Idempotent: if the same product/SKU combination is already in the wishlist, the existing
+        item is returned rather than duplicated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId]
+              properties:
+                productId:
+                  type: string
+                skuId:
+                  type: string
+      responses:
+        "201":
+          description: Wishlist item (newly created or pre-existing).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/WishlistItem"
+        "400":
+          description: Product not found, or SKU does not belong to the given product.
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/wishlist/items/{productId}:
+    delete:
+      tags: [Wishlist]
+      summary: Remove an item from the wishlist
+      parameters:
+        - $ref: "#/components/parameters/productId"
+        - name: skuId
+          in: query
+          schema:
+            type: string
+          description: If the wishlist item has a specific SKU, it must be supplied to remove it.
+      responses:
+        "200":
+          description: Item removed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          removed:
+                            type: boolean
+                            example: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: No matching wishlist item found.
+          $ref: "#/components/responses/NotFound"

@@ -35,6 +35,7 @@ export const RedisKeys = {
   sellerStatus: (sellerId: string) => `seller:status:${sellerId}`,
   userRoles: (userId: string, sellerId: string) => `rbac:${userId}:${sellerId}`,
   userPermissions: (userId: string, sellerId: string) => `perms:${userId}:${sellerId}`,
+  platformPermissions: (userId: string) => `platform-perms:${userId}`,
   couponLock: (couponId: string) => `coupon:lock:${couponId}`,
   lowStockAlert: (productId: string, skuId?: string) =>
     skuId ? `lowstock:sku:${skuId}` : `lowstock:product:${productId}`,
@@ -42,4 +43,5 @@ export const RedisKeys = {
   pincodeLookup: (pincode: string) => `pincode:${pincode}`,
   otpCode: (purpose: string, phone: string) => `otp:code:${purpose}:${phone}`,
   otpAttempts: (purpose: string, phone: string) => `otp:attempts:${purpose}:${phone}`,
+  searchAttributeLexicon: () => `search:attr-lexicon`,
 } as const;

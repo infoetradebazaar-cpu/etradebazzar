@@ -4,6 +4,9 @@ import { logger } from "./utils/logger";
 import { redis } from "./db/redis";
 import { connectDb, disconnectDb } from "./db/index";
 import { startSlaMonitor, stopSlaMonitor } from "./lib/sla/sla-monitor";
+import { startNegotiationNudgeMonitor, stopNegotiationNudgeMonitor } from "./lib/negotiation/nudge-monitor";
+import { startNotificationRetryWorker, stopNotificationRetryWorker } from "./lib/notifications/notification-retry.worker";
+import { startSseRedisSubscriber, stopSseRedisSubscriber } from "./lib/notifications/sse/sse.redis";
 
 let server: ReturnType<typeof app.listen>;
 
@@ -24,6 +27,9 @@ async function start() {
     logger.info(`Server running at ${url}`);
   });
   startSlaMonitor();
+  startNegotiationNudgeMonitor();
+  startNotificationRetryWorker();
+  startSseRedisSubscriber();
 }
 
 let shuttingDown = false;
@@ -41,6 +47,9 @@ const shutdown = (signal: string) => {
 
   server?.close(async () => {
     stopSlaMonitor();
+    stopNegotiationNudgeMonitor();
+    stopNotificationRetryWorker();
+    await stopSseRedisSubscriber();
     try {
       await disconnectDb();
     } catch (err: any) {

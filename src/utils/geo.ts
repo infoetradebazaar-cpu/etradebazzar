@@ -1,4 +1,23 @@
+import geoip from "geoip-lite";
 import { db } from "../db/index";
+
+export interface IpLocation {
+  city: string | null;
+  region: string | null;
+  country: string | null;
+}
+
+export function getLocationFromIp(ip: string | undefined): IpLocation | null {
+  if (!ip) return null;
+  const normalized = ip.replace(/^::ffff:/, "");
+  const geo = geoip.lookup(normalized);
+  if (!geo) return null;
+  return {
+    city: geo.city || null,
+    region: geo.region || null,
+    country: geo.country || null,
+  };
+}
 
 const EARTH_RADIUS_KM = 6371;
 const MAX_CANDIDATE_SHOPS = 200;
@@ -34,7 +53,7 @@ export async function findNearestShop(
       products: {
         some: {
           id: { in: productIds },
-          status: "APPROVED",
+          status: "LIVE",
           stock: { gt: 0 },
         },
       },

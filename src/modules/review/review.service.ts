@@ -100,7 +100,7 @@ export const reviewService = {
             notificationService.notify({
                 userId: owner.userId,
                 email: owner.user.email,
-                type: "REVIEW_RECEIVED" as any,
+                type: "REVIEW_RECEIVED",
                 title: "New review received",
                 message: `A customer left a ${data.rating}-star review on your product.`,
                 channels: ["sse"],

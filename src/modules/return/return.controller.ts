@@ -15,6 +15,7 @@ export const returnController = {
                 "Unauthorized",
                 "Order not delivered yet",
                 "Return request already exists",
+                "One or more images are invalid or already attached",
             ];
             if (clientErrors.includes(error.message)) {
                 return res.status(400).json({ success: false, error: error.message });
@@ -91,6 +92,35 @@ export const returnController = {
             return res.json({ success: true, data: result.data, meta: result.meta });
         } catch (error: any) {
             logger.error({ err: error.message }, "List returns failed");
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
+    async listAllReturnRequests(req: Request, res: Response) {
+        try {
+            const { status, search, reason, sellerId, dateFrom, dateTo, page, limit } = req.query as Record<string, string>;
+            const result = await returnService.listAllReturnRequests({
+                status, search, reason, sellerId, dateFrom, dateTo,
+                page: page ? Number(page) : undefined,
+                limit: limit ? Number(limit) : undefined,
+            });
+            return res.json({ success: true, data: result.data, meta: result.meta });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "List all returns (admin) failed");
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
+    async getReturnRequestForAdmin(req: Request, res: Response) {
+        try {
+            const { returnId } = req.params;
+            const result = await returnService.getReturnRequestForAdmin(returnId as string);
+            return res.json({ success: true, data: result });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Get return request (admin) failed");
+            if (error.message === "Return request not found") {
+                return res.status(404).json({ success: false, error: error.message });
+            }
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },

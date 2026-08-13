@@ -7,6 +7,8 @@ import {
   withOptionalTenantScope,
 } from "../../middleware/tenant";
 import { resolveImageUrls } from "./product-image.service";
+import { syncProductSearchIndexInBackground } from "../../lib/search/product-search-document";
+import { sanitizeSpecificationHtml } from "../../lib/sanitize/html-sanitizer";
 
 const SKU_UNIQUE_CONSTRAINT = "products_sku_key";
 
@@ -23,6 +25,7 @@ async function validateProductAttributes(
 ): Promise<void> {
   const definitions = await db.categoryAttribute.findMany({
     where: { categoryId, isVariant: false },
+    include: { options: true },
   });
   if (!definitions.length) return;
 
@@ -45,7 +48,9 @@ async function validateProductAttributes(
     if (
       !isEmpty &&
       def.type === "ENUM" &&
-      !def.options.includes(String(value))
+      !def.options.some(
+        (opt) => opt.status === "APPROVED" && opt.value === String(value),
+      )
     ) {
       throw new Error(`Invalid value for attribute "${def.label}"`);
     }
@@ -72,6 +77,10 @@ export const productService = {
       height?: number;
       isDigital: boolean;
       attributes?: Record<string, string | number | boolean | null>;
+      negotiationThresholdQty?: number;
+      customizationEnabled?: boolean;
+      customizationAcceptedFormats?: string[];
+      specification?: string;
     },
   ) {
     const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
@@ -105,6 +114,9 @@ export const productService = {
             displayId,
             name: data.name,
             description: data.description,
+            specification: data.specification !== undefined
+              ? sanitizeSpecificationHtml(data.specification)
+              : undefined,
             price: data.price,
             compareAtPrice: data.compareAtPrice,
             sku: data.sku,
@@ -116,6 +128,9 @@ export const productService = {
             height: data.height,
             isDigital: data.isDigital,
             attributes: data.attributes ?? undefined,
+            negotiationThresholdQty: data.negotiationThresholdQty,
+            customizationEnabled: data.customizationEnabled,
+            customizationAcceptedFormats: data.customizationAcceptedFormats,
           },
         });
 
@@ -159,8 +174,15 @@ export const productService = {
       height: number;
       isDigital: boolean;
       attributes: Record<string, string | number | boolean | null>;
+      negotiationThresholdQty: number | null;
+      customizationEnabled: boolean;
+      customizationAcceptedFormats: string[];
+      specification: string;
     }>,
   ) {
+    if (data.specification !== undefined) {
+      data.specification = sanitizeSpecificationHtml(data.specification);
+    }
     if (data.categoryId) {
       const category = await db.category.findUnique({
         where: { id: data.categoryId },
@@ -169,7 +191,7 @@ export const productService = {
     }
 
     try {
-      return await withTenantScope(async (tx) => {
+      const updated = await withTenantScope(async (tx) => {
         const product = await tx.product.findFirst({
           where: { id: productId, sellerId },
         });
@@ -183,9 +205,9 @@ export const productService = {
             data.attributes !== undefined
               ? data.attributes
               : (product.attributes as Record<
-                  string,
-                  string | number | boolean | null
-                > | null);
+                string,
+                string | number | boolean | null
+              > | null);
           await validateProductAttributes(
             effectiveCategoryId,
             effectiveAttributes,
@@ -211,6 +233,8 @@ export const productService = {
 
         return updated;
       });
+      syncProductSearchIndexInBackground(productId);
+      return updated;
     } catch (err: any) {
       if (isUniqueConstraintError(err, SKU_UNIQUE_CONSTRAINT)) {
         throw new Error("SKU already exists");
@@ -311,7 +335,7 @@ export const productService = {
     if (filters.shopId) where.shopId = filters.shopId;
     if (filters.status) {
       const STATUS_MAP: Record<string, string> = {
-        pending: "PENDING",
+        pending: "PENDING_APPROVAL",
         approved: "APPROVED",
         rejected: "REJECTED",
         draft: "DRAFT",
@@ -359,11 +383,45 @@ export const productService = {
     };
   },
 
-  async approveProduct(productId: string, actorId: string, note?: string) {
+  async submitForReview(sellerId: string, actorId: string, productId: string) {
+    return withTenantScope(async (tx) => {
+      const product = await tx.product.findFirst({ where: { id: productId, sellerId } });
+      if (!product) throw new Error("Product not found");
+      if (product.status !== "DRAFT") {
+        throw new Error("Only draft products can be submitted for review");
+      }
+
+      const updated = await tx.product.update({
+        where: { id: productId },
+        data: { status: "PENDING_APPROVAL" },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          sellerId,
+          actorId,
+          actorType: "seller",
+          action: "PRODUCT_SUBMITTED_FOR_REVIEW",
+          entityType: "product",
+          entityId: productId,
+          metadata: {},
+        },
+      });
+
+      return updated;
+    });
+  },
+
+  async approveProduct(
+    productId: string,
+    actorId: string,
+    commissionRate: number,
+    note?: string,
+  ) {
     const { updated, product } = await withTenantScope(async (tx) => {
       const product = await tx.product.findUnique({ where: { id: productId } });
       if (!product) throw new Error("Product not found");
-      if (product.status !== "PENDING")
+      if (product.status !== "PENDING_APPROVAL")
         throw new Error("Product is not pending");
 
       const updated = await tx.product.update({
@@ -388,8 +446,32 @@ export const productService = {
         },
       });
 
+      const proposal = await tx.commissionProposal.create({
+        data: {
+          productId,
+          proposedRate: commissionRate,
+          proposedBy: actorId,
+          proposedByType: "platform",
+          round: 1,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          sellerId: product.sellerId,
+          actorId,
+          actorType: "platform",
+          action: "COMMISSION_PROPOSED",
+          entityType: "commission_proposal",
+          entityId: proposal.id,
+          metadata: { productId, rate: commissionRate, round: 1 },
+        },
+      });
+
       return { updated, product };
     });
+
+    syncProductSearchIndexInBackground(productId);
 
     const [owner, seller] = await Promise.all([
       db.sellerMember.findFirst({
@@ -421,7 +503,7 @@ export const productService = {
     const { updated, product } = await withTenantScope(async (tx) => {
       const product = await tx.product.findUnique({ where: { id: productId } });
       if (!product) throw new Error("Product not found");
-      if (product.status !== "PENDING")
+      if (product.status !== "PENDING_APPROVAL")
         throw new Error("Product is not pending");
 
       const updated = await tx.product.update({
@@ -448,6 +530,9 @@ export const productService = {
 
       return { updated, product };
     });
+
+    syncProductSearchIndexInBackground(productId);
+
     const [owner, seller] = await Promise.all([
       db.sellerMember.findFirst({
         where: { sellerId: product.sellerId, role: { name: "owner" } },
@@ -477,7 +562,7 @@ export const productService = {
   async listPendingProducts() {
     const products = await withTenantScope((tx) =>
       tx.product.findMany({
-        where: { status: "PENDING" },
+        where: { status: "PENDING_APPROVAL" },
         select: {
           id: true,
           name: true,
@@ -514,7 +599,7 @@ export const productService = {
     const limit = filters.limit ?? 20;
 
     const STATUS_MAP: Record<string, string> = {
-      pending: "PENDING",
+      pending: "PENDING_APPROVAL",
       approved: "APPROVED",
       rejected: "REJECTED",
       draft: "DRAFT",
@@ -582,7 +667,7 @@ export const productService = {
         where: { id: productId, sellerId },
       });
       if (!product) throw new Error("Product not found");
-      if (product.status === "APPROVED")
+      if (product.status === "APPROVED" || product.status === "LIVE")
         throw new Error("Cannot delete approved product");
 
       await tx.product.delete({ where: { id: productId } });
@@ -605,11 +690,13 @@ export const productService = {
     data: {
       productIds: string[];
       action: "change_status" | "assign_shop" | "delete";
-      status?: "PENDING" | "APPROVED" | "REJECTED";
+      status?: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
       shopId?: string;
     },
   ) {
-    return withTenantScope(async (tx) => {
+    const searchSyncCandidates: string[] = [];
+
+    const result = await withTenantScope(async (tx) => {
       let success = 0,
         failed = 0;
 
@@ -628,6 +715,7 @@ export const productService = {
               where: { id: productId },
               data: { status: data.status },
             });
+            searchSyncCandidates.push(productId);
           } else if (data.action === "assign_shop" && data.shopId) {
             const shop = await tx.shop.findFirst({
               where: { id: data.shopId, sellerId },
@@ -640,8 +728,9 @@ export const productService = {
               where: { id: productId },
               data: { shopId: data.shopId },
             });
+            searchSyncCandidates.push(productId);
           } else if (data.action === "delete") {
-            if (product.status === "APPROVED") {
+            if (product.status === "APPROVED" || product.status === "LIVE") {
               failed++;
               continue;
             }
@@ -674,6 +763,12 @@ export const productService = {
 
       return { success, failed };
     });
+
+    for (const productId of searchSyncCandidates) {
+      syncProductSearchIndexInBackground(productId);
+    }
+
+    return result;
   },
   async exportProductsCsv(sellerId: string, shopId?: string) {
     return withTenantScope((tx) =>

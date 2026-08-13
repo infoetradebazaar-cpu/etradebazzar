@@ -13,6 +13,8 @@ export const sellerController = {
         businessName,
         businessType,
         address,
+        gstin,
+        pan,
       } = req.body;
       const result = await sellerService.register({
         name,
@@ -22,6 +24,8 @@ export const sellerController = {
         businessName,
         businessType,
         address,
+        gstin,
+        pan,
       });
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {
@@ -438,6 +442,50 @@ export const sellerController = {
     }
   },
 
+  async reverifyGstPan(req: Request, res: Response) {
+    try {
+      const { sellerId } = req.params;
+      const actorId = req.user!.id;
+      const result = await sellerService.reverifyGstPan(sellerId as string, actorId);
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "GST/PAN reverification failed");
+      const clientErrors = ["Seller not found", "No GSTIN or PAN on file to reverify"];
+      if (clientErrors.includes(error.message)) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async overrideGstPanVerification(req: Request, res: Response) {
+    try {
+      const { sellerId } = req.params;
+      const actorId = req.user!.id;
+      const result = await sellerService.overrideGstPanVerification(
+        sellerId as string,
+        actorId,
+        req.body,
+      );
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "GST/PAN verification override failed");
+      const clientErrors = [
+        "Seller not found",
+        "No GSTIN on file to override",
+        "No PAN on file to override",
+      ];
+      if (clientErrors.includes(error.message)) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async listPendingKyc(req: Request, res: Response) {
     try {
       const result = await sellerService.listPendingKyc();
@@ -553,7 +601,11 @@ export const sellerController = {
       );
       return res.json({ success: true, data: result });
     } catch (error: any) {
-      const clientErrors = ["Role not found", "Cannot modify default roles"];
+      const clientErrors = [
+        "Role not found",
+        "Cannot modify default roles",
+        "Role with this name already exists",
+      ];
       if (clientErrors.includes(error.message))
         return res.status(400).json({ success: false, error: error.message });
       return res

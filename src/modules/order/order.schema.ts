@@ -77,6 +77,15 @@ export const orderParamSchema = z.object({
     }),
 });
 
+export const adminAssignShopSchema = z.object({
+    params: z.object({
+        orderId: z.string(),
+    }),
+    body: z.object({
+        shopId: z.string(),
+    }),
+});
+
 export const bulkUploadSchema = z.object({
     params: z.object({
         orderId: z.string(),

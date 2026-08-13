@@ -1,7 +1,7 @@
 import { db } from "../../db/index";
 import { redis } from "../../db/redis";
 import { logger } from "../../utils/logger";
-import { getCommissionRate, isHighTicket } from "../../utils/commission";
+import { getCommissionRate, isHighTicket, isOverQuantityThreshold } from "../../utils/commission";
 import { notificationService } from "../notification/notification.service";
 import { checkLowStock } from "../../lib/inventory/inventory.alert";
 import { triggerAnalyticsRefresh } from "../../lib/analytics/analytics.events";
@@ -121,7 +121,7 @@ export const orderService = {
       where: {
         id: { in: data.items.map((i) => i.productId) },
         sellerId: data.sellerId,
-        status: "APPROVED",
+        status: "LIVE",
       },
       include: { category: { select: { name: true } } },
     });
@@ -162,11 +162,9 @@ export const orderService = {
     )!;
     const categoryName = primaryProduct.category.name;
 
-    const highTicket = await isHighTicket(
-      data.sellerId,
-      categoryName,
-      totalAmount,
-    );
+    const highTicket =
+      (await isHighTicket(data.sellerId, categoryName, totalAmount)) ||
+      isOverQuantityThreshold(data.items, products);
     const orderType = highTicket ? "HIGH_TICKET" : data.type;
     const commissionRate = await getCommissionRate(
       primaryProduct.id,
@@ -206,8 +204,8 @@ export const orderService = {
       initialStatus === "CONFIRMED"
         ? await slaConfigService.getSlaConfig()
         : null;
-    const packingDeadline = packingSla?.packing_sla_hour
-      ? new Date(Date.now() + packingSla.packing_sla_hour * 60 * 60 * 1000)
+    const packingDeadline = packingSla?.packing_sla_hours
+      ? new Date(Date.now() + packingSla.packing_sla_hours * 60 * 60 * 1000)
       : undefined;
 
     const order = await db.$transaction(async (tx) => {
@@ -401,7 +399,7 @@ export const orderService = {
       where: {
         id: { in: items.map((i) => i.productId) },
         sellerId,
-        status: "APPROVED",
+        status: "LIVE",
       },
       include: { category: { select: { name: true } } },
     });
@@ -599,10 +597,14 @@ export const orderService = {
 
       if (data.action === "ACCEPT") {
         const { packing_sla_hours } = await slaConfigService.getSlaConfig();
+        const recomputedCommissionAmount = order.commissionRate
+          ? (Number(negotiation.proposedPrice) * Number(order.commissionRate)) / 100
+          : undefined;
         await tx.order.update({
           where: { id: orderId },
           data: {
             finalAmount: negotiation.proposedPrice,
+            commissionAmount: recomputedCommissionAmount,
             status: "CONFIRMED",
             packingDeadline: packing_sla_hours
               ? new Date(Date.now() + packing_sla_hours * 60 * 60 * 1000)
@@ -781,13 +783,18 @@ export const orderService = {
     }));
   },
 
-  async deleteThreshold(sellerId: string, productCategory: string) {
+async deleteThreshold(sellerId: string, productCategory: string) {
     const where =
       productCategory === "default"
-        ? { sellerId_productCategory: { sellerId, productCategory: null } }
-        : { sellerId_productCategory: { sellerId, productCategory } };
-    return db.orderThreshold.delete({ where });
-  },
+        ? { sellerId, productCategory: null }
+        : { sellerId, productCategory };
+
+    const result = await db.orderThreshold.deleteMany({ where });
+    if (result.count === 0) {
+        throw new Error("Threshold not found");
+    }
+    return result;
+},
 
   async markPacked(orderId: string, sellerId: string, actorId: string) {
     const order = await db.order.findFirst({
@@ -919,6 +926,14 @@ export const orderService = {
       if (!isCustomer && !isOwningSeller) {
         throw new Error("Order not found");
       }
+      if (
+        isOwningSeller &&
+        !isCustomer &&
+        order.paymentMethod === "ONLINE" &&
+        order.paymentStatus !== "PAID"
+      ) {
+        throw new Error("Order not found");
+      }
     }
 
     return {
@@ -960,7 +975,10 @@ export const orderService = {
     const page = filters.page ?? 1;
     const limit = Math.min(filters.limit ?? 20, 100);
 
-    const where: any = { sellerId };
+    const where: any = {
+      sellerId,
+      NOT: { paymentMethod: "ONLINE", paymentStatus: { not: "PAID" } },
+    };
     if (filters.status) where.status = filters.status.toUpperCase();
     if (filters.type) where.type = filters.type.toUpperCase();
     if (filters.shopId) where.assignedShopId = filters.shopId;
@@ -1124,6 +1142,52 @@ export const orderService = {
       data: mapped,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 },
     };
+  },
+
+  async adminAssignShop(orderId: string, shopId: string, actorId: string) {
+    const order = await db.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new Error("Order not found");
+
+    const shop = await db.shop.findFirst({ where: { id: shopId, sellerId: order.sellerId } });
+    if (!shop) throw new Error("Shop not found");
+    if (shop.status !== "APPROVED") throw new Error("Shop not approved");
+
+    const { packing_sla_hours } = await slaConfigService.getSlaConfig();
+
+    return db.$transaction(async (tx) => {
+      const claimed = await tx.order.updateMany({
+        where: { id: orderId, status: "PENDING_ASSIGNMENT" },
+        data: {
+          assignedShopId: shopId,
+          status: "CONFIRMED",
+          ...(packing_sla_hours && {
+            packingDeadline: new Date(Date.now() + packing_sla_hours * 60 * 60 * 1000),
+          }),
+        },
+      });
+      if (claimed.count === 0) {
+        throw new Error("Order is not awaiting assignment");
+      }
+
+      await tx.orderAddress.updateMany({
+        where: { orderId, fulfillmentStatus: { not: "ASSIGNED" } },
+        data: { assignedShopId: shopId, assignedBy: actorId, fulfillmentStatus: "ASSIGNED" },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          sellerId: order.sellerId,
+          actorId,
+          actorType: "platform",
+          action: "ORDER_MANUALLY_ASSIGNED",
+          entityType: "order",
+          entityId: orderId,
+          metadata: { shopId },
+        },
+      });
+
+      return tx.order.findUnique({ where: { id: orderId } });
+    });
   },
 
   async cancelOrder(

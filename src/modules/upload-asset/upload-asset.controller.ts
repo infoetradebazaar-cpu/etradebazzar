@@ -9,10 +9,22 @@ export const uploadAssetController = {
             const file = req.file as Express.Multer.File;
             if (!file) return res.status(400).json({ success: false, error: "File required" });
             const category = req.body.category as string | "shop-assets";
-            const result = await uploadAssetService.uploadAsset(userId, file, category as any);
+            const productId = req.body.productId as string | undefined;
+            const result = await uploadAssetService.uploadAsset(userId, file, category as any, productId);
             return res.status(201).json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Upload asset failed");
+            const clientErrors = [
+                "Invalid category",
+                "File too large",
+                "Product not found",
+                "Customization is not enabled",
+                "This product has no accepted customization formats",
+                "File content does not match an allowed type",
+            ];
+            if (clientErrors.some((prefix) => error.message.startsWith(prefix))) {
+                return res.status(400).json({ success: false, error: error.message });
+            }
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },

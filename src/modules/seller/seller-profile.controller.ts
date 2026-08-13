@@ -15,7 +15,12 @@ export const sellerProfileController = {
 
     async updateProfile(req: Request, res: Response) {
         try {
-            const result = await sellerProfileService.updateProfile(req.seller!.id, req.body);
+            const result = await sellerProfileService.updateProfile(
+                req.seller!.id,
+                req.user!.id,
+                req.body,
+                { ipAddress: req.ip, userAgent: req.get("User-Agent") }
+            );
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Update profile failed");

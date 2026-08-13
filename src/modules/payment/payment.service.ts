@@ -313,7 +313,7 @@ export const paymentService = {
         return { received: true };
     },
 
-    async initiateRefund(orderId: string, actorId: string) {
+    async initiateRefund(orderId: string, actorId: string, reason: string = "Order cancelled") {
         const lockKey = `${orderId}:refund`;
         const locked = await acquirePaymentLock(lockKey);
         if (!locked) throw new Error("Refund already in progress, please wait");
@@ -321,7 +321,9 @@ export const paymentService = {
         try {
             const order = await db.order.findUnique({ where: { id: orderId }, include: { payments: true } });
             if (!order) throw new Error("Order not found");
-            if (order.status !== "CANCELLED") throw new Error("Order must be cancelled first");
+            if (order.status !== "CANCELLED" && order.status !== "RETURNED") {
+                throw new Error("Order must be cancelled or returned first");
+            }
 
             const paidPayments = order.payments.filter((p) => p.status === "PAID");
             if (!paidPayments.length) throw new Error("No payments to refund");
@@ -354,7 +356,7 @@ export const paymentService = {
                     const refund = await gateway.initiateRefund({
                         gatewayPaymentId: payment.razorpayPaymentId,
                         amount: Number(payment.amount),
-                        notes: { orderId, reason: "Order cancelled", actorId },
+                        notes: { orderId, reason, actorId },
                     });
 
                     await db.payment.update({

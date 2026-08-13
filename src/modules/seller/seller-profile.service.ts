@@ -1,4 +1,6 @@
 import { db } from "../../db/index";
+import { invalidateAuthContext } from "../../middleware/auth";
+import { getLocationFromIp } from "../../utils/geo";
 
 function fmt(n: any): number {
     return n ? parseFloat(Number(n).toFixed(2)) : 0.00;
@@ -19,9 +21,48 @@ export const sellerProfileService = {
 
     async updateProfile(
         sellerId: string,
-        data: Partial<{ name: string; alternatePhone: string; profileImage: string }>
+        actorId: string,
+        data: Partial<{ name: string; alternatePhone: string; profileImage: string }>,
+        requestMeta: { ipAddress?: string; userAgent?: string }
     ) {
-        return db.seller.update({ where: { id: sellerId }, data });
+        const location = getLocationFromIp(requestMeta.ipAddress);
+
+        const result = await db.$transaction(async (tx) => {
+            const seller = await tx.seller.update({ where: { id: sellerId }, data });
+
+            let ownerId: string | undefined;
+            if (data.name) {
+                const owner = await tx.sellerMember.findFirst({
+                    where: { sellerId, role: { name: "owner" }, isActive: true },
+                    select: { userId: true },
+                });
+                if (owner) {
+                    ownerId = owner.userId;
+                    await tx.user.update({ where: { id: ownerId }, data: { name: data.name } });
+                }
+
+                await tx.auditLog.create({
+                    data: {
+                        sellerId,
+                        actorId,
+                        actorType: "seller",
+                        action: "SELLER_PROFILE_NAME_UPDATED",
+                        entityType: "seller",
+                        entityId: sellerId,
+                        metadata: { newName: data.name, location } as any,
+                        ipAddress: requestMeta.ipAddress,
+                        userAgent: requestMeta.userAgent,
+                    },
+                });
+            }
+
+            return { seller, ownerId };
+        });
+
+        if (result.ownerId) {
+            await invalidateAuthContext(result.ownerId);
+        }
+        return result.seller;
     },
 
     async getBusiness(sellerId: string) {
@@ -52,7 +93,17 @@ export const sellerProfileService = {
             socialLinks: object;
         }>
     ) {
-        return db.seller.update({ where: { id: sellerId }, data: data as any });
+
+        return db.seller.update({
+            where: { id: sellerId },
+            data: data as any,
+            select: {
+                id: true, businessName: true, businessType: true, businessLogo: true,
+                businessDescription: true, industryCategory: true, yearOfEstablishment: true,
+                street: true, city: true, state: true, pincode: true,
+                pickupAddress: true, billingAddress: true, socialLinks: true,
+            },
+        });
     },
 
     async getVerificationBadges(sellerId: string) {
