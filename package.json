@@ -3,21 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "build": "bun build src/index.ts --outdir=dist --target=node",
+    "build": "prisma generate",
     "test": "bun test",
 
-    "db:generate": "prisma generate",
     "db:push": "prisma db push && bun src/db/migrate.ts",
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
+    "db:generate": "prisma generate",
     "db:seed": "bun src/db/seed.ts",
-
+    
     "db:script": "bun scripts/main-script.ts",
     "db:seed:full": "bun scripts/main-script.ts seed",
     "db:backfill:platform-rbac": "bun scripts/main-script.ts backfill-platform-rbac",
