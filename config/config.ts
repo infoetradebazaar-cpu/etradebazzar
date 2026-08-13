@@ -82,7 +82,7 @@ const envSchema = z.object({
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [key],
-          message: `${key} is required when STORAGE_PROVIDER="${providerLabel}"`,
+          message: `${key} is required when provider="${providerLabel}"`,
         });
       }
     }
