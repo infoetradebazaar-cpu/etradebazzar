@@ -19,7 +19,7 @@ import { maskAccountNumber } from "../../utils/mask";
 import { config } from "../../../config/config";
 import { EmailFactory } from "../../lib/notifications/email/email.factory";
 
-const DEFAULT_SELLER_ROLES = ["owner", "manager", "staff"];
+const DEFAULT_SELLER_ROLES = ["owner", "manager", "staff", "shop"];
 
 async function getSellerOwner(sellerId: string) {
   return db.sellerMember.findFirst({
@@ -1294,7 +1294,7 @@ export const sellerService = {
   },
 
   async listRoles(sellerId: string) {
-    return db.sellerRole.findMany({
+    const roles = await db.sellerRole.findMany({
       where: { sellerId },
       select: {
         id: true,
@@ -1305,6 +1305,17 @@ export const sellerService = {
       },
       orderBy: { createdAt: "asc" },
     });
+
+    const DEFAULT_ROLE_NAMES = new Set(["owner", "manager", "staff", "shop"]);
+
+    return roles.map((r) => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      createdAt: r.createdAt,
+      memberCount: r._count.members,
+      isDefault: DEFAULT_ROLE_NAMES.has(r.name),
+    }));
   },
 
   async createRole(

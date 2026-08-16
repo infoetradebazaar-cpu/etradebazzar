@@ -42,6 +42,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
         PERMISSIONS.SHIPMENTS_VIEW,
         PERMISSIONS.REVIEWS_VIEW,
     ],
+    shop: [
+        PERMISSIONS.ORDERS_FULFILL,
+        PERMISSIONS.SHIPMENTS_VIEW,
+        PERMISSIONS.SHIPMENTS_MANAGE,
+        PERMISSIONS.RETURNS_VIEW,
+    ],
 };
 
 export const DEFAULT_PLATFORM_ROLE_PERMISSIONS: Record<string, string[]> = {

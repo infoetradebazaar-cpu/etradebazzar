@@ -18,6 +18,8 @@ export const createShopSchema = z.object({
     pickupCity: z.string().min(2).optional(),
     pickupState: z.string().min(2).optional(),
     pickupPincode: z.string().regex(/^\d{6}$/, "Invalid pincode"),
+    latitude: z.coerce.number().min(-90).max(90).optional(),
+    longitude: z.coerce.number().min(-180).max(180).optional(),
   }),
 });
 
@@ -46,6 +48,8 @@ export const updateShopSchema = z.object({
       .string()
       .regex(/^\d{6}$/, "Invalid pincode")
       .optional(),
+    latitude: z.coerce.number().min(-90).max(90).optional(),
+    longitude: z.coerce.number().min(-180).max(180).optional(),
   }),
 });
 

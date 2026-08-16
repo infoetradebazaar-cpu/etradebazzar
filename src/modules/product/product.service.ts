@@ -269,11 +269,15 @@ export const productService = {
       ...product,
       seller,
       images,
-      status: product.status.toLowerCase(),
+      status: product.status,
       price: product.price ? Number(product.price) : null,
       compareAtPrice: product.compareAtPrice
         ? Number(product.compareAtPrice)
         : null,
+      skus: product.skus.map((s) => ({
+        ...s,
+        price: Number(s.price),
+      })),
     };
   },
 
@@ -310,11 +314,15 @@ export const productService = {
       ...product,
       seller,
       images,
-      status: product.status.toLowerCase(),
+      status: product.status,
       price: product.price ? Number(product.price) : null,
       compareAtPrice: product.compareAtPrice
         ? Number(product.compareAtPrice)
         : null,
+      skus: product.skus.map((s) => ({
+        ...s,
+        price: Number(s.price),
+      })),
     };
   },
 
@@ -372,7 +380,7 @@ export const productService = {
 
     const mapped = withSignedImages.map((p) => ({
       ...p,
-      status: p.status.toLowerCase(),
+      status: p.status,
       price: p.price ? Number(p.price) : null,
       compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : null,
     }));
@@ -570,20 +578,29 @@ export const productService = {
           category: true,
           status: true,
           createdAt: true,
+          sellerId: true,
           shop: {
             select: {
               id: true,
               name: true,
-              seller: { select: { id: true, name: true, businessName: true } },
             },
           },
         },
         orderBy: { createdAt: "asc" },
       }),
     );
+
+    const sellerIds = [...new Set(products.map((p) => p.sellerId))];
+    const sellers = await db.seller.findMany({
+      where: { id: { in: sellerIds } },
+      select: { id: true, name: true, businessName: true },
+    });
+    const sellerMap = new Map(sellers.map((s) => [s.id, s]));
+
     return products.map((p) => ({
       ...p,
-      status: p.status.toLowerCase(),
+      seller: sellerMap.get(p.sellerId) ?? null,
+      status: p.status,
       price: p.price ? Number(p.price) : null,
     }));
   },
@@ -611,7 +628,7 @@ export const productService = {
       where.status = STATUS_MAP[filters.status] ?? filters.status.toUpperCase();
     }
     if (filters.sellerId) {
-      where.shop = { sellerId: filters.sellerId };
+      where.sellerId = filters.sellerId;
     }
     if (filters.search) {
       where.OR = [
@@ -632,11 +649,11 @@ export const productService = {
           sku: true,
           status: true,
           createdAt: true,
+          sellerId: true,
           shop: {
             select: {
               id: true,
               name: true,
-              seller: { select: { id: true, name: true, businessName: true } },
             },
           },
         },
@@ -648,10 +665,17 @@ export const productService = {
       return { data, total };
     });
 
+    const sellerIds = [...new Set(data.map((p) => p.sellerId))];
+    const sellers = await db.seller.findMany({
+      where: { id: { in: sellerIds } },
+      select: { id: true, name: true, businessName: true },
+    });
+    const sellerMap = new Map(sellers.map((s) => [s.id, s]));
+
     const mapped = data.map((p) => ({
       ...p,
-      seller: p.shop?.seller ?? null,
-      status: p.status.toLowerCase(),
+      seller: sellerMap.get(p.sellerId) ?? null,
+      status: p.status,
       price: p.price ? Number(p.price) : null,
     }));
 

@@ -191,7 +191,7 @@ router.get(
   protect,
   sellerLimiter,
   resolveTenant,
-  requirePermission(PERMISSIONS.SELLER_ROLES_MANAGE),
+  requirePermission(PERMISSIONS.SELLER_MEMBERS_VIEW),
   sellerController.listRoles,
 );
 

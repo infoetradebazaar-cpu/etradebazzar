@@ -83,8 +83,9 @@ export const returnController = {
     async listReturnRequests(req: Request, res: Response) {
         try {
             const sellerId = req.seller!.id;
+            const userId = req.user!.id;
             const { status, search, reason, dateFrom, dateTo, page, limit } = req.query as Record<string, string>;
-            const result = await returnService.listReturnRequests(sellerId, {
+            const result = await returnService.listReturnRequests(sellerId, userId, {
                 status, search, reason, dateFrom, dateTo,
                 page: page ? Number(page) : undefined,
                 limit: limit ? Number(limit) : undefined,

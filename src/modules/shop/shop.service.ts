@@ -89,6 +89,8 @@ export const shopService = {
       pickupCity?: string;
       pickupState?: string;
       pickupPincode: string;
+      latitude?: number;
+      longitude?: number;
     },
   ) {
     const seller = await db.seller.findUnique({ where: { id: sellerId } });
@@ -164,6 +166,8 @@ export const shopService = {
       pickupCity: string;
       pickupState: string;
       pickupPincode: string;
+      latitude: number;
+      longitude: number;
     }>,
   ) {
     const updateData: any = { ...data };

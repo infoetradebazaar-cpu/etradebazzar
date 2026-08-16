@@ -398,6 +398,7 @@ model Product {
   categoryId                    String
   name                          String
   description                   String?
+  specification                 String?
   price                         Decimal?              @db.Decimal(10, 2)
   compareAtPrice                Decimal?              @db.Decimal(10, 2)
   sku                           String?               @unique
@@ -846,16 +847,19 @@ model ReturnShipment {
 model Payment {
   id                String        @id @default(cuid())
   orderId           String
-  razorpayOrderId   String        @unique
+  razorpayOrderId   String?       @unique
   razorpayPaymentId String?
   amount            Decimal       @db.Decimal(10, 2)
   currency          String        @default("INR")
   type              PaymentType
   status            PaymentStatus @default(UNPAID)
+  method            PaymentMethod @default(ONLINE)
   attempts          Int           @default(0)
   refundId          String?
   refundAmount      Decimal?      @db.Decimal(10, 2)
   metadata          Json?
+  recordedByActorId String?
+  note              String?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   order             Order         @relation(fields: [orderId], references: [id])
@@ -1511,6 +1515,7 @@ enum PaymentType {
 enum PaymentMethod {
   ONLINE
   COD
+  CASH
 }
 
 enum PayoutMethod {

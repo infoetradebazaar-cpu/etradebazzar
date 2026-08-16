@@ -22,7 +22,7 @@ export async function reconcileSearchIndex(): Promise<ReconciliationResult> {
   const [sourceGroups, indexedCounts, categories] = await Promise.all([
     db.product.groupBy({
       by: ["categoryId"],
-      where: { status: "LIVE" },
+      where: { status: { in: ["LIVE", "APPROVED"] } },
       _count: { _all: true },
     }),
     provider.countByCategory(),

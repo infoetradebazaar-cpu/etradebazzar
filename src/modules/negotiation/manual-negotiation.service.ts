@@ -50,7 +50,13 @@ export const manualNegotiationService = {
 
     const resolution = await resolveTierPrice(skuId, quantity);
     if (resolution.zone !== "beyond" && resolution.hiddenFloorPrice !== null) {
-      throw new Error("This quantity is eligible for auto-negotiation use the auto-negotiation flow instead");
+      // Check if there's a rejected auto-negotiation session for this customer+sku
+      const rejectedAuto = await db.negotiationSession.findFirst({
+        where: { customerId, skuId, mode: "AUTO", status: "REJECTED" },
+      });
+      if (!rejectedAuto) {
+        throw new Error("This quantity is eligible for auto-negotiation use the auto-negotiation flow instead");
+      }
     }
 
     const openSession = await db.negotiationSession.findFirst({
@@ -94,7 +100,14 @@ export const manualNegotiationService = {
       where: { sessionId },
       include: { messages: { orderBy: { createdAt: "asc" } } },
     });
-    return { session, chat };
+    // For seller view, include customer info
+    const customer = actorType === "seller"
+      ? await db.user.findUnique({
+          where: { id: session.customerId },
+          select: { id: true, name: true, email: true },
+        })
+      : null;
+    return { session, chat, customer };
   },
 
   async sendMessage(actorId: string, actorType: ActorType, sessionId: string, body: string) {

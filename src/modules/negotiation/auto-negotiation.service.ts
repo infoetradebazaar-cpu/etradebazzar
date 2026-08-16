@@ -5,15 +5,38 @@ import { NEGOTIATION_SESSION_OMIT } from "./negotiation.select";
 
 export const MAX_ROUNDS = 3;
 
-function interpolateOffer(visiblePrice: number, hiddenFloor: number, round: number): number {
+function interpolateOffer(
+  visiblePrice: number,
+  hiddenFloor: number,
+  round: number,
+  customerPrice?: number,
+): number {
   if (round >= MAX_ROUNDS) return hiddenFloor;
   const fraction = round / MAX_ROUNDS;
-  const raw = visiblePrice - (visiblePrice - hiddenFloor) * fraction;
-  return Math.round(raw * 100) / 100;
+  const interpolated = visiblePrice - (visiblePrice - hiddenFloor) * fraction;
+
+  // If customer provided a price, blend it with the interpolated price
+  // The system meets the customer partway — weighted more toward customer as rounds progress
+  if (customerPrice && customerPrice > 0) {
+    const clampedCustomer = Math.max(customerPrice, hiddenFloor);
+    const blendWeight = fraction; // 0.33 for round 1, 0.67 for round 2
+    const blended = interpolated * (1 - blendWeight) + clampedCustomer * blendWeight;
+    const result = Math.max(hiddenFloor, Math.min(blended, interpolated));
+    return Math.round(result * 100) / 100;
+  }
+
+  return Math.round(interpolated * 100) / 100;
 }
 
 export const autoNegotiationService = {
-  async startSession(customerId: string, sellerId: string, productId: string, skuId: string, quantity: number) {
+  async startSession(
+    customerId: string,
+    sellerId: string,
+    productId: string,
+    skuId: string,
+    quantity: number,
+    customerPrice?: number,
+  ) {
     const sku = await db.productSKU.findFirst({ where: { id: skuId, productId } });
     if (!sku) throw new Error("SKU not found");
 
@@ -49,7 +72,12 @@ export const autoNegotiationService = {
           omit: NEGOTIATION_SESSION_OMIT,
         });
 
-        const offeredPrice = interpolateOffer(resolution.visiblePrice, resolution.hiddenFloorPrice!, 1);
+        const offeredPrice = interpolateOffer(
+          resolution.visiblePrice,
+          resolution.hiddenFloorPrice!,
+          1,
+          customerPrice,
+        );
         await tx.negotiationRound.create({
           data: { sessionId: session.id, round: 1, offeredPrice },
         });
@@ -79,6 +107,7 @@ export const autoNegotiationService = {
     sessionId: string,
     action: "ACCEPT" | "REJECT",
     deliveryAddress?: DeliveryAddress,
+    customerPrice?: number,
   ) {
     const session = await db.negotiationSession.findFirst({ where: { id: sessionId, customerId } });
     if (!session) throw new Error("Negotiation session not found");
@@ -132,6 +161,7 @@ export const autoNegotiationService = {
         Number(session.visibleTierPrice),
         Number(session.hiddenFloorPrice),
         nextRound,
+        customerPrice,
       );
       await tx.negotiationRound.create({ data: { sessionId, round: nextRound, offeredPrice } });
       const newStatus = nextRound >= MAX_ROUNDS ? "EXHAUSTED" : "PENDING";

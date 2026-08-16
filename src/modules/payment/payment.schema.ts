@@ -20,3 +20,20 @@ export const shipmentPaymentParamSchema = z.object({
         shipmentId: z.string(),
     }),
 });
+
+export const recordManualPaymentSchema = z.object({
+    params: z.object({
+        orderId: z.string(),
+    }),
+    body: z.object({
+        type: z.enum(["ADVANCE", "FINAL"]),
+        amount: z.number().positive(),
+        note: z.string().max(500).optional(),
+    }),
+});
+
+export const setOnlinePaymentsEnabledSchema = z.object({
+    body: z.object({
+        enabled: z.boolean(),
+    }),
+});

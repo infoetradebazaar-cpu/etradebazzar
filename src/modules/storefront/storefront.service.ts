@@ -57,7 +57,7 @@ export const storefrontService = {
                 category: { select: { id: true, name: true } },
             },
         });
-        if (!product || product.status !== "LIVE") throw new Error("Product not found");
+        if (!product || (product.status !== "LIVE" && product.status !== "APPROVED")) throw new Error("Product not found");
         return product;
     },
 };

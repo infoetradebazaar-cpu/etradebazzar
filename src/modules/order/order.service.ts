@@ -8,6 +8,7 @@ import { triggerAnalyticsRefresh } from "../../lib/analytics/analytics.events";
 import { generateDisplayId } from "../../lib/uid/uid.generator";
 import { creditEngine } from "../../lib/credit-engine/credit-rules";
 import { recommendationService } from "../../lib/order-assignment/recommendation.service";
+import { shopAccessService } from "../shop/shop-access.service";
 import { reliabilityService } from "../../lib/order-assignment/reliability.service";
 import { OrderStatus } from "../../../prisma/generated/client";
 import { slaConfigService } from "../platform/sla-config.service";
@@ -926,14 +927,14 @@ async deleteThreshold(sellerId: string, productCategory: string) {
       if (!isCustomer && !isOwningSeller) {
         throw new Error("Order not found");
       }
-      if (
-        isOwningSeller &&
-        !isCustomer &&
-        order.paymentMethod === "ONLINE" &&
-        order.paymentStatus !== "PAID"
-      ) {
-        throw new Error("Order not found");
-      }
+      // if (
+      //   isOwningSeller &&
+      //   !isCustomer &&
+      //   order.paymentMethod === "ONLINE" &&
+      //   order.paymentStatus !== "PAID"
+      // ) {
+      //   throw new Error("Order not found");
+      // }
     }
 
     return {
@@ -961,6 +962,7 @@ async deleteThreshold(sellerId: string, productCategory: string) {
 
   async listOrders(
     sellerId: string,
+    userId: string,
     filters: {
       status?: string;
       search?: string;
@@ -975,13 +977,19 @@ async deleteThreshold(sellerId: string, productCategory: string) {
     const page = filters.page ?? 1;
     const limit = Math.min(filters.limit ?? 20, 100);
 
+    const accessibleShopIds = await shopAccessService.getAccessibleShopIds(sellerId, userId);
+
     const where: any = {
       sellerId,
-      NOT: { paymentMethod: "ONLINE", paymentStatus: { not: "PAID" } },
+      // NOT: { paymentMethod: "ONLINE", paymentStatus: { not: "PAID" } },
     };
     if (filters.status) where.status = filters.status.toUpperCase();
     if (filters.type) where.type = filters.type.toUpperCase();
-    if (filters.shopId) where.assignedShopId = filters.shopId;
+    if (filters.shopId) {
+      where.assignedShopId = filters.shopId;
+    } else if (accessibleShopIds !== null) {
+      where.assignedShopId = { in: accessibleShopIds };
+    }
     if (filters.dateFrom || filters.dateTo) {
       where.createdAt = {};
       if (filters.dateFrom) where.createdAt.gte = new Date(filters.dateFrom);

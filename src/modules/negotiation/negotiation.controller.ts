@@ -24,13 +24,14 @@ export const negotiationController = {
   async startAutoSession(req: Request, res: Response) {
     try {
       const customerId = req.user!.id;
-      const { sellerId, productId, skuId, quantity } = req.body;
+      const { sellerId, productId, skuId, quantity, customerPrice } = req.body;
       const result = await autoNegotiationService.startSession(
         customerId,
         sellerId,
         productId,
         skuId,
         quantity,
+        customerPrice,
       );
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {
@@ -61,12 +62,13 @@ export const negotiationController = {
     try {
       const customerId = req.user!.id;
       const { sessionId } = req.params;
-      const { action, deliveryAddress } = req.body;
+      const { action, deliveryAddress, customerPrice } = req.body;
       const result = await autoNegotiationService.respond(
         customerId,
         String(sessionId),
         action,
         deliveryAddress,
+        customerPrice,
       );
       return res.json({ success: true, data: result });
     } catch (error: any) {

@@ -6,6 +6,7 @@ import { logger } from "../../utils/logger";
 import { triggerAnalyticsRefresh } from "../../lib/analytics/analytics.events";
 import type { WebhookEvent } from "../../lib/shipment/shipment.interface";
 import { config } from "../../../config/config";
+import { shopAccessService } from "../shop/shop-access.service";
 
 // NOTE: exact status strings Shiprocket sends for reverse-pickup shipments
 const RETURN_STATUS_MAP: Record<string, "IN_TRANSIT" | "DELIVERED" | "FAILED"> = {
@@ -336,6 +337,7 @@ export const returnService = {
 
   async listReturnRequests(
     sellerId: string,
+    userId: string,
     filters: {
       status?: string;
       search?: string;
@@ -349,7 +351,12 @@ export const returnService = {
     const page = filters.page ?? 1;
     const limit = Math.min(filters.limit ?? 20, 100);
 
+    const accessibleShopIds = await shopAccessService.getAccessibleShopIds(sellerId, userId);
+
     const where: any = { order: { sellerId } };
+    if (accessibleShopIds !== null) {
+      where.order.assignedShopId = { in: accessibleShopIds };
+    }
     if (filters.status) where.status = filters.status;
     if (filters.reason)
       where.reason = { contains: filters.reason, mode: "insensitive" };

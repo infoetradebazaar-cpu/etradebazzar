@@ -85,7 +85,7 @@ export const cartService = {
       where: { id: data.productId },
     });
     if (!product) throw new Error("Product not found");
-    if (product.status !== "LIVE") throw new Error("Product not available");
+    if (product.status !== "LIVE" && product.status !== "APPROVED") throw new Error("Product not available");
 
     const cart = await getOrCreateCart(userId);
 

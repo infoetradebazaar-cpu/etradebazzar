@@ -15,6 +15,7 @@ export const paymentController = {
                 "Order not in payable state",
                 "Advance payment already initiated",
                 "Payment initiation already in progress, please wait",
+                "Online payments are currently disabled - use manual/cash payment recording instead",
             ];
             if (clientErrors.includes(error.message)) {
                 return res.status(409).json({ success: false, error: error.message });
@@ -34,6 +35,7 @@ export const paymentController = {
                 "Order not found",
                 "Advance payment not completed",
                 "Final payment already initiated",
+                "Online payments are currently disabled - use manual/cash payment recording instead",
             ];
             if (clientErrors.includes(error.message)) {
                 return res.status(400).json({ success: false, error: error.message });
@@ -105,6 +107,50 @@ export const paymentController = {
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Get payments failed");
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
+    async recordManualPayment(req: Request, res: Response) {
+        try {
+            const { orderId } = req.params;
+            const actorId = req.user!.id;
+            const result = await paymentService.recordManualPayment(orderId as string, actorId, req.body);
+            return res.status(201).json({ success: true, data: result });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Record manual payment failed");
+            const clientErrors = [
+                "Order not found",
+                "Order not in payable state",
+                "Advance payment already initiated",
+                "Advance payment not completed",
+                "Final payment already initiated",
+            ];
+            if (clientErrors.includes(error.message)) {
+                return res.status(409).json({ success: false, error: error.message });
+            }
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
+    async getOnlinePaymentsEnabled(req: Request, res: Response) {
+        try {
+            const enabled = await paymentService.getOnlinePaymentsEnabled();
+            return res.json({ success: true, data: { enabled } });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Get online payments flag failed");
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
+    async setOnlinePaymentsEnabled(req: Request, res: Response) {
+        try {
+            const actorId = req.user!.id;
+            const { enabled } = req.body;
+            const result = await paymentService.setOnlinePaymentsEnabled(Boolean(enabled), actorId);
+            return res.json({ success: true, data: result });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Set online payments flag failed");
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },

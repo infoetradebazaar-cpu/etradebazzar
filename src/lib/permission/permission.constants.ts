@@ -76,6 +76,8 @@ export const PLATFORM_PERMISSIONS = {
     PLATFORM_NOTIFICATIONS_VIEW: "platform.notifications.view",
     PLATFORM_NOTIFICATIONS_MANAGE: "platform.notifications.manage",
     PLATFORM_RETURNS_VIEW: "platform.returns.view",
+    PLATFORM_PAYMENTS_CONFIG: "platform.payments.config",
+    PLATFORM_PAYMENTS_RECORD_MANUAL: "platform.payments.record_manual",
 } as const;
 
 export type PlatformPermissionKey = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];

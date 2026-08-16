@@ -3,9 +3,19 @@ import { redis } from "../../db/redis";
 import { PaymentFactory } from "../../lib/payments/payment.factory";
 import { notificationService } from "../notification/notification.service";
 import { logger } from "../../utils/logger";
+import { getPlatformConfigBool } from "../../lib/platform-config/platform-config";
+import { encrypt } from "../../utils/encryption";
 
 const PAYMENT_LOCK_TTL = 15;
 const REFUND_CLAIM_TTL = 300;
+const ONLINE_PAYMENTS_CONFIG_KEY = "online_payments_enabled";
+
+async function assertOnlinePaymentsEnabled(): Promise<void> {
+    const enabled = await getPlatformConfigBool(ONLINE_PAYMENTS_CONFIG_KEY, true);
+    if (!enabled) {
+        throw new Error("Online payments are currently disabled - use manual/cash payment recording instead");
+    }
+}
 
 function getAdvancePercent(orderType: string): number {
     return orderType === "HIGH_TICKET" ? 50 : 20;
@@ -50,6 +60,8 @@ async function notifyPaymentReceived(orderId: string, amount: number) {
 }
 export const paymentService = {
     async createAdvancePayment(orderId: string) {
+        await assertOnlinePaymentsEnabled();
+
         const lockKey = `${orderId}:advance`;
         const locked = await acquirePaymentLock(lockKey);
         if (!locked) throw new Error("Payment initiation already in progress, please wait");
@@ -97,6 +109,8 @@ export const paymentService = {
     },
 
     async createFinalPayment(orderId: string) {
+        await assertOnlinePaymentsEnabled();
+
         const lockKey = `${orderId}:final`;
         const locked = await acquirePaymentLock(lockKey);
         if (!locked) throw new Error("Payment initiation already in progress, please wait");
@@ -405,6 +419,98 @@ export const paymentService = {
 
     async getPayments(orderId: string) {
         return db.payment.findMany({ where: { orderId }, orderBy: { createdAt: "asc" } });
+    },
+
+    async recordManualPayment(
+        orderId: string,
+        actorId: string,
+        data: { type: "ADVANCE" | "FINAL"; amount: number; note?: string },
+    ) {
+        const order = await db.order.findUnique({
+            where: { id: orderId },
+            include: { payments: true },
+        });
+        if (!order) throw new Error("Order not found");
+
+        if (data.type === "ADVANCE") {
+            if (!["CONFIRMED", "NEGOTIATING"].includes(order.status)) {
+                throw new Error("Order not in payable state");
+            }
+            const existingAdvance = order.payments.find((p) => p.type === "ADVANCE" && p.status !== "FAILED");
+            if (existingAdvance) throw new Error("Advance payment already initiated");
+        } else {
+            const advancePaid = order.payments.find((p) => p.type === "ADVANCE" && p.status === "PAID");
+            if (!advancePaid) throw new Error("Advance payment not completed");
+            const existingFinal = order.payments.find((p) => p.type === "FINAL" && p.status !== "FAILED");
+            if (existingFinal) throw new Error("Final payment already initiated");
+        }
+
+        const payment = await db.$transaction(async (tx) => {
+            const created = await tx.payment.create({
+                data: {
+                    orderId,
+                    amount: data.amount,
+                    type: data.type,
+                    status: "PAID",
+                    method: "CASH",
+                    recordedByActorId: actorId,
+                    note: data.note,
+                },
+            });
+
+            const totalPaid = order.payments
+                .filter((p) => p.status === "PAID")
+                .reduce((sum, p) => sum + Number(p.amount), 0) + data.amount;
+            const baseAmount = Number(order.finalAmount ?? order.totalAmount);
+            const isFullyPaid = Math.abs(totalPaid - baseAmount) < 0.01;
+
+            await tx.order.update({
+                where: { id: orderId },
+                data: { paymentStatus: isFullyPaid ? "PAID" : "PARTIALLY_PAID" },
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    sellerId: order.sellerId,
+                    actorId,
+                    actorType: "platform",
+                    action: "PAYMENT_RECORDED_MANUAL",
+                    entityType: "payment",
+                    entityId: created.id,
+                    metadata: { orderId, type: data.type, amount: data.amount, note: data.note ?? null },
+                },
+            });
+
+            return created;
+        });
+
+        await notifyPaymentReceived(orderId, data.amount);
+        return payment;
+    },
+
+    async getOnlinePaymentsEnabled(): Promise<boolean> {
+        return getPlatformConfigBool(ONLINE_PAYMENTS_CONFIG_KEY, true);
+    },
+
+    async setOnlinePaymentsEnabled(enabled: boolean, actorId: string): Promise<{ enabled: boolean }> {
+        await db.platformConfig.upsert({
+            where: { key: ONLINE_PAYMENTS_CONFIG_KEY },
+            update: { value: encrypt(String(enabled)) },
+            create: { key: ONLINE_PAYMENTS_CONFIG_KEY, value: encrypt(String(enabled)) },
+        });
+
+        await db.auditLog.create({
+            data: {
+                actorId,
+                actorType: "platform",
+                action: "PLATFORM_CONFIG_UPDATED",
+                entityType: "platform_config",
+                entityId: ONLINE_PAYMENTS_CONFIG_KEY,
+                metadata: { key: ONLINE_PAYMENTS_CONFIG_KEY, enabled },
+            },
+        });
+
+        return { enabled };
     },
 
     async getOrderAccessInfo(orderId: string) {

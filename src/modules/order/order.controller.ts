@@ -305,9 +305,10 @@ export const orderController = {
   async listOrders(req: Request, res: Response) {
     try {
       const sellerId = req.seller!.id;
+      const userId = req.user!.id;
       const { status, search, type, shopId, dateFrom, dateTo, page, limit } =
         req.query as Record<string, string>;
-      const result = await orderService.listOrders(sellerId, {
+      const result = await orderService.listOrders(sellerId, userId, {
         status,
         search,
         type,

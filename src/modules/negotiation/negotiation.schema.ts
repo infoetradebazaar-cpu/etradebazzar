@@ -7,8 +7,8 @@ const deliveryAddressSchema = z.object({
   city: z.string().min(1),
   state: z.string().min(1),
   pincode: z.string().min(1),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
+  latitude: z.coerce.number().optional(),
+  longitude: z.coerce.number().optional(),
 });
 
 export const startAutoNegotiationSchema = z.object({
@@ -17,6 +17,7 @@ export const startAutoNegotiationSchema = z.object({
     productId: z.string(),
     skuId: z.string(),
     quantity: z.number().int().positive(),
+    customerPrice: z.number().positive().optional(),
   }),
 });
 
@@ -29,6 +30,7 @@ export const respondAutoNegotiationSchema = z.object({
   body: z.object({
     action: z.enum(["ACCEPT", "REJECT"]),
     deliveryAddress: deliveryAddressSchema.optional(),
+    customerPrice: z.number().positive().optional(),
   }),
 });
 
