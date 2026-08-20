@@ -13,6 +13,7 @@ import { AccountLockedEmail } from "./templates/account-locked";
 import { NegotiationNudgeEmail } from "./templates/negotiation-nudge";
 import { ManualNegotiationStartedEmail } from "./templates/manual-negotiation-started";
 import { RbacDisagreementAlertEmail } from "./templates/rbac-disagreement-alert";
+import { NegotiationV2CircuitBreakerEmail } from "./templates/negotiation-v2-circuit-breaker";
 import { LowStockEmail } from "./templates/low-stock";
 import { PayoutInitiatedEmail } from "./templates/payout-initiated";
 import { PayoutPaidEmail } from "./templates/payout-paid";
@@ -23,6 +24,9 @@ import { TeamInviteEmail } from "./templates/team-invite";
 import { ReturnRequestedEmail } from "./templates/return-requested";
 import { ReturnApprovedEmail } from "./templates/return-approved";
 import { ReturnRejectedEmail } from "./templates/return-rejected";
+import { PasswordResetEmail } from "./templates/password-reset";
+import { PasswordChangedEmail } from "./templates/password-changed";
+import { TwoFactorCodeEmail } from "./templates/two-factor-code";
 import { render } from "@react-email/render";
 
 
@@ -39,6 +43,7 @@ const Subject: Record<string, string> = {
     "negotiation-nudge": "Still interested? Talk directly with the seller",
     "manual-negotiation-started": "New negotiation request from a buyer",
     "rbac-disagreement-alert": "🚨 Platform RBAC dual-run check disagreement",
+    "negotiation-v2-circuit-breaker": "🚨 Negotiation pricing-engine-v2 circuit breaker tripped",
     "low-stock": "Low stock alert ⚠️",
     "payout-initiated": "Payout initiated",
     "payout-paid": "Payout successful ✓",
@@ -49,6 +54,9 @@ const Subject: Record<string, string> = {
     "return-requested": "Return request received",
     "return-approved": "Your return has been approved",
     "return-rejected": "Update on your return request",
+    "password-reset": "Reset your password",
+    "password-changed": "Your password was changed",
+    "two-factor-code": "Your verification code",
 }
 
 
@@ -85,6 +93,8 @@ export class ResendProvider implements EmailProvider {
                 return render(ManualNegotiationStartedEmail(data as any));
             case "rbac-disagreement-alert":
                 return render(RbacDisagreementAlertEmail(data as any));
+            case "negotiation-v2-circuit-breaker":
+                return render(NegotiationV2CircuitBreakerEmail(data as any));
             case "low-stock":
                 return render(LowStockEmail(data as any));
             case "payout-initiated":
@@ -105,6 +115,12 @@ export class ResendProvider implements EmailProvider {
                 return render(ReturnApprovedEmail(data as any));
             case "return-rejected":
                 return render(ReturnRejectedEmail(data as any));
+            case "password-reset":
+                return render(PasswordResetEmail(data as any));
+            case "password-changed":
+                return render(PasswordChangedEmail(data as any));
+            case "two-factor-code":
+                return render(TwoFactorCodeEmail(data as any));
             default:
                 throw new Error(`Unknown email template: ${template}`);
         }

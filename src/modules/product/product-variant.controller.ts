@@ -9,7 +9,6 @@ const clientErrors = [
   "Variant option not found",
   'Variant option "',
   "Variant value not found",
-  "Cannot modify approved product variants",
   "Delete all SKUs before removing variant options",
   "Variant value is used by existing SKUs  delete SKUs first",
   "SKU is referenced by existing orders  cannot delete",

@@ -1,9 +1,10 @@
 import { db } from "../../db/index";
 import { redis } from "../../db/redis";
 import { logger } from "../../utils/logger";
-import { getCommissionRate, isHighTicket, isOverQuantityThreshold } from "../../utils/commission";
+import { getCommissionRate } from "../../utils/commission";
 import { notificationService } from "../notification/notification.service";
 import { checkLowStock } from "../../lib/inventory/inventory.alert";
+import { InsufficientStockError } from "../../lib/inventory/stock.errors";
 import { triggerAnalyticsRefresh } from "../../lib/analytics/analytics.events";
 import { generateDisplayId } from "../../lib/uid/uid.generator";
 import { creditEngine } from "../../lib/credit-engine/credit-rules";
@@ -14,6 +15,8 @@ import { OrderStatus } from "../../../prisma/generated/client";
 import { slaConfigService } from "../platform/sla-config.service";
 import { shipmentService } from "../shipment/shipment.service";
 import { paymentService } from "../payment/payment.service";
+import { canAccessOrgResource } from "../../lib/permission/customer-org-permission.service";
+import { CUSTOMER_ORG_PERMISSIONS } from "../../lib/permission/customer-org-permission.constants";
 
 const ORDER_LOCK_TTL = 15;
 const IDEMPOTENCY_TTL_SECONDS = 60 * 60 * 24; // 24h durable window
@@ -33,11 +36,16 @@ async function releaseOrderLock(key: string): Promise<void> {
   await redis.del(`order:lock:${key}`);
 }
 
+function idempotencyScope(customerId: string, orgId?: string | null): string {
+  return orgId ? `org:${orgId}` : customerId;
+}
+
 function idempotencyRedisKey(
   customerId: string,
   idempotencyKey: string,
+  orgId?: string | null,
 ): string {
-  return `order:idem:${customerId}:${idempotencyKey}`;
+  return `order:idem:${idempotencyScope(customerId, orgId)}:${idempotencyKey}`;
 }
 
 async function getCustomerContact(customerId: string) {
@@ -54,7 +62,7 @@ export const orderService = {
     data: {
       sellerId: string;
       type: "STANDARD" | "SAMPLE";
-      items: { productId: string; quantity: number }[];
+      items: { productId: string; quantity: number; skuId?: string }[];
       deliveryAddress: {
         receiverName: string;
         phone: string;
@@ -68,16 +76,17 @@ export const orderService = {
       discountAmount?: number;
       couponCode?: string;
       paymentMethod?: "ONLINE" | "COD";
+      orgId?: string;
     },
   ) {
-    const idemKey = idempotencyRedisKey(customerId, idempotencyKey);
+    const idemKey = idempotencyRedisKey(customerId, idempotencyKey, data.orgId);
 
     const existingOrderId = await redis.get(idemKey);
     if (existingOrderId) {
       return this.getOrder(existingOrderId, customerId);
     }
 
-    const lockKey = `create:${customerId}:${idempotencyKey}`;
+    const lockKey = `create:${idempotencyScope(customerId, data.orgId)}:${idempotencyKey}`;
     const locked = await acquireOrderLock(lockKey);
     if (!locked) {
       throw new Error("Duplicate order submission detected, please wait");
@@ -102,7 +111,7 @@ export const orderService = {
     data: {
       sellerId: string;
       type: "STANDARD" | "SAMPLE";
-      items: { productId: string; quantity: number }[];
+      items: { productId: string; quantity: number; skuId?: string }[];
       deliveryAddress: {
         receiverName: string;
         phone: string;
@@ -116,6 +125,7 @@ export const orderService = {
       discountAmount?: number;
       couponCode?: string;
       paymentMethod?: "ONLINE" | "COD";
+      orgId?: string;
     },
   ) {
     const products = await db.product.findMany({
@@ -138,12 +148,26 @@ export const orderService = {
       throw new Error("Sample orders limited to 2 items");
     }
 
+    const requestedSkuIds = data.items
+      .map((i) => i.skuId)
+      .filter((id): id is string => !!id);
+    const skus = requestedSkuIds.length
+      ? await db.productSKU.findMany({ where: { id: { in: requestedSkuIds } } })
+      : [];
+    const skuById = new Map(skus.map((s) => [s.id, s]));
+    for (const item of data.items) {
+      if (item.skuId && skuById.get(item.skuId)?.productId !== item.productId) {
+        throw new Error("Invalid SKU for product");
+      }
+    }
+
     let totalAmount = 0;
     const itemsData = data.items.map((item) => {
       const product = products.find((p) => p.id === item.productId)!;
-      const unitPrice = Number(product.price);
+      const sku = item.skuId ? skuById.get(item.skuId) : undefined;
+      const unitPrice = sku ? Number(sku.price) : Number(product.price);
       totalAmount += unitPrice * item.quantity;
-      return { productId: item.productId, quantity: item.quantity, unitPrice };
+      return { productId: item.productId, skuId: item.skuId, quantity: item.quantity, unitPrice };
     });
 
     const discountAmount =
@@ -163,10 +187,7 @@ export const orderService = {
     )!;
     const categoryName = primaryProduct.category.name;
 
-    const highTicket =
-      (await isHighTicket(data.sellerId, categoryName, totalAmount)) ||
-      isOverQuantityThreshold(data.items, products);
-    const orderType = highTicket ? "HIGH_TICKET" : data.type;
+    const orderType = data.type;
     const commissionRate = await getCommissionRate(
       primaryProduct.id,
       categoryName,
@@ -176,29 +197,28 @@ export const orderService = {
 
     const displayId = await generateDisplayId("order");
 
-    let initialStatus: "NEGOTIATING" | "PENDING_ASSIGNMENT" | "CONFIRMED" =
-      highTicket ? "NEGOTIATING" : "PENDING_ASSIGNMENT";
+    let initialStatus: "PENDING_ASSIGNMENT" | "CONFIRMED" =
+      "PENDING_ASSIGNMENT";
     let autoAssignedShopId: string | null = null;
 
-    if (!highTicket) {
-      const trusted = await recommendationService.hasTrustedShops(
+    const trusted = await recommendationService.hasTrustedShops(
+      data.sellerId,
+    );
+    if (trusted) {
+      const recs = await recommendationService.computeRecommendations(
         data.sellerId,
+        data.items.map((i) => ({
+          productId: i.productId,
+          skuId: i.skuId,
+          quantity: i.quantity,
+        })),
+        data.deliveryAddress.latitude,
+        data.deliveryAddress.longitude,
       );
-      if (trusted) {
-        const recs = await recommendationService.computeRecommendations(
-          data.sellerId,
-          data.items.map((i) => ({
-            productId: i.productId,
-            quantity: i.quantity,
-          })),
-          data.deliveryAddress.latitude,
-          data.deliveryAddress.longitude,
-        );
-        const topPick = recs[0];
-        if (topPick?.autoAssignEnabled && topPick.stockScore >= 80) {
-          initialStatus = "CONFIRMED";
-          autoAssignedShopId = topPick.shopId;
-        }
+      const topPick = recs[0];
+      if (topPick?.autoAssignEnabled && topPick.stockScore >= 80) {
+        initialStatus = "CONFIRMED";
+        autoAssignedShopId = topPick.shopId;
       }
     }
     const packingSla =
@@ -216,6 +236,7 @@ export const orderService = {
         data: {
           sellerId: data.sellerId,
           customerId,
+          orgId: data.orgId ?? null,
           type: orderType,
           displayId,
           status: initialStatus,
@@ -241,21 +262,29 @@ export const orderService = {
 
       for (const item of itemsData) {
         const product = products.find((p) => p.id === item.productId)!;
-        const prevStock = product.stock ?? 0;
-        const updated = await tx.product.updateMany({
-          where: { id: item.productId, stock: { gte: item.quantity } },
-          data: { stock: { decrement: item.quantity } },
-        });
-        if (updated.count === 0) {
-          throw new Error(
-            `Insufficient stock for product: ${products.find((p) => p.id === item.productId)!.name}`,
-          );
+        if (item.skuId) {
+          const updated = await tx.productSKU.updateMany({
+            where: { id: item.skuId, stock: { gte: item.quantity } },
+            data: { stock: { decrement: item.quantity } },
+          });
+          if (updated.count === 0) {
+            throw new InsufficientStockError(`Insufficient stock for product: ${product.name}`);
+          }
+        } else {
+          const prevStock = product.stock ?? 0;
+          const updated = await tx.product.updateMany({
+            where: { id: item.productId, stock: { gte: item.quantity } },
+            data: { stock: { decrement: item.quantity } },
+          });
+          if (updated.count === 0) {
+            throw new InsufficientStockError(`Insufficient stock for product: ${product.name}`);
+          }
+          checkLowStock(
+            item.productId,
+            prevStock,
+            prevStock - item.quantity,
+          ).catch(() => null);
         }
-        checkLowStock(
-          item.productId,
-          prevStock,
-          prevStock - item.quantity,
-        ).catch(() => null);
       }
 
       await tx.auditLog.create({
@@ -326,7 +355,7 @@ export const orderService = {
     customerId: string,
     idempotencyKey: string,
     sellerId: string,
-    items: { productId: string; quantity: number }[],
+    items: { productId: string; quantity: number; skuId?: string }[],
     file: Express.Multer.File,
   ) {
     const idemKey = idempotencyRedisKey(customerId, idempotencyKey);
@@ -364,7 +393,7 @@ export const orderService = {
   async _createBulkOrderInner(
     customerId: string,
     sellerId: string,
-    items: { productId: string; quantity: number }[],
+    items: { productId: string; quantity: number; skuId?: string }[],
     file: Express.Multer.File,
   ) {
     const MAX_BULK_ROWS = 500;
@@ -407,12 +436,25 @@ export const orderService = {
     if (products.length !== items.length)
       throw new Error("One or more products invalid");
 
+    // Same SKU-aware pricing as _createOrderInner see comment there.
+    const requestedSkuIds = items.map((i) => i.skuId).filter((id): id is string => !!id);
+    const skus = requestedSkuIds.length
+      ? await db.productSKU.findMany({ where: { id: { in: requestedSkuIds } } })
+      : [];
+    const skuById = new Map(skus.map((s) => [s.id, s]));
+    for (const item of items) {
+      if (item.skuId && skuById.get(item.skuId)?.productId !== item.productId) {
+        throw new Error("Invalid SKU for product");
+      }
+    }
+
     let totalAmount = 0;
     const itemsData = items.map((item) => {
       const product = products.find((p) => p.id === item.productId)!;
-      const unitPrice = Number(product.price);
+      const sku = item.skuId ? skuById.get(item.skuId) : undefined;
+      const unitPrice = sku ? Number(sku.price) : Number(product.price);
       totalAmount += unitPrice * item.quantity;
-      return { productId: item.productId, quantity: item.quantity, unitPrice };
+      return { productId: item.productId, skuId: item.skuId, quantity: item.quantity, unitPrice };
     });
 
     const primaryItem = itemsData.reduce((max, cur) =>
@@ -462,15 +504,23 @@ export const orderService = {
 
       for (const item of itemsData) {
         const product = products.find((p) => p.id === item.productId)!;
+        if (item.skuId) {
+          const updated = await tx.productSKU.updateMany({
+            where: { id: item.skuId, stock: { gte: item.quantity } },
+            data: { stock: { decrement: item.quantity } },
+          });
+          if (updated.count === 0) {
+            throw new InsufficientStockError(`Insufficient stock for product: ${product.name}`);
+          }
+          continue;
+        }
         const prevStock = product.stock ?? 0;
         const updated = await tx.product.updateMany({
           where: { id: item.productId, stock: { gte: item.quantity } },
           data: { stock: { decrement: item.quantity } },
         });
         if (updated.count === 0) {
-          throw new Error(
-            `Insufficient stock for product: ${products.find((p) => p.id === item.productId)!.name}`,
-          );
+          throw new InsufficientStockError(`Insufficient stock for product: ${product.name}`);
         }
         checkLowStock(
           item.productId,
@@ -505,170 +555,6 @@ export const orderService = {
       return order;
     });
   },
-  async submitProposal(
-    orderId: string,
-    actorId: string,
-    actorType: string,
-    sellerId: string | undefined,
-    data: { proposedPrice: number; note?: string; meetLink?: string },
-  ) {
-    const order = await db.order.findUnique({ where: { id: orderId } });
-    if (!order) throw new Error("Order not found");
-
-    const isCustomer = actorType === "customer" && order.customerId === actorId;
-    const isOwningSeller =
-      actorType === "seller" && sellerId && order.sellerId === sellerId;
-    if (!isCustomer && !isOwningSeller) {
-      throw new Error("Order not found");
-    }
-
-    if (order.status !== "NEGOTIATING")
-      throw new Error("Order is not in negotiation");
-
-    return db.$transaction(async (tx) => {
-      const negotiation = await tx.orderNegotiation.create({
-        data: {
-          orderId,
-          proposedBy: actorId,
-          proposedByType: actorType,
-          proposedPrice: data.proposedPrice,
-          note: data.note,
-          meetLink: data.meetLink,
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          sellerId: order.sellerId,
-          actorId,
-          actorType,
-          action: "PROPOSAL_SUBMITTED",
-          entityType: "order_negotiation",
-          entityId: negotiation.id,
-          metadata: { proposedPrice: data.proposedPrice },
-        },
-      });
-
-      return negotiation;
-    });
-  },
-
-  async respondToProposal(
-    orderId: string,
-    negotiationId: string,
-    actorId: string,
-    actorType: string,
-    sellerId: string | undefined,
-    data: {
-      action: "ACCEPT" | "REJECT" | "COUNTER";
-      counterPrice?: number;
-      note?: string;
-    },
-  ) {
-    const order = await db.order.findUnique({ where: { id: orderId } });
-    if (!order) throw new Error("Order not found");
-
-    const isCustomer = actorType === "customer" && order.customerId === actorId;
-    const isOwningSeller =
-      actorType === "seller" && sellerId && order.sellerId === sellerId;
-    if (!isCustomer && !isOwningSeller) {
-      throw new Error("Order not found");
-    }
-
-    const newStatus =
-      data.action === "ACCEPT"
-        ? "ACCEPTED"
-        : data.action === "REJECT"
-          ? "REJECTED"
-          : "COUNTERED";
-
-    const result = await db.$transaction(async (tx) => {
-      const updateResult = await tx.orderNegotiation.updateMany({
-        where: { id: negotiationId, orderId, status: "PENDING" },
-        data: { status: newStatus },
-      });
-
-      if (updateResult.count === 0) {
-        throw new Error("Proposal already responded to");
-      }
-
-      const negotiation = await tx.orderNegotiation.findUniqueOrThrow({
-        where: { id: negotiationId },
-      });
-
-      if (data.action === "ACCEPT") {
-        const { packing_sla_hours } = await slaConfigService.getSlaConfig();
-        const recomputedCommissionAmount = order.commissionRate
-          ? (Number(negotiation.proposedPrice) * Number(order.commissionRate)) / 100
-          : undefined;
-        await tx.order.update({
-          where: { id: orderId },
-          data: {
-            finalAmount: negotiation.proposedPrice,
-            commissionAmount: recomputedCommissionAmount,
-            status: "CONFIRMED",
-            packingDeadline: packing_sla_hours
-              ? new Date(Date.now() + packing_sla_hours * 60 * 60 * 1000)
-              : undefined,
-          },
-        });
-      }
-
-      if (data.action === "COUNTER" && data.counterPrice) {
-        await tx.orderNegotiation.create({
-          data: {
-            orderId,
-            proposedBy: actorId,
-            proposedByType: actorType,
-            proposedPrice: data.counterPrice,
-            note: data.note,
-          },
-        });
-      }
-
-      await tx.auditLog.create({
-        data: {
-          sellerId: order.sellerId,
-          actorId,
-          actorType,
-          action: `PROPOSAL_${data.action}ED`,
-          entityType: "order_negotiation",
-          entityId: negotiationId,
-          metadata: { action: data.action, counterPrice: data.counterPrice },
-        },
-      });
-
-      return {
-        order: await tx.order.findUnique({
-          where: { id: orderId },
-          include: { negotiations: true },
-        }),
-        negotiation,
-      };
-    });
-
-    // Notify customer on accept
-    if (data.action === "ACCEPT") {
-      const customer = await getCustomerContact(order.customerId);
-      if (customer) {
-        notificationService
-          .orderConfirmed({
-            userId: order.customerId,
-            email: customer.email,
-            customerName: customer.name ?? "Customer",
-            orderId,
-            finalAmount: Number(result.negotiation.proposedPrice),
-          })
-          .catch(() => null);
-      }
-      triggerAnalyticsRefresh("ORDER_CREATED", order.sellerId).catch(
-        () => null,
-      );
-    }
-
-    return result.order;
-  },
-
   async assignShopToAddress(
     orderId: string,
     addressId: string,
@@ -749,54 +635,6 @@ export const orderService = {
     });
   },
 
-  async setThreshold(
-    sellerId: string,
-    data: { productCategory?: string; amount: number },
-  ) {
-    return db.orderThreshold.upsert({
-      where: {
-        sellerId_productCategory: {
-          sellerId,
-          productCategory: (data.productCategory as string) ?? null,
-        },
-      },
-      update: { amount: data.amount },
-      create: {
-        sellerId,
-        productCategory: data.productCategory,
-        amount: data.amount,
-      },
-    });
-  },
-
-  async getThresholds(sellerId: string) {
-    const rows = await db.orderThreshold.findMany({
-      where: { sellerId },
-      orderBy: { productCategory: "asc" },
-    });
-    return rows.map((r) => ({
-      id: r.id,
-      sellerId: r.sellerId,
-      productCategory: r.productCategory,
-      amount: Number(r.amount),
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-    }));
-  },
-
-async deleteThreshold(sellerId: string, productCategory: string) {
-    const where =
-      productCategory === "default"
-        ? { sellerId, productCategory: null }
-        : { sellerId, productCategory };
-
-    const result = await db.orderThreshold.deleteMany({ where });
-    if (result.count === 0) {
-        throw new Error("Threshold not found");
-    }
-    return result;
-},
-
   async markPacked(orderId: string, sellerId: string, actorId: string) {
     const order = await db.order.findFirst({
       where: { id: orderId, sellerId },
@@ -871,22 +709,6 @@ async deleteThreshold(sellerId: string, productCategory: string) {
 
     return this.getOrder(orderId, undefined, sellerId);
   },
-  async setCommission(
-    actorId: string,
-    data: { productId?: string; category?: string; rate: number },
-  ) {
-    if (!data.productId && !data.category)
-      throw new Error("Provide productId or category");
-    return db.productCommission.create({
-      data: {
-        productId: data.productId,
-        category: data.category,
-        rate: data.rate,
-        setBy: actorId,
-      },
-    });
-  },
-
   async getOrder(
     orderId: string,
     requesterId?: string,
@@ -910,7 +732,6 @@ async deleteThreshold(sellerId: string, productCategory: string) {
             sku: true,
           },
         },
-        negotiations: { orderBy: { createdAt: "desc" } },
         addresses: true,
         assignedShop: { select: { id: true, name: true, slug: true } },
         customer: { select: { id: true, name: true } },
@@ -921,7 +742,13 @@ async deleteThreshold(sellerId: string, productCategory: string) {
     if (!order) throw new Error("Order not found");
 
     if (requesterId !== undefined && requesterRole !== "super_admin") {
-      const isCustomer = order.customerId === requesterId;
+      const isCustomer =
+        order.customerId === requesterId ||
+        (await canAccessOrgResource(
+          requesterId,
+          order.orgId,
+          CUSTOMER_ORG_PERMISSIONS.VIEW_ORDER_HISTORY,
+        ));
       const isOwningSeller =
         requesterSellerId && order.sellerId === requesterSellerId;
       if (!isCustomer && !isOwningSeller) {
@@ -1013,7 +840,6 @@ async deleteThreshold(sellerId: string, productCategory: string) {
           customer: { select: { id: true, name: true } },
           addresses: true,
           assignedShop: { select: { id: true, name: true } },
-          negotiations: { orderBy: { createdAt: "desc" } },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
@@ -1022,38 +848,22 @@ async deleteThreshold(sellerId: string, productCategory: string) {
       db.order.count({ where }),
     ]);
 
-    const mapped = data.map((o) => {
-      const latestNeg = o.negotiations?.[0];
-      return {
-        ...o,
-        shopId: o.assignedShopId,
-        status: o.status.toLowerCase(),
-        paymentStatus: (o.paymentStatus as string).toLowerCase(),
-        totalAmount: o.totalAmount ? Number(o.totalAmount) : null,
-        finalAmount: o.finalAmount ? Number(o.finalAmount) : null,
-        commissionAmount: o.commissionAmount
-          ? Number(o.commissionAmount)
-          : null,
-        addresses: o.addresses.map((addr) => ({
-          ...addr,
-          shopId: addr.assignedShopId,
-          assignmentStatus: addr.fulfillmentStatus.toLowerCase(),
-        })),
-        negotiation: latestNeg
-          ? {
-              id: latestNeg.id,
-              orderId: latestNeg.orderId,
-              proposedBy:
-                latestNeg.proposedByType === "customer" ? "customer" : "seller",
-              proposedAmount: Number(latestNeg.proposedPrice),
-              message: latestNeg.note ?? undefined,
-              status: latestNeg.status.toLowerCase(),
-              createdAt: latestNeg.createdAt,
-              expiresAt: undefined,
-            }
-          : undefined,
-      };
-    });
+    const mapped = data.map((o) => ({
+      ...o,
+      shopId: o.assignedShopId,
+      status: o.status.toLowerCase(),
+      paymentStatus: (o.paymentStatus as string).toLowerCase(),
+      totalAmount: o.totalAmount ? Number(o.totalAmount) : null,
+      finalAmount: o.finalAmount ? Number(o.finalAmount) : null,
+      commissionAmount: o.commissionAmount
+        ? Number(o.commissionAmount)
+        : null,
+      addresses: o.addresses.map((addr) => ({
+        ...addr,
+        shopId: addr.assignedShopId,
+        assignmentStatus: addr.fulfillmentStatus.toLowerCase(),
+      })),
+    }));
 
     return {
       data: mapped,
@@ -1104,7 +914,6 @@ async deleteThreshold(sellerId: string, productCategory: string) {
           seller: { select: { id: true, businessName: true } },
           addresses: true,
           assignedShop: { select: { id: true, name: true } },
-          negotiations: { orderBy: { createdAt: "desc" } },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
@@ -1113,38 +922,22 @@ async deleteThreshold(sellerId: string, productCategory: string) {
       db.order.count({ where }),
     ]);
 
-    const mapped = data.map((o) => {
-      const latestNeg = o.negotiations?.[0];
-      return {
-        ...o,
-        shopId: o.assignedShopId,
-        status: o.status.toLowerCase(),
-        paymentStatus: (o.paymentStatus as string).toLowerCase(),
-        totalAmount: o.totalAmount ? Number(o.totalAmount) : null,
-        finalAmount: o.finalAmount ? Number(o.finalAmount) : null,
-        commissionAmount: o.commissionAmount
-          ? Number(o.commissionAmount)
-          : null,
-        addresses: o.addresses.map((addr) => ({
-          ...addr,
-          shopId: addr.assignedShopId,
-          assignmentStatus: addr.fulfillmentStatus.toLowerCase(),
-        })),
-        negotiation: latestNeg
-          ? {
-              id: latestNeg.id,
-              orderId: latestNeg.orderId,
-              proposedBy:
-                latestNeg.proposedByType === "customer" ? "customer" : "seller",
-              proposedAmount: Number(latestNeg.proposedPrice),
-              message: latestNeg.note ?? undefined,
-              status: latestNeg.status.toLowerCase(),
-              createdAt: latestNeg.createdAt,
-              expiresAt: undefined,
-            }
-          : undefined,
-      };
-    });
+    const mapped = data.map((o) => ({
+      ...o,
+      shopId: o.assignedShopId,
+      status: o.status.toLowerCase(),
+      paymentStatus: (o.paymentStatus as string).toLowerCase(),
+      totalAmount: o.totalAmount ? Number(o.totalAmount) : null,
+      finalAmount: o.finalAmount ? Number(o.finalAmount) : null,
+      commissionAmount: o.commissionAmount
+        ? Number(o.commissionAmount)
+        : null,
+      addresses: o.addresses.map((addr) => ({
+        ...addr,
+        shopId: addr.assignedShopId,
+        assignmentStatus: addr.fulfillmentStatus.toLowerCase(),
+      })),
+    }));
 
     return {
       data: mapped,
@@ -1216,7 +1009,13 @@ async deleteThreshold(sellerId: string, productCategory: string) {
     if (!order) throw new Error("Order not found");
 
     if (requesterId !== undefined) {
-      const isCustomer = order.customerId === requesterId;
+      const isCustomer =
+        order.customerId === requesterId ||
+        (await canAccessOrgResource(
+          requesterId,
+          order.orgId,
+          CUSTOMER_ORG_PERMISSIONS.VIEW_ORDER_HISTORY,
+        ));
       const isOwningSeller =
         requesterSellerId && order.sellerId === requesterSellerId;
       if (!isCustomer && !isOwningSeller) {
@@ -1226,7 +1025,6 @@ async deleteThreshold(sellerId: string, productCategory: string) {
 
     const CANCELLABLE_STATUSES: OrderStatus[] = [
       "PENDING",
-      "NEGOTIATING",
       "CONFIRMED",
       "PACKED",
       "PROCESSING",
@@ -1249,10 +1047,17 @@ async deleteThreshold(sellerId: string, productCategory: string) {
       }
 
       for (const item of order.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
-        });
+        if (item.skuId) {
+          await tx.productSKU.update({
+            where: { id: item.skuId },
+            data: { stock: { increment: item.quantity } },
+          });
+        } else {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
       }
 
       await tx.auditLog.create({
@@ -1321,7 +1126,7 @@ async deleteThreshold(sellerId: string, productCategory: string) {
       "confirm" | "ship" | "cancel",
       OrderStatus[]
     > = {
-      confirm: ["PENDING", "PENDING_ASSIGNMENT", "NEGOTIATING"],
+      confirm: ["PENDING", "PENDING_ASSIGNMENT"],
       ship: ["CONFIRMED", "PROCESSING"],
       cancel: [],
     };
@@ -1375,109 +1180,27 @@ async deleteThreshold(sellerId: string, productCategory: string) {
     return { success, failed };
   },
 
-  async bulkRespondNegotiations(
-    sellerId: string,
-    actorId: string,
-    data: {
-      orderIds: string[];
-      action: "ACCEPT" | "REJECT";
-      counterPrice?: number;
-      note?: string;
-    },
-  ) {
-    const MAX_BULK_ORDERS = 100;
-    if (data.orderIds.length > MAX_BULK_ORDERS) {
-      throw new Error(
-        `Cannot process more than ${MAX_BULK_ORDERS} orders at once`,
-      );
-    }
-
-    let success = 0,
-      failed = 0;
-
-    for (const orderId of data.orderIds) {
-      try {
-        const order = await db.order.findFirst({
-          where: { id: orderId, sellerId },
-        });
-        if (!order) {
-          failed++;
-          continue;
-        }
-
-        const negotiation = await db.orderNegotiation.findFirst({
-          where: { orderId, status: "PENDING" },
-          orderBy: { createdAt: "desc" },
-        });
-        if (!negotiation) {
-          failed++;
-          continue;
-        }
-
-        await this.respondToProposal(
-          orderId,
-          negotiation.id,
-          actorId,
-          "seller",
-          sellerId,
-          {
-            action: data.action,
-            counterPrice: data.counterPrice,
-            note: data.note,
-          },
-        );
-        success++;
-      } catch (err: any) {
-        logger.error(
-          { err: err.message, orderId },
-          "Bulk respond negotiation item failed",
-        );
-        failed++;
-      }
-    }
-
-    return { success, failed };
-  },
-
   async getActionRequired(sellerId: string) {
-    const expiryThreshold = new Date(Date.now() - 48 * 60 * 60 * 1000); // negotiations older 48 hrs
+    const pendingOrders = await db.order.findMany({
+      where: { sellerId, status: { in: ["PENDING", "PROCESSING"] } },
+      select: {
+        id: true,
+        displayId: true,
+        type: true,
+        status: true,
+        totalAmount: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "asc" },
+      take: 50,
+    });
 
-    const [pendingOrders, expiringNegotiations] = await Promise.all([
-      db.order.findMany({
-        where: { sellerId, status: { in: ["PENDING", "PROCESSING"] } },
-        select: {
-          id: true,
-          displayId: true,
-          type: true,
-          status: true,
-          totalAmount: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: "asc" },
-        take: 50,
-      }),
-      db.order.findMany({
-        where: {
-          sellerId,
-          status: "NEGOTIATING",
-          negotiations: {
-            some: { status: "PENDING", createdAt: { lte: expiryThreshold } },
-          },
-        },
-        select: {
-          id: true,
-          displayId: true,
-          type: true,
-          status: true,
-          totalAmount: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: "asc" },
-        take: 50,
-      }),
-    ]);
-
-    return { pendingOrders, expiringNegotiations };
+    return {
+      pendingOrders: pendingOrders.map((o) => ({
+        ...o,
+        status: o.status.toLowerCase(),
+      })),
+    };
   },
 
   async exportOrdersCsv(

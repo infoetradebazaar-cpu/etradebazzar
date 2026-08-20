@@ -51,7 +51,6 @@ export const productSearchService = {
             minPrice: filters.minPrice,
             maxPrice: filters.maxPrice,
             sellerId: filters.sellerId,
-            shopId: filters.shopId,
             attributes: filters.attributes,
             page,
             limit,

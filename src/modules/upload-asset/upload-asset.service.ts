@@ -11,6 +11,10 @@ const EXT_BY_TYPE: Record<DetectedFileType, string> = {
     "application/pdf": ".pdf",
     "model/gltf-binary": ".glb",
     "model/gltf+json": ".gltf",
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
+    "video/x-matroska": ".mkv",
 };
 
 const DEFAULT_ALLOWED_TYPES: readonly DetectedFileType[] = [

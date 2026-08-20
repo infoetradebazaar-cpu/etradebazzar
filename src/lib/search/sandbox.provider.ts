@@ -18,6 +18,10 @@ export class SandboxSearchIndexInstance implements SearchIndexProvider {
     logger.warn("SearchIndexProvider=sandbox product search index is a no-op");
   }
 
+  async recreateIndex(): Promise<void> {
+    // no-op
+  }
+
   async indexProduct(_doc: SearchProductDocument): Promise<void> {
     // no-op
   }

@@ -3,6 +3,7 @@ import { z } from "zod";
 const orderItemSchema = z.object({
     productId: z.string(),
     quantity: z.number().int().positive(),
+    skuId: z.string().optional(),
 });
 
 export const createOrderSchema = z.object({
@@ -29,29 +30,6 @@ export const createBulkOrderSchema = z.object({
         idempotencyKey: z.string().uuid("idempotencyKey must be a valid UUID"),
         sellerId: z.string(),
         items: z.array(orderItemSchema).min(1),
-    }),
-});
-
-export const submitProposalSchema = z.object({
-    params: z.object({
-        orderId: z.string(),
-    }),
-    body: z.object({
-        proposedPrice: z.number().positive(),
-        note: z.string().optional(),
-        meetLink: z.string().url().optional(),
-    }),
-});
-
-export const respondProposalSchema = z.object({
-    params: z.object({
-        orderId: z.string(),
-        negotiationId: z.string(),
-    }),
-    body: z.object({
-        action: z.enum(["ACCEPT", "REJECT", "COUNTER"]),
-        counterPrice: z.number().positive().optional(),
-        note: z.string().optional(),
     }),
 });
 
@@ -92,34 +70,10 @@ export const bulkUploadSchema = z.object({
     }),
 });
 
-export const setThresholdSchema = z.object({
-    body: z.object({
-        productCategory: z.string().optional(),
-        amount: z.number().positive(),
-    }),
-});
-
-export const setCommissionSchema = z.object({
-    body: z.object({
-        productId: z.string().optional(),
-        category: z.string().optional(),
-        rate: z.number().min(0).max(100),
-    }),
-});
-
 export const bulkOrderActionSchema = z.object({
     body: z.object({
         orderIds: z.array(z.string()).min(1),
         action: z.enum(["confirm", "cancel", "ship"]),
-    }),
-});
-
-export const bulkRespondNegotiationsSchema = z.object({
-    body: z.object({
-        orderIds: z.array(z.string()).min(1),
-        action: z.enum(["ACCEPT", "REJECT"]),
-        counterPrice: z.number().positive().optional(),
-        note: z.string().optional(),
     }),
 });
 

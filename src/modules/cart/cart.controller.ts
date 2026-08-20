@@ -12,7 +12,7 @@ export const cartController = {
     async getCart(req: Request, res: Response) {
         try {
             const userId = req.user!.id;
-            const result = await cartService.getCart(userId);
+            const result = await cartService.getCart(userId, req.customerOrg?.orgId);
             return res.json({ success: true, data: result });
         } catch (error: any) {
             return res.status(500).json({ success: false, error: "Internal server error" });
@@ -22,7 +22,7 @@ export const cartController = {
     async addItem(req: Request, res: Response) {
         try {
             const userId = req.user!.id;
-            const result = await cartService.addItem(userId, req.body);
+            const result = await cartService.addItem(userId, req.body, req.customerOrg?.orgId);
             return res.status(201).json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Add cart item failed");
@@ -36,7 +36,7 @@ export const cartController = {
             const userId = req.user!.id;
             const { itemId } = req.params;
             const { quantity } = req.body;
-            const result = await cartService.updateItem(userId, itemId as string, quantity);
+            const result = await cartService.updateItem(userId, itemId as string, quantity, req.customerOrg?.orgId);
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Update cart item failed");
@@ -49,7 +49,7 @@ export const cartController = {
         try {
             const userId = req.user!.id;
             const { itemId } = req.params;
-            const result = await cartService.removeItem(userId, itemId as string);
+            const result = await cartService.removeItem(userId, itemId as string, req.customerOrg?.orgId);
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Remove cart item failed");
@@ -61,7 +61,7 @@ export const cartController = {
     async clearCart(req: Request, res: Response) {
         try {
             const userId = req.user!.id;
-            const result = await cartService.clearCart(userId);
+            const result = await cartService.clearCart(userId, req.customerOrg?.orgId);
             return res.json({ success: true, data: result });
         } catch (error: any) {
             return res.status(500).json({ success: false, error: "Internal server error" });
@@ -72,7 +72,7 @@ export const cartController = {
         try {
             const userId = req.user!.id;
             const { idempotencyKey, ...checkoutData } = req.body;
-            const result = await cartService.checkout(userId, idempotencyKey, checkoutData);
+            const result = await cartService.checkout(userId, idempotencyKey, checkoutData, req.customerOrg?.orgId);
             return res.status(201).json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Checkout failed");

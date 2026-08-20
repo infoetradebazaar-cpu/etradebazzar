@@ -26,36 +26,3 @@ export async function getCommissionRate(
   });
   return Number(categoryRate?.rate ?? 0);
 }
-
-export async function isHighTicket(
-  sellerId: string,
-  category: string,
-  totalAmount: number
-): Promise<boolean> {
-  const categoryThreshold = await db.orderThreshold.findFirst({
-    where: { 
-      sellerId,
-      productCategory: category },
-  });
-
-  const threshold =
-    categoryThreshold ??
-    (await db.orderThreshold.findFirst({
-      where: { sellerId, productCategory: null },
-    }));
-  if (!threshold) return false;
-  return totalAmount > Number(threshold.amount);
-}
-
-export function isOverQuantityThreshold(
-  items: { productId: string; quantity: number }[],
-  products: { id: string; negotiationThresholdQty: number | null }[],
-): boolean {
-  return items.some((item) => {
-    const product = products.find((p) => p.id === item.productId);
-    return (
-      product?.negotiationThresholdQty != null &&
-      item.quantity >= product.negotiationThresholdQty
-    );
-  });
-}

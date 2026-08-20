@@ -214,11 +214,11 @@ export const NOTIFICATION_EVENT_CATALOG: Record<NotificationType, NotificationEv
     NEGOTIATION_NUDGE: {
         type: "NEGOTIATION_NUDGE",
         label: "Negotiation nudge",
-        description: "Sent to a customer whose auto-negotiation expired without a deal, nudging them toward manual negotiation.",
+        description: "Sent to a customer whose negotiation didn't conclude: either an AUTO session that ended REJECTED (nudging them toward manual negotiation), or a MANUAL session that went stale/EXPIRED from inactivity (low-pressure reminder the item's still available).",
         category: "NEGOTIATION",
         defaultChannels: ["email", "sse"],
         emailTemplate: "negotiation-nudge",
-        variables: ["customerName", "productName", "quantity", "lastOfferedPrice", "negotiationUrl"],
+        variables: ["reason", "customerName", "productName", "quantity", "lastOfferedPrice", "visiblePrice", "negotiationUrl"],
     },
     MANUAL_NEGOTIATION_STARTED: {
         type: "MANUAL_NEGOTIATION_STARTED",

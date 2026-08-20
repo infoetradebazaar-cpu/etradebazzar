@@ -55,8 +55,12 @@ export const createPriceTierSchema = z.object({
     params: z.object({ productId: z.string(), skuId: z.string() }),
     body: z.object({
         minQty: z.number().int().min(2),
+        maxQty: z.number().int().positive().optional(),
         price: z.number().positive(),
         hiddenFloorPrice: z.number().positive().optional(),
+    }).refine((data) => data.maxQty === undefined || data.maxQty > data.minQty, {
+        message: "maxQty must be greater than minQty",
+        path: ["maxQty"],
     }),
 });
 
@@ -64,9 +68,17 @@ export const updatePriceTierSchema = z.object({
     params: z.object({ productId: z.string(), skuId: z.string(), tierId: z.string() }),
     body: z.object({
         minQty: z.number().int().min(2).optional(),
+        maxQty: z.number().int().positive().nullable().optional(),
         price: z.number().positive().optional(),
         hiddenFloorPrice: z.number().positive().nullable().optional(),
-    }),
+    }).refine(
+        (data) =>
+            data.minQty === undefined ||
+            data.maxQty === undefined ||
+            data.maxQty === null ||
+            data.maxQty > data.minQty,
+        { message: "maxQty must be greater than minQty", path: ["maxQty"] },
+    ),
 });
 
 export const priceTierParamSchema = z.object({

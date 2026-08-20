@@ -2,7 +2,7 @@ import { db } from "../db/index";
 
 const MAX_TIER_EXTRAPOLATION_MULTIPLIER = 2;
 
-export type TierZone = "base" | "tiered" | "beyond";
+export type TierZone = "base" | "tiered" | "gap" | "beyond";
 
 export interface TierResolution {
   visiblePrice: number;
@@ -24,20 +24,7 @@ export async function resolveTierPrice(skuId: string, qty: number): Promise<Tier
     return { visiblePrice: Number(sku.price), hiddenFloorPrice: null, zone: "base", tierId: null };
   }
 
-  const topTier = tiers[tiers.length - 1]!;
-  if (qty > topTier.minQty * MAX_TIER_EXTRAPOLATION_MULTIPLIER) {
-    return { visiblePrice: Number(sku.price), hiddenFloorPrice: null, zone: "beyond", tierId: null };
-  }
-
-  // Highest minQty tier that's still <= qty
-  let applicableIndex = -1;
-  for (let i = 0; i < tiers.length; i++) {
-    if (tiers[i]!.minQty <= qty) applicableIndex = i;
-    else break;
-  }
-
-  if (applicableIndex === -1) {
-    // Qty below first tier — use SKU price as visible, first tier price as hidden floor
+  if (qty < tiers[0]!.minQty) {
     const firstTier = tiers[0]!;
     const hiddenFloor = firstTier.hiddenFloorPrice !== null
       ? Number(firstTier.hiddenFloorPrice)
@@ -45,27 +32,40 @@ export async function resolveTierPrice(skuId: string, qty: number): Promise<Tier
     return { visiblePrice: Number(sku.price), hiddenFloorPrice: hiddenFloor, zone: "base", tierId: null };
   }
 
-  const applicable = tiers[applicableIndex]!;
-
-  // Use explicit hiddenFloorPrice if set, otherwise derive from next tier's price
-  let hiddenFloorPrice = applicable.hiddenFloorPrice !== null
-    ? Number(applicable.hiddenFloorPrice)
-    : null;
-
-  if (hiddenFloorPrice === null && applicableIndex < tiers.length - 1) {
-    const nextTier = tiers[applicableIndex + 1]!;
-    hiddenFloorPrice = Number(nextTier.price);
+  const topTier = tiers[tiers.length - 1]!;
+  if (topTier.maxQty === null && qty > topTier.minQty * MAX_TIER_EXTRAPOLATION_MULTIPLIER) {
+    return { visiblePrice: Number(sku.price), hiddenFloorPrice: null, zone: "beyond", tierId: null };
   }
 
-  // For the last tier with no explicit hidden floor, use 97% of the visible price
-  if (hiddenFloorPrice === null) {
-    hiddenFloorPrice = Math.round(Number(applicable.price) * 0.97 * 100) / 100;
+  for (let i = 0; i < tiers.length; i++) {
+    const tier = tiers[i]!;
+    const nextTier = tiers[i + 1];
+    const effectiveMax =
+      tier.maxQty !== null ? tier.maxQty :
+      nextTier ? nextTier.minQty - 1 :
+      Infinity;
+
+    if (qty >= tier.minQty && qty <= effectiveMax) {
+      let hiddenFloorPrice = tier.hiddenFloorPrice !== null
+        ? Number(tier.hiddenFloorPrice)
+        : null;
+
+      if (hiddenFloorPrice === null && nextTier) {
+        hiddenFloorPrice = Number(nextTier.price);
+      }
+
+      if (hiddenFloorPrice === null) {
+        hiddenFloorPrice = Math.round(Number(tier.price) * 0.97 * 100) / 100;
+      }
+
+      return {
+        visiblePrice: Number(tier.price),
+        hiddenFloorPrice,
+        zone: "tiered",
+        tierId: tier.id,
+      };
+    }
   }
 
-  return {
-    visiblePrice: Number(applicable.price),
-    hiddenFloorPrice,
-    zone: "tiered",
-    tierId: applicable.id,
-  };
+  return { visiblePrice: Number(sku.price), hiddenFloorPrice: null, zone: "gap", tierId: null };
 }

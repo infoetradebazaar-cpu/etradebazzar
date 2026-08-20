@@ -28,7 +28,6 @@ export const searchProductsSchema = z.object({
         minPrice: z.string().regex(/^\d+(\.\d+)?$/, "Invalid minPrice").optional(),
         maxPrice: z.string().regex(/^\d+(\.\d+)?$/, "Invalid maxPrice").optional(),
         sellerId: z.string().optional(),
-        shopId: z.string().optional(),
         sort: z.enum(["relevance", "price_asc", "price_desc", "newest"]).optional(),
         attributes: attributesSchema,
         page: z.string().regex(/^\d+$/, "Invalid page").optional(),
@@ -43,7 +42,6 @@ export const facetsQuerySchema = z.object({
         minPrice: z.string().regex(/^\d+(\.\d+)?$/, "Invalid minPrice").optional(),
         maxPrice: z.string().regex(/^\d+(\.\d+)?$/, "Invalid maxPrice").optional(),
         sellerId: z.string().optional(),
-        shopId: z.string().optional(),
         attributes: attributesSchema,
     }),
 });

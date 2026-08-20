@@ -1505,27 +1505,6 @@ async function seedComprehensive() {
       }
     }
 
-    // 10. Order Thresholds
-    logger.info("Seeding order thresholds...");
-    for (const seller of [seller1, seller2]) {
-      for (const cat of categoryTree) {
-        await db.orderThreshold.upsert({
-          where: {
-            sellerId_productCategory: {
-              sellerId: seller.id,
-              productCategory: cat.name,
-            },
-          },
-          update: {},
-          create: {
-            sellerId: seller.id,
-            productCategory: cat.name,
-            amount: randomDecimal(5000, 50000),
-          },
-        });
-      }
-    }
-
     // 11. Customers
     logger.info("Seeding customers...");
     const customers: any[] = [];
@@ -1662,7 +1641,6 @@ async function seedComprehensive() {
       "SHIPPED",
       "DELIVERED",
       "CANCELLED",
-      "NEGOTIATING",
     ];
 
     for (let i = 0; i < 50; i++) {
@@ -1792,41 +1770,6 @@ async function seedComprehensive() {
       }
 
       orders.push({ order, address });
-    }
-
-    // 16. Negotiations
-    logger.info("Seeding negotiations...");
-    for (const { order } of orders
-      .filter((o) => o.order.status === "NEGOTIATING")
-      .slice(0, 8)) {
-      await db.orderNegotiation.create({
-        data: {
-          orderId: order.id,
-          proposedBy: order.customerId,
-          proposedByType: "customer",
-          proposedPrice: parseFloat(order.totalAmount.toString()) * 0.85,
-          status: randomItem([
-            "PENDING",
-            "ACCEPTED",
-            "REJECTED",
-            "COUNTERED",
-          ]) as any,
-          note: "Looking for a better deal",
-        },
-      });
-    }
-    for (let i = 0; i < 5; i++) {
-      const { order } = randomItem(orders);
-      await db.orderNegotiation.create({
-        data: {
-          orderId: order.id,
-          proposedBy: order.sellerId,
-          proposedByType: "seller",
-          proposedPrice: parseFloat(order.totalAmount.toString()) * 0.92,
-          status: "COUNTERED",
-          note: "Counter offer from seller",
-        },
-      });
     }
 
     // 17. Coupon Usages

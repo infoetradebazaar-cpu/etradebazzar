@@ -1,6 +1,9 @@
 import { db } from "../../db/index";
 import { invalidateAuthContext } from "../../middleware/auth";
 import { getLocationFromIp } from "../../utils/geo";
+import type { OrderStatus } from "../../../prisma/generated/client";
+import { resolveKycDocumentUrls } from "./seller.service";
+import { maskIdNumber } from "../../utils/mask";
 
 function fmt(n: any): number {
     return n ? parseFloat(Number(n).toFixed(2)) : 0.00;
@@ -73,11 +76,36 @@ export const sellerProfileService = {
                 businessDescription: true, industryCategory: true, yearOfEstablishment: true,
                 street: true, city: true, state: true, pincode: true,
                 pickupAddress: true, billingAddress: true, socialLinks: true,
-                kyc: { select: { panNumber: true, gstNumber: true, status: true } },
+                kyc: {
+                    select: {
+                        id: true, status: true,
+                        panNumber: true, gstNumber: true, aadharNumber: true,
+                        businessRegNumber: true, documents: true,
+                        rejectedReason: true, verifiedAt: true, createdAt: true,
+                        aadhaarStatus: true, aadhaarRejectedReason: true, aadhaarVerifiedAt: true,
+                        govtIdType: true, govtIdNumber: true, govtIdStatus: true,
+                        govtIdRejectedReason: true, govtIdVerifiedAt: true,
+                        gstVerificationStatus: true, gstVerifiedAt: true,
+                        panVerificationStatus: true, panVerifiedAt: true,
+                    },
+                },
             },
         });
         if (!seller) throw new Error("Seller not found");
-        return seller;
+
+        if (!seller.kyc) return seller;
+
+        const kycWithUrls = await resolveKycDocumentUrls(seller.kyc);
+        return {
+            ...seller,
+            kyc: {
+                ...kycWithUrls,
+                aadharNumber: maskIdNumber(seller.kyc.aadharNumber),
+                govtIdNumber: seller.kyc.govtIdNumber
+                    ? maskIdNumber(seller.kyc.govtIdNumber)
+                    : seller.kyc.govtIdNumber,
+            },
+        };
     },
 
     async updateBusiness(
@@ -135,7 +163,12 @@ export const sellerProfileService = {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        const [totalAgg, monthAgg, reviewAgg] = await Promise.all([
+        const CONFIRMED_STATUSES: OrderStatus[] = [
+            "CONFIRMED", "PACKED", "PROCESSING", "SHIPPED",
+            "OUT_FOR_DELIVERY", "DELIVERED", "RETURNED",
+        ];
+
+        const [totalAgg, monthAgg, reviewAgg, assignedOrderCount, confirmedOrderCount] = await Promise.all([
             db.order.aggregate({
                 where: { assignedShopId: shopId, status: "DELIVERED" },
                 _sum: { finalAmount: true, totalAmount: true },
@@ -150,13 +183,17 @@ export const sellerProfileService = {
                 where: { product: { shopId }, status: "APPROVED" },
                 _avg: { rating: true },
             }),
+            db.order.count({ where: { assignedShopId: shopId } }),
+            db.order.count({ where: { assignedShopId: shopId, status: { in: CONFIRMED_STATUSES } } }),
         ]);
 
         return {
             totalRevenue: fmt(totalAgg._sum.finalAmount ?? totalAgg._sum.totalAmount),
-            totalOrders: totalAgg._count.id ?? 0,
+            totalOrders: assignedOrderCount,
             averageRating: fmt(reviewAgg._avg.rating),
-            responseRate: 0.00,
+            responseRate: assignedOrderCount > 0
+                ? fmt((confirmedOrderCount / assignedOrderCount) * 100)
+                : 0.00,
             monthlyRevenue: fmt(monthAgg._sum.finalAmount ?? monthAgg._sum.totalAmount),
             monthlyOrders: monthAgg._count.id ?? 0,
         };

@@ -20,4 +20,19 @@ export const userController = {
         .json({ success: false, error: "Internal server error" });
     }
   },
+
+  async getUserById(req: Request, res: Response) {
+    try {
+      const { userId } = req.params;
+      const result = await userService.getUserById(userId);
+      if (!result)
+        return res.status(404).json({ success: false, error: "User not found" });
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Get user failed");
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
 };

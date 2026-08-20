@@ -13,14 +13,9 @@ import {
 } from "../../middleware/rate-limit";
 import {
   createOrderSchema,
-  submitProposalSchema,
-  respondProposalSchema,
   assignShopSchema,
   orderParamSchema,
-  setThresholdSchema,
-  setCommissionSchema,
   bulkOrderActionSchema,
-  bulkRespondNegotiationsSchema,
   listAllOrdersSchema,
   markPackedSchema,
   cancelOrderSchema,
@@ -89,53 +84,6 @@ router.post(
   orderController.bulkAction,
 );
 
-router.post(
-  "/negotiate/bulk-respond",
-  protect,
-  sellerLimiter,
-  resolveTenant,
-  requirePermission(PERMISSIONS.ORDERS_MANAGE),
-  validate(bulkRespondNegotiationsSchema),
-  orderController.bulkRespondNegotiations,
-);
-
-router.post(
-  "/threshold",
-  protect,
-  resolveTenant,
-  sellerLimiter,
-  requirePermission(PERMISSIONS.ORDERS_ADMIN),
-  validate(setThresholdSchema),
-  orderController.setThreshold,
-);
-
-router.get(
-  "/threshold",
-  protect,
-  resolveTenant,
-  sellerLimiter,
-  requirePermission(PERMISSIONS.ORDERS_MANAGE),
-  orderController.getThresholds,
-);
-
-router.delete(
-  "/threshold/:productCategory",
-  protect,
-  resolveTenant,
-  sellerLimiter,
-  requirePermission(PERMISSIONS.ORDERS_ADMIN),
-  orderController.deleteThreshold,
-);
-
-router.post(
-  "/commission",
-  protect,
-  sellerLimiter,
-  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_ORDERS_SET_COMMISSION]),
-  validate(setCommissionSchema),
-  orderController.setCommission,
-);
-
 //Customer
 router.post(
   "/",
@@ -151,24 +99,6 @@ router.post(
   uploadLimiter,
   upload.single("file"),
   orderController.createBulkOrder,
-);
-
-router.post(
-  "/:orderId/negotiate",
-  protect,
-  resolveTenant,
-  validate(submitProposalSchema),
-  publicLimiter,
-  orderController.submitProposalAsCustomer,
-);
-
-router.patch(
-  "/:orderId/negotiate/:negotiationId",
-  protect,
-  resolveTenant,
-  publicLimiter,
-  validate(respondProposalSchema),
-  orderController.respondToProposal,
 );
 
 router.get(
@@ -207,16 +137,6 @@ router.get(
   sellerLimiter,
   requirePermission(PERMISSIONS.ORDERS_FULFILL),
   orderController.listOrders,
-);
-
-router.post(
-  "/:orderId/negotiate/proposal",
-  sellerLimiter,
-  protect,
-  resolveTenant,
-  requirePermission(PERMISSIONS.ORDERS_MANAGE),
-  validate(submitProposalSchema),
-  orderController.submitProposalAsSeller,
 );
 
 router.patch(

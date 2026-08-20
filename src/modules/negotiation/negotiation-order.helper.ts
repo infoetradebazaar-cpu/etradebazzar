@@ -1,6 +1,10 @@
 import { getCommissionRate } from "../../utils/commission";
 import { generateDisplayId } from "../../lib/uid/uid.generator";
 import { slaConfigService } from "../platform/sla-config.service";
+import { recommendationService } from "../../lib/order-assignment/recommendation.service";
+import { InsufficientStockError } from "../../lib/inventory/stock.errors";
+
+export { InsufficientStockError };
 
 export interface DeliveryAddress {
   receiverName: string;
@@ -17,6 +21,7 @@ interface NegotiationLike {
   id: string;
   sellerId: string;
   customerId: string;
+  orgId?: string | null;
   productId: string;
   skuId: string;
   quantity: number;
@@ -33,26 +38,53 @@ export async function createOrderFromNegotiation(
     include: { category: { select: { name: true } } },
   });
   if (!product) throw new Error("Product not found");
+  const skuStockUpdate = await tx.productSKU.updateMany({
+    where: { id: session.skuId, stock: { gte: session.quantity } },
+    data: { stock: { decrement: session.quantity } },
+  });
+  if (skuStockUpdate.count === 0) {
+    throw new InsufficientStockError(`Insufficient stock for product: ${product.name}`);
+  }
 
   const commissionRate = await getCommissionRate(session.productId, product.category.name);
   const commissionAmount = (finalPrice * commissionRate) / 100;
   const displayId = await generateDisplayId("order");
-  const { packing_sla_hours } = await slaConfigService.getSlaConfig();
+  let status: "CONFIRMED" | "PENDING_ASSIGNMENT" = "PENDING_ASSIGNMENT";
+  let autoAssignedShopId: string | null = null;
+  const trusted = await recommendationService.hasTrustedShops(session.sellerId);
+  if (trusted) {
+    const recs = await recommendationService.computeRecommendations(
+      session.sellerId,
+      [{ productId: session.productId, quantity: session.quantity }],
+      address.latitude,
+      address.longitude,
+    );
+    const topPick = recs[0];
+    if (topPick?.autoAssignEnabled && topPick.stockScore >= 80) {
+      status = "CONFIRMED";
+      autoAssignedShopId = topPick.shopId;
+    }
+  }
+
+  const packingSla = status === "CONFIRMED" ? await slaConfigService.getSlaConfig() : null;
+  const packingDeadline = packingSla?.packing_sla_hours
+    ? new Date(Date.now() + packingSla.packing_sla_hours * 60 * 60 * 1000)
+    : undefined;
 
   return tx.order.create({
     data: {
       displayId,
       sellerId: session.sellerId,
       customerId: session.customerId,
+      orgId: session.orgId ?? null,
       type: "STANDARD",
-      status: "CONFIRMED",
+      status,
       totalAmount: finalPrice,
       finalAmount: finalPrice,
       commissionRate,
       commissionAmount,
-      packingDeadline: packing_sla_hours
-        ? new Date(Date.now() + packing_sla_hours * 60 * 60 * 1000)
-        : undefined,
+      assignedShopId: autoAssignedShopId,
+      packingDeadline,
       items: {
         create: {
           productId: session.productId,
@@ -62,7 +94,13 @@ export async function createOrderFromNegotiation(
           finalUnitPrice: finalPrice / session.quantity,
         },
       },
-      addresses: { create: address },
+      addresses: {
+        create: {
+          ...address,
+          assignedShopId: autoAssignedShopId,
+          fulfillmentStatus: autoAssignedShopId ? "ASSIGNED" : "PENDING",
+        },
+      },
     },
   });
 }

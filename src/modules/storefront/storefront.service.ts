@@ -28,13 +28,14 @@ export const storefrontService = {
         if (filters.categoryId) where.categoryId = filters.categoryId;
         if (filters.search) where.name = { contains: filters.search, mode: "insensitive" };
 
-        const [data, total] = await Promise.all([
+        const [rows, total] = await Promise.all([
             db.product.findMany({
                 where,
                 select: {
                     id: true, displayId: true, name: true, price: true, compareAtPrice: true,
                     stock: true, images: { take: 1, orderBy: { order: "asc" } },
                     category: { select: { id: true, name: true } },
+                    skus: { select: { stock: true } },
                 },
                 orderBy: { createdAt: "desc" },
                 skip: (page - 1) * limit,
@@ -42,6 +43,11 @@ export const storefrontService = {
             }),
             db.product.count({ where }),
         ]);
+
+        const data = rows.map(({ skus, ...product }) => ({
+            ...product,
+            stock: skus.length ? skus.reduce((sum, s) => sum + (s.stock ?? 0), 0) : product.stock,
+        }));
 
         return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 } };
     },

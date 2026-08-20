@@ -16,7 +16,7 @@ export const myNegotiationController = {
         status,
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
-      });
+      }, req.customerOrg?.orgId);
       return res.json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "List my negotiation sessions failed");

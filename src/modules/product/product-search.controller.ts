@@ -10,7 +10,6 @@ interface SearchQuery {
     minPrice?: string;
     maxPrice?: string;
     sellerId?: string;
-    shopId?: string;
     sort?: SearchSort;
     attributes?: Record<string, string[]>;
     page?: string;
@@ -26,7 +25,6 @@ export const productSearchController = {
                 minPrice,
                 maxPrice,
                 sellerId,
-                shopId,
                 sort,
                 attributes,
                 page,
@@ -39,7 +37,6 @@ export const productSearchController = {
                 minPrice: minPrice ? Number(minPrice) : undefined,
                 maxPrice: maxPrice ? Number(maxPrice) : undefined,
                 sellerId,
-                shopId,
                 sort,
                 attributes,
                 page: page ? Number(page) : undefined,
@@ -55,7 +52,7 @@ export const productSearchController = {
 
     async getFacets(req: Request, res: Response) {
         try {
-            const { q, categoryId, minPrice, maxPrice, sellerId, shopId, attributes } =
+            const { q, categoryId, minPrice, maxPrice, sellerId, attributes } =
                 req.query as unknown as SearchQuery;
 
             const result = await productSearchService.getFacets({
@@ -64,7 +61,6 @@ export const productSearchController = {
                 minPrice: minPrice ? Number(minPrice) : undefined,
                 maxPrice: maxPrice ? Number(maxPrice) : undefined,
                 sellerId,
-                shopId,
                 attributes,
             });
 

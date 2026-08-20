@@ -23,6 +23,7 @@ import {
   DEFAULT_ROLE_PERMISSIONS,
 } from "../src/lib/permission/permission.service";
 import { generateDisplayId } from "../src/lib/uid/uid.generator";
+import { invoicingService } from "../src/modules/invoicing/invoicing.service";
 import { encrypt } from "../src/utils/encryption";
 import { logger } from "../src/utils/logger";
 import { SearchIndexFactory } from "../src/lib/search/search-index.factory";
@@ -289,7 +290,7 @@ async function seedComprehensive() {
     if (existingSellers) {
       logger.info("Sellers already exist — cleaning product data and re-seeding products...");
       await cleanProductData();
-      const existingShops = await db.shop.findMany({ where: { status: "APPROVED" } });
+      const existingSellersList = await db.seller.findMany({ where: { status: "APPROVED" } });
       const existingCategories = await db.category.findMany();
       const categoryMap = new Map<string, string>();
       for (const cat of existingCategories) categoryMap.set(cat.name, cat.id);
@@ -318,8 +319,8 @@ async function seedComprehensive() {
       const products: any[] = [];
       let skuCounter = 100000;
       const allSubCats = categoryTree.flatMap((c) => c.subs);
-      for (const shop of existingShops) {
-        for (let i = 0; i < 6; i++) {
+      for (const seller of existingSellersList) {
+        for (let i = 0; i < 20; i++) {
           const subCat = randomItem(allSubCats);
           const catId = categoryMap.get(subCat) ?? categoryMap.get("Electronics")!;
           const parentCatName = categoryTree.find((c) => c.subs.includes(subCat))?.name ?? "Electronics";
@@ -327,7 +328,7 @@ async function seedComprehensive() {
           const price = randomDecimal(299, 49999);
           const product = await db.product.create({
             data: {
-              shopId: shop.id, sellerId: shop.sellerId, categoryId: catId,
+              sellerId: seller.id, categoryId: catId,
               displayId: await generateDisplayId("product"), name: pName,
               description: `Premium ${pName}. Manufacturer warranty included.`,
               price, compareAtPrice: price * 1.2, sku: `SKU-${++skuCounter}`,
@@ -344,7 +345,7 @@ async function seedComprehensive() {
           });
           await Promise.all([1, 2, 3].map((n) => db.productImage.create({
             data: {
-              productId: product.id, url: `https://picsum.photos/seed/${product.id}${n}/400/400`,
+              productId: product.id, skuId: null, url: `https://picsum.photos/seed/${product.id}${n}/400/400`,
               key: `${product.id}-${n}`, order: n - 1,
             }
           })));
@@ -365,8 +366,8 @@ async function seedComprehensive() {
             });
             skuIds.push(sku.id);
             // SkuPriceTier — 2 tiers per SKU
-            for (const tier of [{ minQty: 10, price: price * 0.95 }, { minQty: 50, price: price * 0.88 }]) {
-              await db.skuPriceTier.create({ data: { skuId: sku.id, minQty: tier.minQty, price: tier.price, hiddenFloorPrice: tier.price * 0.8 } });
+            for (const [ti, tier] of [{ minQty: 10, maxQty: 49, price: price * 0.95 }, { minQty: 50, maxQty: null, price: price * 0.88 }].entries()) {
+              await db.skuPriceTier.create({ data: { skuId: sku.id, minQty: tier.minQty, maxQty: tier.maxQty, price: tier.price, hiddenFloorPrice: tier.price * 0.8 } }).catch(() => {});
             }
           }
           await db.productCommission.create({ data: { productId: product.id, rate: randomDecimal(3, 10), setBy: adminUser.id } });
@@ -386,7 +387,7 @@ async function seedComprehensive() {
             const firstSku = await db.productSKU.findFirst({ where: { productId: product.id } });
             await db.template.create({
               data: {
-                productId: product.id, sellerId: shop.sellerId,
+                productId: product.id, sellerId: seller.id,
                 name: `${pName} Default Template`,
                 industry: parentCatName, style: randomItem(["Modern", "Classic", "Minimal"]),
                 thumbnailUrl: `https://picsum.photos/seed/template-${product.id}/300/300`,
@@ -420,18 +421,34 @@ async function seedComprehensive() {
       const customerUsers = existingCustomers.filter((u) => !existingSellers.some((s) => s.email === u.email));
       logger.info("Re-seeding negotiation sessions...");
       const negProducts = products.slice(0, 20);
-      const negStatuses = ["PENDING", "ACCEPTED", "REJECTED", "EXHAUSTED", "PENDING"];
+      const negStatuses = ["PENDING", "ACCEPTED", "REJECTED", "EXHAUSTED", "EXPIRED"];
       const negModes = ["AUTO", "MANUAL", "AUTO", "MANUAL", "AUTO"];
       for (const customer of customerUsers) {
+        const usedSkuIds = new Set<string>();
         for (let i = 0; i < 5 && negProducts.length > 0; i++) {
-          const product = randomItem(negProducts);
-          const skus = await db.productSKU.findMany({ where: { productId: product.id }, take: 1 });
-          const skuId = skus[0]?.id ?? "";
+          let product: any = null;
+          let sellerId = "";
+          let skuId = "";
+          for (let attempt = 0; attempt < 10; attempt++) {
+            const candidate = randomItem(negProducts);
+            const candidateSkus = await db.productSKU.findMany({ where: { productId: candidate.id } });
+            const availableSku = candidateSkus.find((s) => !usedSkuIds.has(s.id));
+            if (availableSku) {
+              product = candidate;
+              sellerId = candidate.sellerId;
+              skuId = availableSku.id;
+              usedSkuIds.add(skuId);
+              break;
+            }
+          }
+          if (!product) continue;
           const mode = negModes[i] as any;
           const status = negStatuses[i] as any;
           const session = await db.negotiationSession.create({ data: {
-            customerId: customer.id, sellerId: product.sellerId, productId: product.id, skuId,
+            customerId: customer.id, sellerId, productId: product.id, skuId,
+            orgId: null, formulaVersion: Math.random() > 0.5 ? "v2_gamma" : "v1_linear",
             quantity: randomInt(5, 50), mode, status, visibleTierPrice: parseFloat(product.price.toString()),
+            hiddenFloorPrice: parseFloat(product.price.toString()) * 0.8,
             round: mode === "AUTO" ? randomInt(1, 3) : 0,
             finalPrice: status === "ACCEPTED" ? parseFloat(product.price.toString()) * 0.9 : null,
             nudgeDueAt: status === "PENDING" ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null,
@@ -442,6 +459,7 @@ async function seedComprehensive() {
               await db.negotiationRound.create({ data: {
                 sessionId: session.id, round: r,
                 offeredPrice: parseFloat(product.price.toString()) * (1 - r * 0.05),
+                customerPrice: parseFloat(product.price.toString()) * (1 - (r + 1) * 0.05),
                 response: r < numRounds ? randomItem(["ACCEPT", "REJECT"]) as any : null,
                 createdAt: randomDate(new Date("2024-10-01"), new Date()),
                 respondedAt: r < numRounds ? randomDate(new Date("2024-10-01"), new Date()) : null,
@@ -456,7 +474,7 @@ async function seedComprehensive() {
             }});
             for (let m = 0; m < randomInt(2, 5); m++) {
               await db.negotiationMessage.create({ data: {
-                chatSessionId: chat.id, senderId: m % 2 === 0 ? customer.id : product.sellerId,
+                chatSessionId: chat.id, senderId: m % 2 === 0 ? customer.id : sellerId,
                 senderType: m % 2 === 0 ? "customer" as any : "seller" as any,
                 body: randomItem(["Can you offer a better price?", "What's the best you can do?", "I can offer a 10% discount.", "Let me check and get back.", "That works for me."]),
               }});
@@ -481,7 +499,7 @@ async function seedComprehensive() {
       }
       logger.info("Re-seeding carts...");
       for (const customer of customerUsers) {
-        const cart = await db.cart.create({ data: { userId: customer.id, sellerId: randomItem(existingSellers).id } }).catch(() => null);
+        const cart = await db.cart.create({ data: { userId: customer.id, orgId: null, sellerId: randomItem(existingSellers).id } }).catch(() => null);
         if (!cart) continue;
         for (let i = 0; i < randomInt(3, 5); i++) {
           const product = randomItem(products);
@@ -609,6 +627,9 @@ async function seedComprehensive() {
         categoryMap.set(sub, child.id);
       }
     }
+    // Uncategorized placeholder category for products uploaded without a category
+    const uncategorized = await db.category.upsert({ where: { name: "Uncategorized" }, update: {}, create: { name: "Uncategorized", slug: "uncategorized", description: "Products without a category — assign one later" } });
+    categoryMap.set("Uncategorized", uncategorized.id);
 
     // 6b. Category Attributes
     logger.info("Seeding category attributes...");
@@ -681,8 +702,8 @@ async function seedComprehensive() {
     const products: any[] = [];
     let skuCounter = 100000;
     const allSubCats = categoryTree.flatMap((c) => c.subs);
-    for (const shop of shops) {
-      for (let i = 0; i < 6; i++) {
+    for (const seller of [seller1, seller2]) {
+      for (let i = 0; i < 20; i++) {
         const subCat = randomItem(allSubCats);
         const catId = categoryMap.get(subCat) ?? categoryMap.get("Electronics")!;
         const parentCatName = categoryTree.find((c) => c.subs.includes(subCat))?.name ?? "Electronics";
@@ -691,7 +712,7 @@ async function seedComprehensive() {
         const isCustomizable = Math.random() > 0.7;
         const product = await db.product.create({
           data: {
-            shopId: shop.id, sellerId: shop.sellerId, categoryId: catId,
+            sellerId: seller.id, categoryId: catId,
             displayId: await generateDisplayId("product"), name: pName,
             description: `Premium ${pName}. Manufacturer warranty included.`,
             price, compareAtPrice: price * 1.2, sku: `SKU-${++skuCounter}`,
@@ -755,7 +776,7 @@ async function seedComprehensive() {
             data: {
               productId: product.id, proposedRate: randomDecimal(2, 5),
               status: randomItem(["PENDING", "ACCEPTED", "REJECTED"]) as any,
-              proposedBy: shop.sellerId, proposedByType: "seller",
+              proposedBy: seller.id, proposedByType: "seller",
             }
           });
         }
@@ -764,7 +785,7 @@ async function seedComprehensive() {
           const firstSku = await db.productSKU.findFirst({ where: { productId: product.id } });
           await db.template.create({
             data: {
-              productId: product.id, sellerId: shop.sellerId,
+              productId: product.id, sellerId: seller.id,
               name: `${pName} Default Template`,
               industry: parentCatName, style: randomItem(["Modern", "Classic", "Minimal"]),
               thumbnailUrl: `https://picsum.photos/seed/template-${product.id}/300/300`,
@@ -780,14 +801,6 @@ async function seedComprehensive() {
           }).catch(() => { });
         }
         products.push(product);
-      }
-    }
-
-    // 10. Order Thresholds
-    logger.info("Seeding order thresholds...");
-    for (const seller of [seller1, seller2]) {
-      for (const cat of categoryTree) {
-        await db.orderThreshold.upsert({ where: { sellerId_productCategory: { sellerId: seller.id, productCategory: cat.name } }, update: {}, create: { sellerId: seller.id, productCategory: cat.name, amount: randomDecimal(5000, 50000) } });
       }
     }
 
@@ -862,7 +875,7 @@ async function seedComprehensive() {
     const usedCouponOrders = new Set<string>();
     const usedReviewCombos = new Set<string>();
     // Ensure each customer gets a spread of statuses
-    const orderStatuses = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "NEGOTIATING"];
+    const orderStatuses = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
     const ordersPerCustomer = 12; // 4 customers × 12 = 48 orders
     for (let ci = 0; ci < customers.length; ci++) {
       const customer = customers[ci]!;
@@ -870,7 +883,7 @@ async function seedComprehensive() {
         const seller = randomItem([seller1, seller2]);
         const shopPool = shops.filter((s) => s.sellerId === seller.id);
         const shop = randomItem(shopPool);
-        const prodPool = products.filter((p) => p.shopId === shop.id);
+        const prodPool = products.filter((p) => p.sellerId === seller.id);
         const product = prodPool.length > 0 ? randomItem(prodPool) : randomItem(products);
         const qty = randomInt(1, 10);
         const total = parseFloat(product.price.toString()) * qty;
@@ -883,13 +896,14 @@ async function seedComprehensive() {
         const payS = oStatus === "DELIVERED" || oStatus === "SHIPPED" ? "PAID" : randomItem(["UNPAID", "PAID", "PARTIALLY_PAID"]) as any;
         const order = await db.order.create({
           data: {
-            sellerId: seller.id, customerId: customer.id, displayId: await generateDisplayId("order"),
+            sellerId: seller.id, customerId: customer.id, orgId: null, displayId: await generateDisplayId("order"),
             type: oType, status: oStatus, totalAmount: total, finalAmount: total - commA,
             commissionRate: commR, commissionAmount: commA, paymentStatus: payS,
             assignedShopId: shop.id, discountAmount: Math.random() > 0.7 ? randomDecimal(50, 500) : null,
           }
         });
-        await db.orderItem.create({ data: { orderId: order.id, productId: product.id, quantity: qty, unitPrice: product.price, finalUnitPrice: product.price, selectedOptions: { Color: randomItem(["Black", "White", "Blue"]) } } });
+        const orderSkus = await db.productSKU.findMany({ where: { productId: product.id }, take: 1 });
+        await db.orderItem.create({ data: { orderId: order.id, productId: product.id, skuId: orderSkus[0]?.id ?? null, quantity: qty, unitPrice: product.price, finalUnitPrice: product.price, selectedOptions: { Color: randomItem(["Black", "White", "Blue"]) } } });
         const address = await db.orderAddress.create({
           data: {
             orderId: order.id, receiverName: customer.name ?? "Customer", phone: `98${randomInt(10000000, 99999999)}`,
@@ -923,33 +937,40 @@ async function seedComprehensive() {
       }
     }
 
-    // 16. Order Negotiations (legacy)
-    logger.info("Seeding order negotiations...");
-    for (const { order } of orders.filter((o) => o.order.status === "NEGOTIATING").slice(0, 8)) {
-      await db.orderNegotiation.create({ data: { orderId: order.id, proposedBy: order.customerId, proposedByType: "customer", proposedPrice: parseFloat(order.totalAmount.toString()) * 0.85, status: randomItem(["PENDING", "ACCEPTED", "REJECTED", "COUNTERED"]) as any, note: "Looking for a better deal" } });
-    }
-    for (let i = 0; i < 5; i++) {
-      const { order } = randomItem(orders);
-      await db.orderNegotiation.create({ data: { orderId: order.id, proposedBy: order.sellerId, proposedByType: "seller", proposedPrice: parseFloat(order.totalAmount.toString()) * 0.92, status: "COUNTERED", note: "Counter offer from seller" } });
-    }
 
     // 16b. Negotiation Sessions (5 per customer across all 4 customers)
     logger.info("Seeding negotiation sessions...");
     const negProducts = products.slice(0, 20);
-    const negStatuses = ["PENDING", "ACCEPTED", "REJECTED", "EXHAUSTED", "PENDING"];
+    const negStatuses = ["PENDING", "ACCEPTED", "REJECTED", "EXHAUSTED", "EXPIRED"];
     const negModes = ["AUTO", "MANUAL", "AUTO", "MANUAL", "AUTO"];
     for (const customer of customers) {
+      const usedSkuIds = new Set<string>();
       for (let i = 0; i < 5; i++) {
-        const product = randomItem(negProducts);
-        const sellerId = product.sellerId;
-        const skus = await db.productSKU.findMany({ where: { productId: product.id }, take: 1 });
-        const skuId = skus[0]?.id ?? "";
+        // Pick a product with an SKU not yet used for this customer (avoids unique constraint on PENDING/EXHAUSTED)
+        let product: any = null;
+        let sellerId = "";
+        let skuId = "";
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const candidate = randomItem(negProducts);
+          const candidateSkus = await db.productSKU.findMany({ where: { productId: candidate.id } });
+          const availableSku = candidateSkus.find((s) => !usedSkuIds.has(s.id));
+          if (availableSku) {
+            product = candidate;
+            sellerId = candidate.sellerId;
+            skuId = availableSku.id;
+            usedSkuIds.add(skuId);
+            break;
+          }
+        }
+        if (!product) continue;
         const mode = negModes[i] as any;
         const status = negStatuses[i] as any;
         const session = await db.negotiationSession.create({
           data: {
             customerId: customer.id, sellerId, productId: product.id, skuId,
+            orgId: null, formulaVersion: Math.random() > 0.5 ? "v2_gamma" : "v1_linear",
             quantity: randomInt(5, 50), mode, status, visibleTierPrice: parseFloat(product.price.toString()),
+            hiddenFloorPrice: parseFloat(product.price.toString()) * 0.8,
             round: mode === "AUTO" ? randomInt(1, 3) : 0,
             finalPrice: status === "ACCEPTED" ? parseFloat(product.price.toString()) * 0.9 : null,
             nudgeDueAt: status === "PENDING" ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null,
@@ -963,6 +984,7 @@ async function seedComprehensive() {
               data: {
                 sessionId: session.id, round: r,
                 offeredPrice: parseFloat(product.price.toString()) * (1 - r * 0.05),
+                customerPrice: parseFloat(product.price.toString()) * (1 - (r + 1) * 0.05),
                 response: r < numRounds ? randomItem(["ACCEPT", "REJECT"]) as any : null,
                 createdAt: randomDate(new Date("2024-10-01"), new Date()),
                 respondedAt: r < numRounds ? randomDate(new Date("2024-10-01"), new Date()) : null,
@@ -1053,35 +1075,30 @@ async function seedComprehensive() {
     }
 
     // 20b. Invoices & Purchase Orders (for delivered/confident orders)
+    // Use the real invoicing service so snapshots have the full shape
+    // (seller/buyer/items/etc.) the PDF renderer requires, instead of a
+    // hand-rolled stub that generatePdf() would crash on.
     logger.info("Seeding invoices & purchase orders...");
     for (const { order } of orders.filter((o) => o.order.status === "DELIVERED" || o.order.status === "SHIPPED").slice(0, 15)) {
-      const totalAmt = parseFloat(order.totalAmount.toString());
-      const taxAmt = totalAmt * 0.18;
-      const existingInvoice = await db.invoice.findUnique({ where: { orderId: order.id } });
-      if (!existingInvoice) {
-        await db.invoice.create({
-          data: {
-            invoiceNumber: `INV-${order.displayId ?? order.id}`,
-            orderId: order.id, sellerId: order.sellerId, buyerId: order.customerId,
-            issuedBy: adminUser.id, issuedByType: "seller",
-            snapshot: { order: { id: order.id, total: totalAmt } },
-            totalAmount: totalAmt, taxAmount: taxAmt, isProvisional: false,
-          }
+      try {
+        await invoicingService.generateInvoice(order.id, {
+          userId: adminUser.id,
+          sellerId: order.sellerId,
+          actorType: "seller",
         });
+      } catch (err: any) {
+        logger.warn({ err: err.message, orderId: order.id }, "Skipped seeding invoice for order");
       }
       // Purchase orders for some orders
       if (Math.random() > 0.5) {
-        const existingPO = await db.purchaseOrder.findUnique({ where: { orderId: order.id } });
-        if (!existingPO) {
-          await db.purchaseOrder.create({
-            data: {
-              poNumber: `PO-${order.displayId ?? order.id}`,
-              orderId: order.id, sellerId: order.sellerId, buyerId: order.customerId,
-              issuedBy: adminUser.id, issuedByType: "buyer",
-              snapshot: { order: { id: order.id, total: totalAmt } },
-              totalAmount: totalAmt,
-            }
+        try {
+          await invoicingService.generatePurchaseOrder(order.id, {
+            userId: adminUser.id,
+            sellerId: order.sellerId,
+            actorType: "seller",
           });
+        } catch (err: any) {
+          logger.warn({ err: err.message, orderId: order.id }, "Skipped seeding purchase order for order");
         }
       }
     }
@@ -1190,7 +1207,7 @@ async function seedComprehensive() {
     // 22d. Carts & Cart Items (1 cart per customer with 3-5 items)
     logger.info("Seeding carts...");
     for (const customer of customers) {
-      const cart = await db.cart.create({ data: { userId: customer.id, sellerId: randomItem([seller1.id, seller2.id]) } });
+      const cart = await db.cart.create({ data: { userId: customer.id, orgId: null, sellerId: randomItem([seller1.id, seller2.id]) } });
       const usedProductIds = new Set<string>();
       const itemCount = randomInt(3, 5);
       for (let i = 0; i < itemCount; i++) {
@@ -1230,6 +1247,123 @@ async function seedComprehensive() {
 
     // 23. Fix Permissions
     await fixSellerPermissions();
+
+    // 24. Customer Organization Permissions Catalog
+    logger.info("Seeding customer org permissions catalog...");
+    const orgPermDefs = [
+      { key: "view_org_cart", description: "View organization shared cart" },
+      { key: "edit_org_cart", description: "Add or modify items in org cart" },
+      { key: "place_order", description: "Place orders on behalf of organization" },
+      { key: "view_order_history", description: "View organization order history" },
+      { key: "manage_negotiations", description: "Manage negotiations for organization" },
+      { key: "invite_members", description: "Invite new members to organization" },
+      { key: "manage_roles", description: "Create and manage custom roles" },
+      { key: "remove_members", description: "Remove members from organization" },
+    ];
+    for (const perm of orgPermDefs) {
+      await db.customerOrgPermission.upsert({
+        where: { key: perm.key },
+        update: { description: perm.description },
+        create: perm,
+      });
+    }
+
+    // 25. Customer Organizations (1 org for first 2 customers)
+    logger.info("Seeding customer organizations...");
+    const orgPermIds = await db.customerOrgPermission.findMany();
+    const orgPermIdByKey = new Map(orgPermIds.map((p) => [p.key, p.id]));
+    const allPermIds = orgPermIds.map((p) => p.id);
+
+    for (let oi = 0; oi < 2 && oi < customers.length; oi++) {
+      const customer = customers[oi]!;
+      const org = await db.customerOrg.create({
+        data: {
+          name: `${customer.name?.split(" ")[0] ?? "Customer"} Industries Pvt Ltd`,
+          createdBy: customer.id,
+        },
+      });
+      // Admin role with all permissions
+      const adminRole = await db.customerOrgRole.create({
+        data: { orgId: org.id, name: "admin" },
+      });
+      await db.customerOrgRolePermission.createMany({
+        data: allPermIds.map((pid) => ({ roleId: adminRole.id, permissionId: pid })),
+        skipDuplicates: true,
+      });
+      // Buyer role with limited permissions
+      const buyerRole = await db.customerOrgRole.create({
+        data: { orgId: org.id, name: "buyer" },
+      });
+      const buyerPerms = ["view_org_cart", "edit_org_cart", "place_order", "view_order_history", "manage_negotiations"];
+      await db.customerOrgRolePermission.createMany({
+        data: buyerPerms.map((k) => ({ roleId: buyerRole.id, permissionId: orgPermIdByKey.get(k)! })).filter((x) => x.permissionId),
+        skipDuplicates: true,
+      });
+      // Add customer as admin member
+      await db.customerOrgMember.create({
+        data: { userId: customer.id, orgId: org.id, roleId: adminRole.id, isActive: true },
+      });
+      // Pending invite
+      await db.customerOrgInvite.create({
+        data: {
+          orgId: org.id, email: `invitee.${oi + 1}@example.com`, roleId: buyerRole.id,
+          invitedBy: customer.id, status: "PENDING",
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      }).catch(() => {});
+    }
+
+    // 26. Pricing Engine Config + Constants
+    logger.info("Seeding pricing engine config and constants...");
+    await db.pricingEngineConfig.upsert({
+      where: { id: "singleton" },
+      update: {},
+      create: {
+        id: "singleton",
+        stage: 0,
+        enableDemandDecay: false,
+        enableVolatility: false,
+        enableAdverseSelection: false,
+        enableDynamicHorizon: false,
+        enableRegimeAdj: false,
+        enableOFI: false,
+        enableRepeatMult: false,
+        enableCrossSkuDemand: false,
+        updatedBy: adminUser.id,
+      },
+    }).catch(() => {});
+
+    await db.pricingEngineConstants.upsert({
+      where: { id: "singleton" },
+      update: {},
+      create: {
+        id: "singleton",
+        updatedBy: adminUser.id,
+      },
+    }).catch(() => {});
+
+    // 27. Seller Negotiation Configs (1 per seller)
+    logger.info("Seeding seller negotiation configs...");
+    for (const seller of [seller1, seller2]) {
+      await db.sellerNegotiationConfig.create({
+        data: {
+          sellerId: seller.id,
+          category: null,
+          gammaBase: 0.5,
+          gammaMin: 0.2,
+          gammaMax: 0.8,
+          alpha: 0.3,
+          beta: 0.3,
+          delta: 0,
+          zeta: 0,
+          eta: 0,
+          tolerancePct: 0.03,
+          earlyExitMinRound: 2,
+          minImprovementPct: 0.005,
+          setBy: adminUser.id,
+        },
+      }).catch(() => {});
+    }
 
     logger.info("✅ Seed completed!");
     logger.info(`  Sellers: ${allSellers.length}  |  Shops: ${shops.length}  |  Products: ${products.length}`);
@@ -1315,7 +1449,7 @@ async function reindexSearch() {
     process.exit(1);
   }
   const provider = SearchIndexFactory.get();
-  await provider.ensureIndex();
+  await provider.recreateIndex();
   const approvedCount = await db.product.count({ where: { status: "APPROVED" } });
   console.log(`Reindexing search: ${approvedCount} APPROVED product(s) found in Postgres.\n`);
   let indexed = 0, failed = 0;

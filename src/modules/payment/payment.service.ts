@@ -72,7 +72,7 @@ export const paymentService = {
                 include: { payments: true },
             });
             if (!order) throw new Error("Order not found");
-            if (!["CONFIRMED", "NEGOTIATING"].includes(order.status)) {
+            if (!["CONFIRMED"].includes(order.status)) {
                 throw new Error("Order not in payable state");
             }
 
@@ -433,7 +433,7 @@ export const paymentService = {
         if (!order) throw new Error("Order not found");
 
         if (data.type === "ADVANCE") {
-            if (!["CONFIRMED", "NEGOTIATING"].includes(order.status)) {
+            if (!["CONFIRMED"].includes(order.status)) {
                 throw new Error("Order not in payable state");
             }
             const existingAdvance = order.payments.find((p) => p.type === "ADVANCE" && p.status !== "FAILED");

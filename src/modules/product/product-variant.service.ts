@@ -100,8 +100,6 @@ export const productVariantService = {
       where: { id: productId, sellerId },
     });
     if (!product) throw new Error("Product not found");
-    if (product.status === "APPROVED" || product.status === "LIVE")
-      throw new Error("Cannot modify approved product variants");
 
     const existing = await db.variantOption.findUnique({
       where: { productId_name: { productId, name: data.name } },
@@ -256,27 +254,37 @@ export const productVariantService = {
     });
     if (existing) throw new Error("SKU code already exists");
 
-    const allSkus = await db.productSKU.findMany({ where: { productId } });
-    const isDuplicate = allSkus.some((s) => {
-      const opts = s.options as Record<string, string>;
-      return (
-        JSON.stringify(sortObject(opts)) ===
-        JSON.stringify(sortObject(data.options))
-      );
-    });
-    if (isDuplicate)
-      throw new Error("A SKU with this option combination already exists");
+    const created = await db.$transaction(async (tx) => {
+      const allSkus = await tx.productSKU.findMany({ where: { productId } });
+      const isDuplicate = allSkus.some((s) => {
+        const opts = s.options as Record<string, string>;
+        return (
+          JSON.stringify(sortObject(opts)) ===
+          JSON.stringify(sortObject(data.options))
+        );
+      });
+      if (isDuplicate)
+        throw new Error("A SKU with this option combination already exists");
 
-    const created = await db.productSKU.create({
-      data: {
-        productId,
-        sku: data.sku,
-        price: data.price,
-        stock: data.stock,
-        minQuantity: data.minQuantity ?? 1,
-        options: data.options,
-      },
+      const isFirstSku = allSkus.length === 0;
+
+      const createdSku = await tx.productSKU.create({
+        data: {
+          productId,
+          sku: data.sku,
+          price: data.price,
+          stock: data.stock,
+          minQuantity: data.minQuantity ?? 1,
+          options: data.options,
+        },
+      });
+      if (isFirstSku) {
+        await tx.product.update({ where: { id: productId }, data: { stock: 0 } });
+      }
+
+      return createdSku;
     });
+
     syncProductSearchIndexInBackground(productId);
     return created;
   },
@@ -342,7 +350,7 @@ export const productVariantService = {
     return db.skuPriceTier.findMany({
       where: { skuId },
       orderBy: { minQty: "asc" },
-      select: { id: true, skuId: true, minQty: true, price: true, createdAt: true, updatedAt: true },
+      select: { id: true, skuId: true, minQty: true, maxQty: true, price: true, createdAt: true, updatedAt: true },
     });
   },
 
@@ -358,18 +366,25 @@ export const productVariantService = {
     sellerId: string,
     productId: string,
     skuId: string,
-    data: { minQty: number; price: number; hiddenFloorPrice?: number },
+    data: { minQty: number; maxQty?: number; price: number; hiddenFloorPrice?: number },
   ) {
     const product = await db.product.findFirst({ where: { id: productId, sellerId } });
     if (!product) throw new Error("Product not found");
     const sku = await db.productSKU.findFirst({ where: { id: skuId, productId } });
     if (!sku) throw new Error("SKU not found");
 
+    const existingTiers = await db.skuPriceTier.findMany({
+      where: { skuId },
+      select: { id: true, minQty: true, maxQty: true },
+    });
+    validateTierRange(existingTiers, data.minQty, data.maxQty ?? null);
+
     try {
       return await db.skuPriceTier.create({
         data: {
           skuId,
           minQty: data.minQty,
+          maxQty: data.maxQty,
           price: data.price,
           hiddenFloorPrice: data.hiddenFloorPrice,
         },
@@ -385,7 +400,7 @@ export const productVariantService = {
     productId: string,
     skuId: string,
     tierId: string,
-    data: { minQty?: number; price?: number; hiddenFloorPrice?: number | null },
+    data: { minQty?: number; maxQty?: number | null; price?: number; hiddenFloorPrice?: number | null },
   ) {
     const product = await db.product.findFirst({ where: { id: productId, sellerId } });
     if (!product) throw new Error("Product not found");
@@ -393,6 +408,14 @@ export const productVariantService = {
     if (!sku) throw new Error("SKU not found");
     const tier = await db.skuPriceTier.findFirst({ where: { id: tierId, skuId } });
     if (!tier) throw new Error("Price tier not found");
+
+    const existingTiers = await db.skuPriceTier.findMany({
+      where: { skuId },
+      select: { id: true, minQty: true, maxQty: true },
+    });
+    const effectiveMinQty = data.minQty ?? tier.minQty;
+    const effectiveMaxQty = data.maxQty !== undefined ? data.maxQty : tier.maxQty;
+    validateTierRange(existingTiers, effectiveMinQty, effectiveMaxQty, tierId);
 
     try {
       return await db.skuPriceTier.update({ where: { id: tierId }, data });
@@ -416,9 +439,12 @@ export const productVariantService = {
 
 const TIER_TRIGGER_ERROR_PREFIXES = [
   "SkuPriceTier.minQty must be >= 2",
+  "Tier maxQty (",
   "Tier price (",
   "Tier hidden floor price (",
   "Tier hidden floor (",
+  "Tier range [",
+  "Tier at minQty=",
   "Cannot set SKU price (",
 ];
 
@@ -426,6 +452,28 @@ function translateTierTriggerError(err: any): Error {
   const message = String(err?.message ?? "");
   const matched = TIER_TRIGGER_ERROR_PREFIXES.find((prefix) => message.includes(prefix));
   return matched ? new Error(message.slice(message.indexOf(matched))) : err;
+}
+function validateTierRange(
+  existingTiers: { id: string; minQty: number; maxQty: number | null }[],
+  minQty: number,
+  maxQty: number | null,
+  excludeTierId?: string,
+): void {
+  const others = existingTiers.filter((t) => t.id !== excludeTierId);
+
+  const next = others
+    .filter((t) => t.minQty > minQty)
+    .sort((a, b) => a.minQty - b.minQty)[0];
+  if (maxQty !== null && next && maxQty >= next.minQty) {
+    throw new Error(`Tier range [${minQty}, ${maxQty}] overlaps the next tier starting at minQty=${next.minQty}`);
+  }
+
+  const prev = others
+    .filter((t) => t.minQty < minQty)
+    .sort((a, b) => b.minQty - a.minQty)[0];
+  if (prev && prev.maxQty !== null && prev.maxQty >= minQty) {
+    throw new Error(`Tier at minQty=${minQty} overlaps the previous tier's range ending at maxQty=${prev.maxQty}`);
+  }
 }
 
 type VariantWithValues = {
@@ -437,8 +485,11 @@ async function validateSkuOptions(
   variants: VariantWithValues[],
   options: Record<string, string>,
 ): Promise<void> {
-  if (!variants.length)
-    throw new Error("Product has no variant options defined");
+  if (!variants.length) {
+    if (Object.keys(options).length > 0)
+      throw new Error("Product has no variant options defined");
+    return;
+  }
 
   const variantMap = new Map(
     variants.map((v) => [v.name, new Set(v.values.map((val) => val.value))]),

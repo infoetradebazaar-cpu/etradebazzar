@@ -113,11 +113,12 @@ export const customerService = {
   async listMyOrders(
     userId: string,
     filters: { status?: string; page?: number; limit?: number },
+    orgId?: string | null,
   ) {
     const page = filters.page ?? 1;
     const limit = Math.min(filters.limit ?? 20, 100);
 
-    const where: any = { customerId: userId };
+    const where: any = orgId ? { orgId } : { customerId: userId, orgId: null };
     if (filters.status) where.status = filters.status;
 
     const [data, total] = await Promise.all([

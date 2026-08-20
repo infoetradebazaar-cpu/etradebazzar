@@ -7,12 +7,14 @@ export async function checkNegotiationNudges(): Promise<void> {
 
   const due = await db.negotiationSession.findMany({
     where: {
-      status: "REJECTED",
-      mode: "AUTO",
       nudgeDueAt: { lt: now },
       nudgeSentAt: null,
+      OR: [
+        { status: "REJECTED", mode: "AUTO" },
+        { status: "EXPIRED", mode: "MANUAL" },
+      ],
     },
-    select: { id: true, customerId: true, productId: true, quantity: true },
+    select: { id: true, customerId: true, productId: true, quantity: true, mode: true, visibleTierPrice: true },
     take: 500,
   });
 
@@ -26,26 +28,38 @@ export async function checkNegotiationNudges(): Promise<void> {
     if (claimed.count === 0) continue;
 
     try {
-      const [customer, lastRound, product] = await Promise.all([
+      const [customer, product] = await Promise.all([
         db.user.findUnique({ where: { id: session.customerId }, select: { email: true, name: true } }),
-        db.negotiationRound.findFirst({
-          where: { sessionId: session.id },
-          orderBy: { round: "desc" },
-          select: { offeredPrice: true },
-        }),
         db.product.findUnique({ where: { id: session.productId }, select: { name: true } }),
       ]);
       if (!customer) continue;
 
-      await notificationService.negotiationExpiredNudge({
-        userId: session.customerId,
-        email: customer.email,
-        customerName: customer.name ?? "there",
-        productName: product?.name ?? "your product",
-        quantity: session.quantity,
-        lastOfferedPrice: lastRound ? Number(lastRound.offeredPrice) : 0,
-        sessionId: session.id,
-      });
+      if (session.mode === "MANUAL") {
+        await notificationService.manualNegotiationExpiredNudge({
+          userId: session.customerId,
+          email: customer.email,
+          customerName: customer.name ?? "there",
+          productName: product?.name ?? "your product",
+          quantity: session.quantity,
+          visiblePrice: Number(session.visibleTierPrice),
+          sessionId: session.id,
+        });
+      } else {
+        const lastRound = await db.negotiationRound.findFirst({
+          where: { sessionId: session.id },
+          orderBy: { round: "desc" },
+          select: { offeredPrice: true },
+        });
+        await notificationService.negotiationExpiredNudge({
+          userId: session.customerId,
+          email: customer.email,
+          customerName: customer.name ?? "there",
+          productName: product?.name ?? "your product",
+          quantity: session.quantity,
+          lastOfferedPrice: lastRound ? Number(lastRound.offeredPrice) : 0,
+          sessionId: session.id,
+        });
+      }
       sent++;
     } catch (err: any) {
       logger.error({ err: err.message, sessionId: session.id }, "Failed to send negotiation nudge email");

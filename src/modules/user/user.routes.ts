@@ -15,4 +15,12 @@ router.get(
   userController.listUsers,
 );
 
+router.get(
+  "/:userId",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_USERS_VIEW]),
+  userController.getUserById,
+);
+
 export default router;

@@ -62,7 +62,6 @@ export const productService = {
     sellerId: string,
     actorId: string,
     data: {
-      shopId?: string;
       name: string;
       description?: string;
       price?: number;
@@ -98,18 +97,9 @@ export const productService = {
 
     try {
       return await withTenantScope(async (tx) => {
-        if (data.shopId) {
-          const shop = await tx.shop.findFirst({
-            where: { id: data.shopId, sellerId },
-          });
-          if (!shop) throw new Error("Shop not found");
-          if (shop.status !== "APPROVED") throw new Error("Shop not approved");
-        }
-
         const product = await tx.product.create({
           data: {
             sellerId,
-            shopId: data.shopId ?? null,
             categoryId: data.categoryId,
             displayId,
             name: data.name,
@@ -142,7 +132,7 @@ export const productService = {
             action: "PRODUCT_CREATED",
             entityType: "product",
             entityId: product.id,
-            metadata: { name: data.name, shopId: data.shopId ?? null },
+            metadata: { name: data.name },
           },
         });
 
@@ -249,9 +239,15 @@ export const productService = {
         where: { id: productId, sellerId },
         include: {
           images: { orderBy: { order: "asc" } },
-          skus: true,
+          skus: {
+            include: {
+              priceTiers: {
+                orderBy: { minQty: "asc" },
+                select: { id: true, skuId: true, minQty: true, maxQty: true, price: true, createdAt: true, updatedAt: true },
+              },
+            },
+          },
           variants: { include: { values: true } },
-          shop: { select: { id: true, name: true, slug: true } },
           category: { select: { id: true, name: true } },
         },
       }),
@@ -277,6 +273,10 @@ export const productService = {
       skus: product.skus.map((s) => ({
         ...s,
         price: Number(s.price),
+        priceTiers: (s.priceTiers ?? []).map((t) => ({
+          ...t,
+          price: Number(t.price),
+        })),
       })),
     };
   },
@@ -287,16 +287,15 @@ export const productService = {
         where: { id: productId },
         include: {
           images: { orderBy: { order: "asc" } },
-          skus: true,
-          variants: { include: { values: true } },
-          shop: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              seller: { select: { id: true, name: true, businessName: true } },
+          skus: {
+            include: {
+              priceTiers: {
+                orderBy: { minQty: "asc" },
+                select: { id: true, skuId: true, minQty: true, maxQty: true, price: true, createdAt: true, updatedAt: true },
+              },
             },
           },
+          variants: { include: { values: true } },
           category: { select: { id: true, name: true } },
         },
       }),
@@ -322,6 +321,10 @@ export const productService = {
       skus: product.skus.map((s) => ({
         ...s,
         price: Number(s.price),
+        priceTiers: (s.priceTiers ?? []).map((t) => ({
+          ...t,
+          price: Number(t.price),
+        })),
       })),
     };
   },
@@ -329,9 +332,9 @@ export const productService = {
   async listProducts(
     sellerId: string,
     filters: {
-      shopId?: string;
       status?: string;
       search?: string;
+      category?: string;
       page?: number;
       limit?: number;
     },
@@ -340,7 +343,6 @@ export const productService = {
     const limit = filters.limit ?? 20;
 
     const where: any = { sellerId };
-    if (filters.shopId) where.shopId = filters.shopId;
     if (filters.status) {
       const STATUS_MAP: Record<string, string> = {
         pending: "PENDING_APPROVAL",
@@ -351,16 +353,23 @@ export const productService = {
       };
       where.status = STATUS_MAP[filters.status] ?? filters.status.toUpperCase();
     }
-    if (filters.search)
-      where.name = { contains: filters.search, mode: "insensitive" };
+    if (filters.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: "insensitive" } },
+        { sku: { contains: filters.search, mode: "insensitive" } },
+        { displayId: { contains: filters.search, mode: "insensitive" } },
+      ];
+    }
+    if (filters.category) {
+      where.category = { name: { contains: filters.category, mode: "insensitive" } };
+    }
 
-    const { data, total } = await withTenantScope(async (tx) => {
+    const { data, total, countsMap } = await withTenantScope(async (tx) => {
       const data = await tx.product.findMany({
         where,
         include: {
           images: { orderBy: { order: "asc" } },
           skus: true,
-          shop: { select: { id: true, name: true } },
           category: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -368,7 +377,18 @@ export const productService = {
         take: limit,
       });
       const total = await tx.product.count({ where });
-      return { data, total };
+
+      const statusCounts = await tx.product.groupBy({
+        by: ["status"],
+        where: { sellerId },
+        _count: { status: true },
+      });
+      const countsMap: Record<string, number> = {};
+      for (const sc of statusCounts) {
+        countsMap[sc.status] = sc._count.status;
+      }
+
+      return { data, total, countsMap };
     });
 
     const withSignedImages = await Promise.all(
@@ -387,7 +407,7 @@ export const productService = {
 
     return {
       data: mapped,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 },
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 1, statusCounts: countsMap },
     };
   },
 
@@ -579,12 +599,6 @@ export const productService = {
           status: true,
           createdAt: true,
           sellerId: true,
-          shop: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
         },
         orderBy: { createdAt: "asc" },
       }),
@@ -650,12 +664,6 @@ export const productService = {
           status: true,
           createdAt: true,
           sellerId: true,
-          shop: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
@@ -713,9 +721,8 @@ export const productService = {
     actorId: string,
     data: {
       productIds: string[];
-      action: "change_status" | "assign_shop" | "delete";
+      action: "change_status" | "delete";
       status?: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
-      shopId?: string;
     },
   ) {
     const searchSyncCandidates: string[] = [];
@@ -738,19 +745,6 @@ export const productService = {
             await tx.product.update({
               where: { id: productId },
               data: { status: data.status },
-            });
-            searchSyncCandidates.push(productId);
-          } else if (data.action === "assign_shop" && data.shopId) {
-            const shop = await tx.shop.findFirst({
-              where: { id: data.shopId, sellerId },
-            });
-            if (!shop) {
-              failed++;
-              continue;
-            }
-            await tx.product.update({
-              where: { id: productId },
-              data: { shopId: data.shopId },
             });
             searchSyncCandidates.push(productId);
           } else if (data.action === "delete") {
@@ -794,10 +788,10 @@ export const productService = {
 
     return result;
   },
-  async exportProductsCsv(sellerId: string, shopId?: string) {
+  async exportProductsCsv(sellerId: string) {
     return withTenantScope((tx) =>
       tx.product.findMany({
-        where: { sellerId, ...(shopId && { shopId }) },
+        where: { sellerId },
         select: {
           id: true,
           displayId: true,
@@ -807,7 +801,6 @@ export const productService = {
           status: true,
           sku: true,
           createdAt: true,
-          shop: { select: { name: true } },
           category: { select: { name: true } },
         },
         orderBy: { createdAt: "desc" },

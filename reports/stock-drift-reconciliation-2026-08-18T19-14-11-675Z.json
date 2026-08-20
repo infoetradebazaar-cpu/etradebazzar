@@ -1,0 +1,329 @@
+{
+  "generatedAt": "2026-08-18T19:14:11.675Z",
+  "driftRows": [
+    {
+      "productId": "cmsz1bt1500gng3cpqqe0rsp3",
+      "productName": "Casual Dress Basic",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 499,
+      "skuCount": 3,
+      "totalSkuStock": 131,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt8900k4g3cpoyflcyn4",
+      "productName": "Hiking Backpack Pro",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 499,
+      "skuCount": 1,
+      "totalSkuStock": 74,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btas00lxg3cpleingg87",
+      "productName": "Foundation Pro",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 496,
+      "skuCount": 1,
+      "totalSkuStock": 92,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bthg00pug3cpubj9bh2s",
+      "productName": "Omega-3 Capsules Basic",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 476,
+      "skuCount": 1,
+      "totalSkuStock": 7,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btqc00vng3cp69935r2z",
+      "productName": "Dry Shampoo Premium",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 474,
+      "skuCount": 1,
+      "totalSkuStock": 14,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btfi00osg3cpv92nszeb",
+      "productName": "Think and Grow Rich Premium",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 442,
+      "skuCount": 1,
+      "totalSkuStock": 64,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btdd00nfg3cp99kq9qi0",
+      "productName": "Wireless Charger Elite",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 391,
+      "skuCount": 3,
+      "totalSkuStock": 242,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bsy600fkg3cp3ffrm0ar",
+      "productName": "Study Table Elite",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 383,
+      "skuCount": 3,
+      "totalSkuStock": 89,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btac00lkg3cp1m4gumu6",
+      "productName": "Jump Rope Elite",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 356,
+      "skuCount": 1,
+      "totalSkuStock": 64,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bthu00q2g3cp7yrr4l0j",
+      "productName": "Study Table Basic",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 344,
+      "skuCount": 3,
+      "totalSkuStock": 172,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt7w00jwg3cpemz1r2qe",
+      "productName": "1984 Premium",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 320,
+      "skuCount": 1,
+      "totalSkuStock": 84,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btet00o8g3cpqtmnhfdm",
+      "productName": "Lenovo ThinkPad E15 Plus",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 318,
+      "skuCount": 3,
+      "totalSkuStock": 251,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt8u00kig3cpf8mpov2i",
+      "productName": "Cotton T-Shirt Premium",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 316,
+      "skuCount": 3,
+      "totalSkuStock": 211,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt6f00j3g3cpcr7p0tf1",
+      "productName": "iPhone 15 Elite",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 309,
+      "skuCount": 3,
+      "totalSkuStock": 227,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt4300hyg3cpelwu0l87",
+      "productName": "Argan Hair Oil Elite",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 301,
+      "skuCount": 1,
+      "totalSkuStock": 18,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btj000qxg3cp9u8d4vno",
+      "productName": "Air Filter Premium",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 268,
+      "skuCount": 1,
+      "totalSkuStock": 18,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btjf00r6g3cp9x97r7az",
+      "productName": "Bookshelf Premium",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 264,
+      "skuCount": 3,
+      "totalSkuStock": 112,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btrm00wgg3cp7avdfyyg",
+      "productName": "Football Plus",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 261,
+      "skuCount": 1,
+      "totalSkuStock": 31,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btlc00sag3cpdv25hip6",
+      "productName": "Conditioner Elite",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 244,
+      "skuCount": 1,
+      "totalSkuStock": 24,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt7b00jng3cpf2s92068",
+      "productName": "Pulse Oximeter Elite",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 225,
+      "skuCount": 1,
+      "totalSkuStock": 36,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btm900stg3cprhemwlcf",
+      "productName": "Adjustable Dumbbells Premium",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 219,
+      "skuCount": 1,
+      "totalSkuStock": 91,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btoe00ucg3cpg4gi2znm",
+      "productName": "Foundation Pro",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 209,
+      "skuCount": 1,
+      "totalSkuStock": 68,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt0e00geg3cpjdo66fdx",
+      "productName": "1984 Basic",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 189,
+      "skuCount": 1,
+      "totalSkuStock": 16,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btn900tig3cpri8i8562",
+      "productName": "Photo Frame Premium",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 173,
+      "skuCount": 3,
+      "totalSkuStock": 105,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt5700ihg3cp1bpw0nml",
+      "productName": "Sapiens Premium",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 172,
+      "skuCount": 1,
+      "totalSkuStock": 21,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btb600m5g3cpqvwsf912",
+      "productName": "Lehenga Choli Pro",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 156,
+      "skuCount": 3,
+      "totalSkuStock": 149,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btoq00ukg3cppl11934t",
+      "productName": "Physics Textbook Basic",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 128,
+      "skuCount": 1,
+      "totalSkuStock": 78,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btqs00vwg3cpw982rrbc",
+      "productName": "Ceramic Vase Basic",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 113,
+      "skuCount": 3,
+      "totalSkuStock": 195,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btc700mwg3cp824zuzkr",
+      "productName": "Pressure Cooker Pro",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 110,
+      "skuCount": 3,
+      "totalSkuStock": 184,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt5s00iqg3cpi1g2zadp",
+      "productName": "Cricket Bat Pro",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 99,
+      "skuCount": 1,
+      "totalSkuStock": 100,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btk900rqg3cphohyn08v",
+      "productName": "Think and Grow Rich Elite",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 87,
+      "skuCount": 1,
+      "totalSkuStock": 82,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btgi00pbg3cpf8rg7w9n",
+      "productName": "Harry Potter Box Set Plus",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 79,
+      "skuCount": 1,
+      "totalSkuStock": 34,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bsxb00fbg3cphr86y4jh",
+      "productName": "Toner Mist Premium",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 74,
+      "skuCount": 1,
+      "totalSkuStock": 88,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bt3i00hqg3cpit2h6xk5",
+      "productName": "Pre-Workout Plus",
+      "sellerId": "cmsz1brdw0048g3cpnb9h2o3j",
+      "productStock": 36,
+      "skuCount": 1,
+      "totalSkuStock": 93,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1btpk00v3g3cpsg3itspz",
+      "productName": "Phone Case Premium",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 31,
+      "skuCount": 3,
+      "totalSkuStock": 178,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsz1bted00o0g3cpopc3o0rp",
+      "productName": "Physics Textbook Plus",
+      "sellerId": "cmsz1bre5004ag3cpbevy8n1m",
+      "productStock": 24,
+      "skuCount": 1,
+      "totalSkuStock": 9,
+      "allSkusZero": false
+    }
+  ]
+}

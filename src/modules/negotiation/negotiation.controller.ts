@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { autoNegotiationService } from "./auto-negotiation.service";
+import { InsufficientStockError } from "./negotiation-order.helper";
 import { logger } from "../../utils/logger";
 
 const CLIENT_ERRORS = [
@@ -12,6 +13,7 @@ const CLIENT_ERRORS = [
   "This negotiation is already resolved",
   "Negotiation round not found",
   "Delivery address is required",
+  "Your offer meets our price",
   "This round has already been responded to",
   "Product not found",
 ];
@@ -32,6 +34,7 @@ export const negotiationController = {
         skuId,
         quantity,
         customerPrice,
+        req.customerOrg?.orgId,
       );
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {
@@ -73,6 +76,9 @@ export const negotiationController = {
       return res.json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "Respond to negotiation failed");
+      if (error instanceof InsufficientStockError) {
+        return res.status(409).json({ success: false, error: error.message, code: "INSUFFICIENT_STOCK" });
+      }
       if (isClientError(error.message)) {
         return res.status(400).json({ success: false, error: error.message });
       }

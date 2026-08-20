@@ -76,7 +76,7 @@ export const customerController = {
             const { status, page, limit } = req.query as Record<string, string>;
             const result = await customerService.listMyOrders(userId, {
                 status, page: page ? Number(page) : undefined, limit: limit ? Number(limit) : undefined,
-            });
+            }, req.customerOrg?.orgId);
             return res.json({ success: true, data: result.data, meta: result.meta });
         } catch (error: any) {
             return res.status(500).json({ success: false, error: "Internal server error" });

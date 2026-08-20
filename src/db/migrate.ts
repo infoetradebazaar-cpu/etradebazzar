@@ -12,6 +12,9 @@ async function runRLSMigration() {
         DROP POLICY IF EXISTS tenant_isolation ON products;
         DROP POLICY IF EXISTS tenant_isolation ON seller_members;
         DROP POLICY IF EXISTS tenant_isolation ON seller_roles;
+        DROP POLICY IF EXISTS customer_org_isolation ON carts;
+        DROP POLICY IF EXISTS customer_org_isolation ON orders;
+        DROP POLICY IF EXISTS customer_org_isolation ON negotiation_sessions;
       END $$;
     `);
 

@@ -156,6 +156,20 @@ export const otpLimiter = createRateLimiter({
     failClosed: true,
 });
 
+export const mfaLoginLimiter = createRateLimiter({
+    ...getConfig("MFA_LOGIN", { windowSecs: 300, max: 8 }),
+    keyPrefix: "mfa-login",
+    keyExtractor: (req) => (req.body?.challengeId ? String(req.body.challengeId) : getIp(req)),
+    failClosed: true,
+});
+
+export const passwordResetLimiter = createRateLimiter({
+    ...getConfig("PASSWORD_RESET", { windowSecs: 900, max: 3 }),
+    keyPrefix: "pwreset",
+    keyExtractor: getAuthIdentifier,
+    failClosed: true,
+});
+
 export const verificationCostLimiter = createRateLimiter({
     ...getConfig("VERIFICATION_COST", { windowSecs: 60, max: 5 }),
     keyPrefix: "verification-cost",

@@ -1,3 +1,5 @@
+import { getBankBrand, type BankBrand } from "./bank.registry";
+
 export function validateAccountNumber(accountNumber: string): { valid: boolean; error?: string } {
     if (!/^\d+$/.test(accountNumber)) {
         return { valid: false, error: "Account number must contain only digits" };
@@ -23,6 +25,7 @@ export async function lookupIfsc(ifsc: string): Promise<{
     bankName?: string;
     branch?: string;
     message: string;
+    bankBrand?: BankBrand;
 }> {
     const formatCheck = validateIfscFormat(ifsc);
     if (!formatCheck.valid) {
@@ -40,6 +43,7 @@ export async function lookupIfsc(ifsc: string): Promise<{
             bankName: data.BANK,
             branch: data.BRANCH,
             message: "IFSC verified successfully",
+            bankBrand: getBankBrand(ifsc, data.BANK),
         };
     } catch {
         return { verified: false, message: "IFSC lookup service unavailable" };

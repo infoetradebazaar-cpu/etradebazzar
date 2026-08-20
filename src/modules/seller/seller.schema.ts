@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { strongPasswordSchema } from "../../utils/password-policy";
 
 const addressSchema = z.object({
   street: z.string().min(5),
@@ -11,7 +12,7 @@ export const registerSellerSchema = z.object({
   body: z.object({
     name: z.string().min(2).max(100),
     email: z.string().email(),
-    password: z.string().min(8),
+    password: strongPasswordSchema,
     phone: z.string().regex(/^\+?[6-9]\d{9}$/, "Invalid phone number"),
     businessName: z.string().min(2).max(100),
     businessType: z.enum(["INDIVIDUAL", "COMPANY", "PARTNERSHIP"]),
@@ -100,7 +101,7 @@ export const acceptInviteSchema = z.object({
   body: z.object({
     token: z.string(),
     name: z.string().min(2).max(100),
-    password: z.string().min(8),
+    password: strongPasswordSchema,
     phone: z.string().regex(/^\+?[6-9]\d{9}$/, "Invalid phone number"),
     businessName: z.string().min(2).max(100),
     businessType: z.enum(["INDIVIDUAL", "COMPANY", "PARTNERSHIP"]),
@@ -195,6 +196,6 @@ export const acceptTeamInviteSchema = z.object({
   body: z.object({
     token: z.string(),
     name: z.string().min(2),
-    password: z.string().min(8),
+    password: strongPasswordSchema,
   }),
 });

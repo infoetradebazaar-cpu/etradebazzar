@@ -2,6 +2,7 @@ import { db } from "./index";
 import { logger } from "../utils/logger";
 import bcrypt from "bcryptjs";
 import { seedPlatformPermissions } from "../lib/permission/permission.service";
+import { seedCustomerOrgPermissions } from "../lib/permission/customer-org-permission.service";
 import crypto from "crypto";
 
 async function seed() {
@@ -27,6 +28,7 @@ async function seed() {
 
   await db.$transaction(async (tx) => {
     await seedPlatformPermissions(tx);
+    await seedCustomerOrgPermissions(tx);
 
     const role = await tx.platformRole.upsert({
       where: { name: "super_admin" },

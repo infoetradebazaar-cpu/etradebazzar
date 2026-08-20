@@ -40,72 +40,122 @@ export const analyticsService = {
     from?: string,
     to?: string,
   ) {
-    if (from && to) {
-      return db.$queryRaw<any[]>`
+    const rows = from && to
+      ? await db.$queryRaw<any[]>`
                 SELECT * FROM mv_seller_daily_revenue
                 WHERE seller_id = ${sellerId}
                   AND date >= ${new Date(from)}
                   AND date <= ${new Date(to)}
                 ORDER BY date ASC
-            `;
-    }
-
-    const since = period ? getPeriodDate(period) : getPeriodDate("30d");
-    return db.$queryRaw<any[]>`
+            `
+      : await db.$queryRaw<any[]>`
             SELECT * FROM mv_seller_daily_revenue
             WHERE seller_id = ${sellerId}
-              AND date >= ${since}
+              AND date >= ${period ? getPeriodDate(period) : getPeriodDate("30d")}
             ORDER BY date ASC
         `;
+
+    return rows.map((r) => ({
+      date: r.date instanceof Date ? r.date.toISOString().slice(0, 10) : r.date,
+      revenue: Number(r.gross_revenue) || 0,
+      orders: Number(r.total_orders) || 0,
+    }));
   },
 
   async getSellerTopProducts(sellerId: string, limit = 10) {
     const cappedLimit = Math.min(limit, MAX_LIMIT);
-    return db.$queryRaw<any[]>`
+    const rows = await db.$queryRaw<any[]>`
             SELECT * FROM mv_seller_product_stats
             WHERE seller_id = ${sellerId}
             ORDER BY total_revenue DESC
             LIMIT ${cappedLimit}
         `;
+
+    return rows.map((r) => {
+      const totalRevenue = Number(r.total_revenue) || 0;
+      const totalOrders = Number(r.distinct_orders) || 0;
+      return {
+        productId: r.product_id,
+        productName: r.product_name,
+        totalRevenue,
+        totalOrders,
+        averageOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+      };
+    });
   },
 
   async getSellerReturnRate(sellerId: string) {
-    const result = await db.$queryRaw<any[]>`
-            SELECT
-                COUNT(DISTINCT o.id)::int           AS total_delivered,
-                COUNT(DISTINCT rr.id)::int          AS total_returns,
-                CASE
-                    WHEN COUNT(DISTINCT o.id) > 0
-                    THEN ROUND(
-                        COUNT(DISTINCT rr.id)::numeric /
-                        COUNT(DISTINCT o.id)::numeric * 100, 2
-                    )
-                    ELSE 0
-                END                                 AS return_rate_pct
+    const [deliveredResult, returnsByStatus] = await Promise.all([
+      db.$queryRaw<any[]>`
+            SELECT COUNT(*)::int AS total_delivered
             FROM orders o
-            LEFT JOIN return_requests rr ON rr.order_id = o.id
-            WHERE o.seller_id = ${sellerId}
+            WHERE o."sellerId" = ${sellerId}
               AND o.status = 'DELIVERED'
-        `;
-    return result[0] ?? null;
+        `,
+      db.$queryRaw<any[]>`
+            SELECT rr.status, COUNT(*)::int AS count
+            FROM return_requests rr
+            JOIN orders o ON o.id = rr."orderId"
+            WHERE o."sellerId" = ${sellerId}
+            GROUP BY rr.status
+        `,
+    ]);
+
+    const totalDelivered = Number(deliveredResult[0]?.total_delivered) || 0;
+    const counts: Record<string, number> = {};
+    for (const row of returnsByStatus) counts[row.status] = Number(row.count) || 0;
+
+    const totalReturns = Object.values(counts).reduce((sum, c) => sum + c, 0);
+    const pendingReturns = counts["PENDING"] ?? 0;
+    const rejectedReturns = counts["REJECTED"] ?? 0;
+    const approvedReturns =
+      (counts["APPROVED"] ?? 0) + (counts["PICKED_UP"] ?? 0) + (counts["COMPLETED"] ?? 0);
+
+    return {
+      totalReturns,
+      returnRate:
+        totalDelivered > 0
+          ? Math.round((totalReturns / totalDelivered) * 10000) / 100
+          : 0,
+      approvedReturns,
+      rejectedReturns,
+      pendingReturns,
+    };
   },
 
   async getSellerAnalytics(
     sellerId: string,
-    period?: Period,
-    from?: string,
-    to?: string,
+    _period?: Period,
+    _from?: string,
+    _to?: string,
   ) {
-    const [overview, dailyRevenue, topProducts, returnRate] = await Promise.all(
-      [
+    const [overview, returnMetrics, confirmedOrders, shippedOrders, totalProducts, activeProducts] =
+      await Promise.all([
         this.getSellerOverview(sellerId),
-        this.getSellerDailyRevenue(sellerId, period, from, to),
-        this.getSellerTopProducts(sellerId),
         this.getSellerReturnRate(sellerId),
-      ],
-    );
+        db.order.count({ where: { sellerId, status: "CONFIRMED" } }),
+        db.order.count({ where: { sellerId, status: "SHIPPED" } }),
+        db.product.count({ where: { sellerId } }),
+        db.product.count({ where: { sellerId, status: "LIVE" } }),
+      ]);
 
-    return { overview, dailyRevenue, topProducts, returnRate };
+    const totalOrders = Number(overview?.total_orders) || 0;
+    const totalRevenue = Number(overview?.gross_revenue) || 0;
+
+    return {
+      totalOrders,
+      totalRevenue,
+      averageOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+      totalProducts,
+      activeProducts,
+      pendingOrders: Number(overview?.pending_orders) || 0,
+      confirmedOrders,
+      shippedOrders,
+      deliveredOrders: Number(overview?.delivered_orders) || 0,
+      cancelledOrders: Number(overview?.cancelled_orders) || 0,
+      returnRate: returnMetrics.returnRate,
+      returnCount: returnMetrics.totalReturns,
+    };
   },
 
   // Platform Analytics
@@ -113,13 +163,12 @@ export const analyticsService = {
   async getPlatformOverview() {
     const result = await db.$queryRaw<any[]>`
             SELECT
-                SUM(gmv)                AS total_gmv,
-                SUM(total_commission)   AS total_commission,
-                SUM(total_orders)::int  AS total_orders,
-                SUM(delivered_orders)::int AS delivered_orders,
+                COALESCE(SUM(gmv) FILTER (WHERE status = 'APPROVED'), 0)              AS total_gmv,
+                COALESCE(SUM(total_commission) FILTER (WHERE status = 'APPROVED'), 0) AS total_commission,
+                COALESCE(SUM(total_orders) FILTER (WHERE status = 'APPROVED'), 0)::int AS total_orders,
+                COALESCE(SUM(delivered_orders) FILTER (WHERE status = 'APPROVED'), 0)::int AS delivered_orders,
                 COUNT(*)::int           AS total_sellers
             FROM mv_platform_seller_stats
-            WHERE status = 'APPROVED'
         `;
     return result[0] ?? null;
   },

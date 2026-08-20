@@ -14,13 +14,11 @@ export interface SearchProductDocument {
   categoryName: string;
   categoryPath: string[];
   sellerId: string;
-  shopId: string;
-  shopName: string;
   imageKey: string | null;
   attributes: SearchProductAttribute[];
   createdAt: string;
 }
-
+// MAQ update pending in the searchSort
 export type SearchSort = "relevance" | "price_asc" | "price_desc" | "newest";
 
 export interface SearchFilters {
@@ -29,7 +27,6 @@ export interface SearchFilters {
   minPrice?: number;
   maxPrice?: number;
   sellerId?: string;
-  shopId?: string;
   attributes?: Record<string, string[]>;
 }
 
@@ -60,6 +57,7 @@ export interface CategoryCounts {
 
 export interface SearchIndexProvider {
   ensureIndex(): Promise<void>;
+  recreateIndex(): Promise<void>;
   indexProduct(doc: SearchProductDocument): Promise<void>;
   deleteProduct(productId: string): Promise<void>;
   search(query: SearchQuery): Promise<SearchResult>;

@@ -8,11 +8,17 @@ export const myNegotiationService = {
     actorId: string,
     actorType: ActorType,
     filters: { status?: string; page?: number; limit?: number },
+    orgId?: string | null,
   ) {
     const page = Math.max(1, filters.page ?? 1);
     const limit = Math.min(100, Math.max(1, filters.limit ?? 20));
 
-    const where: any = actorType === "customer" ? { customerId: actorId } : { sellerId: actorId };
+    const where: any =
+      actorType === "customer"
+        ? orgId
+          ? { orgId }
+          : { customerId: actorId, orgId: null }
+        : { sellerId: actorId };
     if (filters.status) where.status = filters.status;
 
     const [sessions, total] = await Promise.all([

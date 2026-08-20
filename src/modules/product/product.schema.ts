@@ -7,7 +7,6 @@ const detectedFileTypeEnum = z.enum([
 
 export const createProductSchema = z.object({
   body: z.object({
-    shopId: z.string().optional(),
     name: z.string().min(2).max(200),
     description: z.string().optional(),
     specification: z.string().max(50000).optional(),
@@ -75,9 +74,9 @@ export const submitForReviewSchema = z.object({
 
 export const listProductsSchema = z.object({
   query: z.object({
-    shopId: z.string().optional(),
     status: z.string().optional(),
     search: z.string().optional(),
+    category: z.string().optional(),
     page: z.string().optional(),
     limit: z.string().optional(),
   }),
@@ -86,8 +85,7 @@ export const listProductsSchema = z.object({
 export const bulkProductActionSchema = z.object({
   body: z.object({
     productIds: z.array(z.string()).min(1),
-    action: z.enum(["change_status", "assign_shop", "delete"]),
+    action: z.enum(["change_status", "delete"]),
     status: z.enum(["PENDING_APPROVAL", "APPROVED", "REJECTED"]).optional(),
-    shopId: z.string().optional(),
   }),
 });

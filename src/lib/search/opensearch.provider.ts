@@ -70,8 +70,6 @@ export class OpenSearchIndexInstance implements SearchIndexProvider {
             categoryName: { type: "keyword" },
             categoryPath: { type: "keyword" },
             sellerId: { type: "keyword" },
-            shopId: { type: "keyword" },
-            shopName: { type: "keyword" },
             imageKey: { type: "keyword", index: false },
             attributes: {
               type: "nested",
@@ -86,6 +84,16 @@ export class OpenSearchIndexInstance implements SearchIndexProvider {
       },
     });
     logger.info({ index: INDEX_NAME }, "Search index created");
+  }
+
+  async recreateIndex(): Promise<void> {
+    try {
+      await this.client.indices.delete({ index: INDEX_NAME });
+      logger.info({ index: INDEX_NAME }, "Search index deleted for recreation");
+    } catch (error: any) {
+      if (error?.meta?.statusCode !== 404) throw error;
+    }
+    await this.ensureIndex();
   }
 
   async indexProduct(doc: SearchProductDocument): Promise<void> {
@@ -113,9 +121,6 @@ export class OpenSearchIndexInstance implements SearchIndexProvider {
     }
     if (filters.sellerId) {
       filter.push({ term: { sellerId: filters.sellerId } });
-    }
-    if (filters.shopId) {
-      filter.push({ term: { shopId: filters.shopId } });
     }
     if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
       const range: any = {};

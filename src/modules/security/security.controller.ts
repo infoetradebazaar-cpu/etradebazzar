@@ -7,14 +7,26 @@ export const securityController = {
         try {
             const userId = req.user!.id;
             const email = req.user!.email;
-            const currentToken = req.body?.currentToken;
-            const result = await securityService.generateTwoFactorSecret(userId, email as string, currentToken);
+            const { method, currentToken } = req.body;
+            const result = await securityService.generateTwoFactorSecret(userId, email as string, method, currentToken);
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Setup 2FA failed");
-            if (["Current 2FA code required to re-enroll", "Invalid 2FA code"].includes(error.message)) {
+            if (["Current 2FA code required to re-enroll", "Invalid 2FA code", "User not found"].includes(error.message)) {
                 return res.status(400).json({ success: false, error: error.message });
             }
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
+    async requestTwoFactorEmailCode(req: Request, res: Response) {
+        try {
+            const userId = req.user!.id;
+            const purpose = req.body.purpose === "disable" ? "2fa-disable" : "2fa-reverify";
+            await securityService.requestTwoFactorEmailCode(userId, purpose);
+            return res.json({ success: true, message: "Verification code sent" });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Request 2FA email code failed");
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },
@@ -22,12 +34,19 @@ export const securityController = {
     async verifyTwoFactor(req: Request, res: Response) {
         try {
             const userId = req.user!.id;
-            const { token } = req.body;
-            const result = await securityService.verifyAndEnableTwoFactor(userId, token);
-            return res.json({ success: true, data: { twoFactorEnabled: result.twoFactorEnabled } });
+            const { method, token } = req.body;
+            const result = await securityService.verifyAndEnableTwoFactor(userId, method, token);
+            return res.json({
+                success: true,
+                data: {
+                    twoFactorEnabled: result.twoFactorEnabled,
+                    twoFactorMethod: result.twoFactorMethod,
+                    backupCodes: result.backupCodes,
+                },
+            });
         } catch (error: any) {
             logger.error({ err: error.message }, "Verify 2FA failed");
-            if (["2FA setup not initiated", "Invalid 2FA code"].includes(error.message)) {
+            if (["2FA setup not initiated", "Invalid 2FA code", "Too many attempts, request a new code"].includes(error.message)) {
                 return res.status(400).json({ success: false, error: error.message });
             }
             return res.status(500).json({ success: false, error: "Internal server error" });
@@ -42,7 +61,22 @@ export const securityController = {
             return res.json({ success: true, data: { twoFactorEnabled: false } });
         } catch (error: any) {
             logger.error({ err: error.message }, "Disable 2FA failed");
-            if (error.message === "Invalid 2FA code") {
+            if (["Invalid 2FA code", "Too many attempts, request a new code"].includes(error.message)) {
+                return res.status(400).json({ success: false, error: error.message });
+            }
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
+    async regenerateBackupCodes(req: Request, res: Response) {
+        try {
+            const userId = req.user!.id;
+            const { token } = req.body;
+            const backupCodes = await securityService.regenerateBackupCodes(userId, token);
+            return res.json({ success: true, data: { backupCodes } });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Regenerate backup codes failed");
+            if (["Invalid 2FA code", "Too many attempts, request a new code"].includes(error.message)) {
                 return res.status(400).json({ success: false, error: error.message });
             }
             return res.status(500).json({ success: false, error: "Internal server error" });

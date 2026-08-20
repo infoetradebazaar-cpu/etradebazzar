@@ -5,8 +5,9 @@ import { adminNegotiationController } from "./admin-negotiation.controller";
 import { myNegotiationController } from "./my-negotiation.controller";
 import { protect } from "../../middleware/auth";
 import { resolveTenant } from "../../middleware/tenant";
-import { requirePlatformAdminAndPermission, requirePermissionIfSeller } from "../../middleware/permission";
+import { requirePlatformAdminAndPermission, requirePermissionIfSeller, requireCustomerOrgPermissionIfOrg } from "../../middleware/permission";
 import { PLATFORM_PERMISSIONS, PERMISSIONS } from "../../lib/permission/permission.constants";
+import { CUSTOMER_ORG_PERMISSIONS } from "../../lib/permission/customer-org-permission.constants";
 import { validate } from "../../utils/validate";
 import { sellerLimiter } from "../../middleware/rate-limit";
 import {
@@ -27,6 +28,7 @@ router.post(
   "/auto",
   protect,
   sellerLimiter,
+  requireCustomerOrgPermissionIfOrg(CUSTOMER_ORG_PERMISSIONS.MANAGE_NEGOTIATIONS),
   validate(startAutoNegotiationSchema),
   negotiationController.startAutoSession,
 );
@@ -34,6 +36,7 @@ router.get(
   "/auto/:sessionId",
   protect,
   sellerLimiter,
+  requireCustomerOrgPermissionIfOrg(CUSTOMER_ORG_PERMISSIONS.MANAGE_NEGOTIATIONS),
   validate(negotiationSessionParamSchema),
   negotiationController.getSession,
 );
@@ -41,6 +44,7 @@ router.patch(
   "/auto/:sessionId/respond",
   protect,
   sellerLimiter,
+  requireCustomerOrgPermissionIfOrg(CUSTOMER_ORG_PERMISSIONS.MANAGE_NEGOTIATIONS),
   validate(respondAutoNegotiationSchema),
   negotiationController.respond,
 );
@@ -53,6 +57,7 @@ router.post(
   protect,
   sellerLimiter,
   resolveTenant,
+  requireCustomerOrgPermissionIfOrg(CUSTOMER_ORG_PERMISSIONS.MANAGE_NEGOTIATIONS),
   validate(startManualNegotiationSchema),
   manualNegotiationController.startSession,
 );
@@ -95,6 +100,7 @@ router.patch(
   "/manual/:sessionId/accept",
   protect,
   sellerLimiter,
+  requireCustomerOrgPermissionIfOrg(CUSTOMER_ORG_PERMISSIONS.MANAGE_NEGOTIATIONS),
   validate(manualAcceptSchema),
   manualNegotiationController.accept,
 );

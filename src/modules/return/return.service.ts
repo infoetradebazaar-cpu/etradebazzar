@@ -539,28 +539,50 @@ export const returnService = {
     }
 
     if (mappedStatus === "DELIVERED") {
-      const completed = await db.returnRequest.updateMany({
-        where: { id: shipment.returnRequestId, status: { in: ["APPROVED", "PICKED_UP"] } },
-        data: { status: "COMPLETED" },
-      });
-      if (completed.count === 1) {
-        const returnRequest = await db.returnRequest.findUnique({
+      const returnRequest = await db.$transaction(async (tx) => {
+        const completed = await tx.returnRequest.updateMany({
+          where: { id: shipment.returnRequestId, status: { in: ["APPROVED", "PICKED_UP"] } },
+          data: { status: "COMPLETED" },
+        });
+        if (completed.count === 0) return null;
+
+        const rr = await tx.returnRequest.findUniqueOrThrow({
           where: { id: shipment.returnRequestId },
           select: { orderId: true, customerId: true },
         });
-        if (returnRequest) {
-          try {
-            await paymentService.initiateRefund(
-              returnRequest.orderId,
-              "system",
-              "Return completed - item received back",
-            );
-          } catch (err: any) {
-            logger.error(
-              { err: err.message, orderId: returnRequest.orderId, returnRequestId: shipment.returnRequestId },
-              "Failed to initiate refund after return marked COMPLETED",
-            );
+        const order = await tx.order.findUniqueOrThrow({
+          where: { id: rr.orderId },
+          select: { items: { select: { productId: true, skuId: true, quantity: true } } },
+        });
+        for (const item of order.items) {
+          if (item.skuId) {
+            await tx.productSKU.update({
+              where: { id: item.skuId },
+              data: { stock: { increment: item.quantity } },
+            });
+          } else {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: { increment: item.quantity } },
+            });
           }
+        }
+
+        return rr;
+      });
+
+      if (returnRequest) {
+        try {
+          await paymentService.initiateRefund(
+            returnRequest.orderId,
+            "system",
+            "Return completed - item received back",
+          );
+        } catch (err: any) {
+          logger.error(
+            { err: err.message, orderId: returnRequest.orderId, returnRequestId: shipment.returnRequestId },
+            "Failed to initiate refund after return marked COMPLETED",
+          );
         }
       }
     }

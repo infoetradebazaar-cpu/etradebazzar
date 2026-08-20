@@ -293,6 +293,14 @@ router.get(
   sellerController.getSellerById,
 );
 
+router.get(
+  "/:sellerId/members",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin", "onboarding_manager"], [PLATFORM_PERMISSIONS.PLATFORM_SELLERS_VIEW_DETAIL]),
+  sellerController.listMembersBySellerId,
+);
+
 router.patch(
   "/:sellerId/approve",
   protect,

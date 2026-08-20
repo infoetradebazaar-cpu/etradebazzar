@@ -20,15 +20,19 @@ model User {
   createdAt            DateTime              @default(now())
   twoFactorEnabled     Boolean               @default(false)
   twoFactorSecret      String?
+  twoFactorMethod      String?
+  twoFactorBackupCodes String[]              @default([])
   passwordChangedAt    DateTime?
   sessions             Session[]
   updatedAt            DateTime              @updatedAt
   orders               Order[]               @relation("CustomerOrders")
   platformMember       PlatformMember?
   sellerMemberships    SellerMember[]
+  customerOrgMemberships CustomerOrgMember[]
+  createdCustomerOrgs    CustomerOrg[]         @relation("CustomerOrgCreator")
   wallet               Wallet[]
   addresses            CustomerAddress[]
-  cart                 Cart?
+  carts                Cart[]
   customerUploadAssets CustomerUploadAsset[]
   savedDesigns         SavedDesign[]
   wishlistItems        WishlistItem[]
@@ -127,7 +131,6 @@ model Seller {
   auditLogs                  AuditLog[]
   bankDetail                 SellerBankDetail?
   kyc                        SellerKyc?
-  orderThresholds            OrderThreshold[]
   orders                     Order[]
   payouts                    SellerPayout[]
   templates                  Template[]
@@ -276,6 +279,112 @@ model SellerInvite {
   @@map("seller_invites")
 }
 
+model CustomerOrg {
+  id             String  @id @default(cuid())
+  name           String
+  createdBy      String
+  creator        User    @relation("CustomerOrgCreator", fields: [createdBy], references: [id])
+  legalEntityName String?
+  tradeName      String?
+  gstin          String?
+  pan            String?
+  businessType   String?
+  industry       String?
+  yearEstablished Int?
+  employees      String?
+  annualTurnover String?
+  website        String?
+  registeredEmail String?
+  gstVerified    Boolean  @default(false)
+  panVerified    Boolean  @default(false)
+  gstVerifiedAt  DateTime?
+  panVerifiedAt  DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  members CustomerOrgMember[]
+  roles   CustomerOrgRole[]
+  invites CustomerOrgInvite[]
+
+  @@unique([createdBy])
+  @@map("customer_orgs")
+}
+
+model CustomerOrgMember {
+  id        String   @id @default(cuid())
+  userId    String
+  orgId     String
+  roleId    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User            @relation(fields: [userId], references: [id])
+  org  CustomerOrg     @relation(fields: [orgId], references: [id])
+  role CustomerOrgRole @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+  @@index([userId])
+  @@map("customer_org_members")
+}
+
+model CustomerOrgRole {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  createdAt DateTime @default(now())
+
+  org         CustomerOrg                 @relation(fields: [orgId], references: [id])
+  members     CustomerOrgMember[]
+  permissions CustomerOrgRolePermission[]
+  invites     CustomerOrgInvite[]
+
+  @@unique([orgId, name])
+  @@map("customer_org_roles")
+}
+
+model CustomerOrgPermission {
+  id          String @id @default(cuid())
+  key         String @unique
+  description String
+
+  rolePermissions CustomerOrgRolePermission[]
+
+  @@map("customer_org_permissions")
+}
+
+model CustomerOrgRolePermission {
+  id           String @id @default(cuid())
+  roleId       String
+  permissionId String
+
+  role       CustomerOrgRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission CustomerOrgPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("customer_org_role_permissions")
+}
+
+model CustomerOrgInvite {
+  id        String       @id @default(cuid())
+  orgId     String
+  email     String
+  roleId    String
+  invitedBy String
+  token     String       @unique @default(cuid())
+  status    InviteStatus @default(PENDING)
+  expiresAt DateTime
+  createdAt DateTime     @default(now())
+
+  org  CustomerOrg     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role CustomerOrgRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([token])
+  @@map("customer_org_invites")
+}
+
 // SHOP
 model Shop {
   id             String         @id @default(cuid())
@@ -310,7 +419,6 @@ model Shop {
   reliabilityScore  Decimal        @default(100) @db.Decimal(5, 2)
   autoAssignEnabled Boolean        @default(false)
   seller            Seller         @relation(fields: [sellerId], references: [id])
-  products          Product[]
   orders            Order[]
   orderAddresses    OrderAddress[]
   shipments         Shipment[]
@@ -393,7 +501,6 @@ model CategoryAttributeOption {
 model Product {
   id                            String                @id @default(cuid())
   displayId                     String?               @unique
-  shopId                        String?
   sellerId                      String
   categoryId                    String
   name                          String
@@ -419,7 +526,6 @@ model Product {
   customizationAcceptedFormats  String[]              @default([])
   createdAt                     DateTime              @default(now())
   updatedAt                     DateTime              @updatedAt
-  shop                          Shop?                 @relation(fields: [shopId], references: [id])
   category                      Category              @relation(fields: [categoryId], references: [id])
   images                        ProductImage[]
   variants                      VariantOption[]
@@ -427,6 +533,7 @@ model Product {
   commissions                   ProductCommission[]
   commissionProposals           CommissionProposal[]
   model3d                       ProductModel3D[]
+  video                         ProductVideo?
   printAreas                    PrintArea[]
   customizationOptionGroups     CustomizationOptionGroup[]
   uploadAssets                  CustomerUploadAsset[]
@@ -444,15 +551,18 @@ model Product {
 }
 
 model ProductImage {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   productId String
+  skuId     String?
   url       String
   key       String
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order     Int         @default(0)
+  createdAt DateTime    @default(now())
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku       ProductSKU? @relation(fields: [skuId], references: [id], onDelete: SetNull)
 
   @@index([productId])
+  @@index([skuId])
   @@map("product_images")
 }
 
@@ -501,6 +611,7 @@ model ProductSKU {
   uploadAssets  CustomerUploadAsset[]
   printAreas    PrintArea[]
   savedDesigns  SavedDesign[]
+  images        ProductImage[]
 
   @@index([productId])
   @@map("product_skus")
@@ -510,6 +621,7 @@ model SkuPriceTier {
   id        String     @id @default(cuid())
   skuId     String
   minQty    Int
+  maxQty    Int?
   price     Decimal    @db.Decimal(10, 2)
   hiddenFloorPrice Decimal?  @db.Decimal(10, 2)
   createdAt DateTime   @default(now())
@@ -524,6 +636,7 @@ model SkuPriceTier {
 model NegotiationSession {
   id               String                   @id @default(cuid())
   customerId       String
+  orgId            String?
   sellerId         String
   productId        String
   skuId            String
@@ -539,14 +652,21 @@ model NegotiationSession {
   nudgeSentAt      DateTime?
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
+  formulaVersion   String                   @default("v1_linear")
+  activeEngineFlags Json?
+  resumedFromSessionId String?
+  resumedFrom          NegotiationSession?  @relation("SessionResumption", fields: [resumedFromSessionId], references: [id], onDelete: SetNull)
+  resumedInto          NegotiationSession[] @relation("SessionResumption")
 
   rounds NegotiationRound[]
   chat   NegotiationChatSession?
 
   @@index([customerId])
+  @@index([orgId])
   @@index([sellerId])
   @@index([skuId])
   @@index([nudgeDueAt])
+  @@index([resumedFromSessionId])
   @@map("negotiation_sessions")
 }
 
@@ -555,6 +675,7 @@ model NegotiationRound {
   sessionId     String
   round         Int
   offeredPrice  Decimal   @db.Decimal(10, 2)
+  customerPrice Decimal?  @db.Decimal(10, 2)
   response      String? // "ACCEPTED" | "REJECTED" | null while pending
   createdAt     DateTime  @default(now())
   respondedAt   DateTime?
@@ -587,7 +708,7 @@ model NegotiationMessage {
   id            String   @id @default(cuid())
   chatSessionId String
   senderId      String
-  senderType    String // "customer" | "seller"
+  senderType    String // "customer" | "seller" | "system"
   body          String
   createdAt     DateTime @default(now())
 
@@ -595,6 +716,83 @@ model NegotiationMessage {
 
   @@index([chatSessionId])
   @@map("negotiation_messages")
+}
+
+model SellerNegotiationConfig {
+  id            String   @id @default(cuid())
+  sellerId      String
+  category      String?
+  gammaBase     Decimal  @db.Decimal(4, 3)
+  gammaMin      Decimal  @db.Decimal(4, 3)
+  gammaMax      Decimal  @db.Decimal(4, 3)
+  alpha         Decimal  @db.Decimal(4, 3) // stock-pressure weight
+  beta          Decimal  @db.Decimal(4, 3) // demand weight
+  delta         Decimal  @db.Decimal(4, 3) @default(0) // volatility weight
+  zeta          Decimal  @db.Decimal(4, 3) @default(0) // regime weight
+  eta           Decimal  @db.Decimal(4, 3) @default(0) // order-flow-imbalance weight
+  tolerancePct      Decimal @db.Decimal(4, 3) @default(0.03)
+  earlyExitMinRound Int     @default(2) 
+  minImprovementPct Decimal @db.Decimal(5, 4) @default(0.005) // 0.5% of (V-F)
+  setBy         String
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([sellerId, category, effectiveFrom])
+  @@index([sellerId])
+  @@map("seller_negotiation_configs")
+}
+
+ 
+model PricingEngineConfig {
+  id                     String   @id @default(cuid())
+  stage                  Int      @default(0)
+  enableDemandDecay      Boolean  @default(false)
+  enableVolatility       Boolean  @default(false)
+  enableAdverseSelection Boolean  @default(false)
+  enableDynamicHorizon   Boolean  @default(false)
+  enableRegimeAdj        Boolean  @default(false)
+  enableOFI              Boolean  @default(false)
+  enableRepeatMult       Boolean  @default(false)
+  enableCrossSkuDemand   Boolean  @default(false)
+  updatedAt              DateTime @updatedAt
+  updatedBy              String
+
+  @@map("pricing_engine_config")
+}
+
+model PricingEngineConstants {
+  id String @id @default(cuid())
+  kMin               Decimal @db.Decimal(5, 3) @default(1.1)
+  kMax               Decimal @db.Decimal(5, 3) @default(3.5)
+  kappa              Decimal @db.Decimal(5, 3) @default(0.6) // curve stiffness sensitivity to sigma
+  w0                 Decimal @db.Decimal(5, 3) @default(0.5) // base customer-influence weight
+  pExponent          Decimal @db.Decimal(5, 3) @default(1.5) // w(r) time-decay exponent
+  lambdaAdverse      Decimal @db.Decimal(5, 3) @default(0.6) // w(r) discount from adverse signal
+  psiImpact          Decimal @db.Decimal(5, 3) @default(0.4) // w(r) discount from price impact
+  muJitter           Decimal @db.Decimal(5, 3) @default(0.5) // jitter widening under volatility
+  jitterBaseFraction Decimal @db.Decimal(6, 4) @default(0.02) // max jitter amplitude, fraction of (V-F)
+
+  theta Decimal @db.Decimal(5, 3) @default(0.5) // dynamic-horizon stock-urgency sensitivity
+
+  tau      Decimal @db.Decimal(5, 3) @default(1) // discount-trend slope sensitivity
+  deltaMax Decimal @db.Decimal(5, 3) @default(0.15) // regimeAdj clamp bound
+
+  rhoRepeat Decimal @db.Decimal(5, 3) @default(0.1) // repeat-rejection gamma multiplier
+
+  lambdaDecayPerDay        Decimal @db.Decimal(6, 4) @default(0.15) // recency-decay rate
+  crossSkuWeight           Decimal @db.Decimal(5, 3) @default(0.3) // cross-SKU demand blend weight
+  demandColdStartThreshold Int     @default(5) // sessions below this count trigger cross-SKU borrowing
+
+  // volatility shrinkage
+  volatilityShrinkageN0 Int @default(10)
+
+  minImprovementFloorRupees Decimal @db.Decimal(10, 2) @default(5)
+
+  updatedAt DateTime @updatedAt
+  updatedBy String
+
+  @@map("pricing_engine_constants")
 }
 
 // AUDIT LOG
@@ -619,20 +817,6 @@ model AuditLog {
 }
 
 // ORDER THRESHOLD
-model OrderThreshold {
-  id              String   @id @default(cuid())
-  sellerId        String
-  productCategory String?
-  amount          Decimal  @db.Decimal(10, 2)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  seller          Seller   @relation(fields: [sellerId], references: [id])
-
-  @@unique([sellerId, productCategory])
-  @@index([sellerId])
-  @@map("order_thresholds")
-}
-
 // COMMISSION
 model ProductCommission {
   id            String   @id @default(cuid())
@@ -673,6 +857,7 @@ model Order {
   displayId        String?            @unique
   sellerId         String
   customerId       String
+  orgId            String?
   type             OrderType
   status           OrderStatus        @default(PENDING)
   totalAmount      Decimal            @db.Decimal(10, 2)
@@ -692,7 +877,6 @@ model Order {
   assignedShop     Shop?              @relation(fields: [assignedShopId], references: [id])
   customer         User               @relation("CustomerOrders", fields: [customerId], references: [id])
   items            OrderItem[]
-  negotiations     OrderNegotiation[]
   addresses        OrderAddress[]
   bulkUpload       BulkUpload?
   shipments        Shipment[]
@@ -707,6 +891,7 @@ model Order {
 
   @@index([sellerId, status])
   @@index([customerId])
+  @@index([orgId])
   @@map("orders")
 }
 
@@ -729,23 +914,6 @@ model OrderItem {
 }
 
 // NEGOTIATION
-model OrderNegotiation {
-  id             String            @id @default(cuid())
-  orderId        String
-  proposedBy     String
-  proposedByType String
-  proposedPrice  Decimal           @db.Decimal(10, 2)
-  status         NegotiationStatus @default(PENDING)
-  meetLink       String?
-  note           String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  order          Order             @relation(fields: [orderId], references: [id])
-
-  @@index([orderId])
-  @@map("order_negotiations")
-}
-
 // BULK ORDER
 model BulkUpload {
   id             String           @id @default(cuid())
@@ -1273,6 +1441,19 @@ model ProductModel3D {
   @@map("product_models_3d")
 }
 
+model ProductVideo {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  key       String
+  format    String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_videos")
+}
+
 model TeamInvite {
   id        String       @id @default(cuid())
   sellerId  String
@@ -1369,13 +1550,16 @@ model SavedDesign {
 
 model Cart {
   id        String     @id @default(cuid())
-  userId    String     @unique
+  userId    String
+  orgId     String?
   sellerId  String?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   user      User       @relation(fields: [userId], references: [id])
   items     CartItem[]
 
+  @@unique([userId, orgId])
+  @@index([orgId])
   @@map("carts")
 }
 
@@ -1485,7 +1669,6 @@ enum OrderType {
 
 enum OrderStatus {
   PENDING
-  NEGOTIATING
   CONFIRMED
   PACKED
   PROCESSING
@@ -1550,6 +1733,7 @@ enum NegotiationSessionStatus {
   EXHAUSTED
   ACCEPTED
   REJECTED
+  EXPIRED
 }
 
 enum BulkUploadStatus {

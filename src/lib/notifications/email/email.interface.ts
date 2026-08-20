@@ -24,6 +24,7 @@ export type EmailTemplate =
     | "negotiation-nudge"
     | "manual-negotiation-started"
     | "rbac-disagreement-alert"
+    | "negotiation-v2-circuit-breaker"
     | "low-stock"
     | "payout-initiated"
     | "payout-paid"
@@ -33,7 +34,10 @@ export type EmailTemplate =
     | "team-invite"
     | "return-requested"
     | "return-approved"
-    | "return-rejected";
+    | "return-rejected"
+    | "password-reset"
+    | "password-changed"
+    | "two-factor-code";
 
 export interface EmailProvider {
     send(input: SendEmailInput): Promise<EmailResult>;

@@ -8,17 +8,19 @@ export const productImageController = {
             const sellerId = req.seller!.id;
             const { productId } = req.params;
             const file = req.file;
+            const skuId = req.body.skuId || null;
 
             if (!file) {
                 return res.status(400).json({ success: false, error: "Image file required" });
             }
 
-            const result = await productImageService.uploadImage(sellerId, String(productId), file);
+            const result = await productImageService.uploadImage(sellerId, String(productId), file, skuId);
             return res.status(201).json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Upload product image failed");
             const clientErrors = [
                 "Product not found",
+                "SKU not found",
                 "Invalid file type",
                 "File too large",
                 "Maximum",
@@ -66,7 +68,8 @@ export const productImageController = {
     async listImages(req: Request, res: Response) {
         try {
             const { productId } = req.params;
-            const result = await productImageService.listImages(String(productId));
+            const skuId = req.query.skuId as string | undefined;
+            const result = await productImageService.listImages(String(productId), skuId);
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "List product images failed");

@@ -8,7 +8,15 @@ const CAHCE_TTL_SECONDS = 30;
 
 interface OrderedItem {
     productId: string;
+    skuId?: string;
     quantity: number;
+}
+
+function normalizeOptions(options: unknown): string {
+    const obj = (options ?? {}) as Record<string, string>;
+    return JSON.stringify(
+        Object.fromEntries(Object.entries(obj).sort(([a], [b]) => a.localeCompare(b))),
+    );
 }
 
 export interface ShopRecommendation {
@@ -24,7 +32,10 @@ export const recommendationService = {
     async getCandidateShops(sellerId: string, items: OrderedItem[]) {
         const orderedProducts = await db.product.findMany({
             where: { id: { in: items.map((i) => i.productId) } },
-            select: { id: true, sku: true, name: true, categoryId: true, shopId: true, stock: true },
+            select: {
+                id: true, sku: true, name: true, categoryId: true, shopId: true, stock: true,
+                skus: { select: { id: true, options: true, stock: true } },
+            },
         });
 
         const shops = await db.shop.findMany({
@@ -40,11 +51,14 @@ export const recommendationService = {
 
             for (const item of items) {
                 const orderedProduct = orderedProducts.find((p) => p.id === item.productId)!;
+                const orderedSku = item.skuId
+                    ? orderedProduct.skus.find((s) => s.id === item.skuId)
+                    : undefined;
 
                 let stock: number | null = null;
 
                 if (orderedProduct.shopId === shop.id) {
-                    stock = orderedProduct.stock ?? 0;
+                    stock = orderedSku ? orderedSku.stock ?? 0 : orderedProduct.stock ?? 0;
                 } else {
                     const sibling = await db.product.findFirst({
                         where: {
@@ -55,9 +69,21 @@ export const recommendationService = {
                                 { name: orderedProduct.name, categoryId: orderedProduct.categoryId },
                             ],
                         },
-                        select: { stock: true },
+                        select: {
+                            stock: true,
+                            skus: { select: { options: true, stock: true } },
+                        },
                     });
-                    if (sibling) stock = sibling.stock ?? 0;
+                    if (sibling) {
+                        if (orderedSku) {
+                            const match = sibling.skus.find(
+                                (s) => normalizeOptions(s.options) === normalizeOptions(orderedSku.options),
+                            );
+                            stock = match ? match.stock ?? 0 : 0;
+                        } else {
+                            stock = sibling.stock ?? 0;
+                        }
+                    }
                 }
 
                 if (stock === null) { fulfillable = false; break; }

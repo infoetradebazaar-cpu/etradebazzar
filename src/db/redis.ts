@@ -36,6 +36,8 @@ export const RedisKeys = {
   userRoles: (userId: string, sellerId: string) => `rbac:${userId}:${sellerId}`,
   userPermissions: (userId: string, sellerId: string) => `perms:${userId}:${sellerId}`,
   platformPermissions: (userId: string) => `platform-perms:${userId}`,
+  customerOrgMemberships: (userId: string) => `customer-orgs:${userId}`,
+  customerOrgPermissions: (userId: string, orgId: string) => `customer-org-perms:${userId}:${orgId}`,
   couponLock: (couponId: string) => `coupon:lock:${couponId}`,
   lowStockAlert: (productId: string, skuId?: string) =>
     skuId ? `lowstock:sku:${skuId}` : `lowstock:product:${productId}`,
@@ -43,5 +45,10 @@ export const RedisKeys = {
   pincodeLookup: (pincode: string) => `pincode:${pincode}`,
   otpCode: (purpose: string, phone: string) => `otp:code:${purpose}:${phone}`,
   otpAttempts: (purpose: string, phone: string) => `otp:attempts:${purpose}:${phone}`,
+  passwordResetToken: (tokenHash: string) => `pwreset:${tokenHash}`,
+  passwordResetRequest: (userId: string) => `pwreset:user:${userId}`,
+  twoFactorEmailCode: (purpose: string, userId: string) => `2fa:email:code:${purpose}:${userId}`,
+  twoFactorEmailAttempts: (purpose: string, userId: string) => `2fa:email:attempts:${purpose}:${userId}`,
+  mfaLoginChallenge: (challengeId: string) => `mfa:challenge:${challengeId}`,
   searchAttributeLexicon: () => `search:attr-lexicon`,
 } as const;

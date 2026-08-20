@@ -1,0 +1,329 @@
+{
+  "generatedAt": "2026-08-17T20:59:45.125Z",
+  "driftRows": [
+    {
+      "productId": "cmsxprjop00rts3cpqf05x3dk",
+      "productName": "Omega-3 Capsules Pro",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 445,
+      "skuCount": 1,
+      "totalSkuStock": 62,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjp400s1s3cp5bercozj",
+      "productName": "Oil Filter Pro",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 428,
+      "skuCount": 1,
+      "totalSkuStock": 49,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjpk00sas3cpyd6bb33n",
+      "productName": "The Alchemist Plus",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 414,
+      "skuCount": 1,
+      "totalSkuStock": 10,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjs800ubs3cpo929a1jt",
+      "productName": "Pre-Workout Elite",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 411,
+      "skuCount": 1,
+      "totalSkuStock": 35,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjo000rds3cp8r9md7qo",
+      "productName": "Toner Mist Pro",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 404,
+      "skuCount": 1,
+      "totalSkuStock": 80,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjtv00vfs3cp9qqrd49g",
+      "productName": "Resistance Bands Premium",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 395,
+      "skuCount": 1,
+      "totalSkuStock": 49,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjkk00p6s3cpios8dhgg",
+      "productName": "Conditioner Basic",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 382,
+      "skuCount": 1,
+      "totalSkuStock": 30,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjlq00pxs3cp5lp2jdv3",
+      "productName": "Mascara Basic",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 379,
+      "skuCount": 1,
+      "totalSkuStock": 13,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjq000sjs3cp5zmj2yst",
+      "productName": "The Alchemist Plus",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 379,
+      "skuCount": 1,
+      "totalSkuStock": 36,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjfk00lws3cpbz1pic48",
+      "productName": "Wireless Charger Basic",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 378,
+      "skuCount": 3,
+      "totalSkuStock": 148,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjax00ips3cpt22ux83n",
+      "productName": "Denim Jeans Premium",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 360,
+      "skuCount": 3,
+      "totalSkuStock": 179,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprj4e00fus3cpvejmwslh",
+      "productName": "Denim Jeans Elite",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 336,
+      "skuCount": 3,
+      "totalSkuStock": 59,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjmo00qes3cpjypg84fr",
+      "productName": "Football Premium",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 332,
+      "skuCount": 1,
+      "totalSkuStock": 45,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjhy00nls3cpkg0lgyfp",
+      "productName": "Physics Textbook Elite",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 329,
+      "skuCount": 1,
+      "totalSkuStock": 84,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjm300q5s3cp949c483u",
+      "productName": "Ceramic Brake Pads Elite",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 327,
+      "skuCount": 1,
+      "totalSkuStock": 22,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjca00jts3cp8dzk25g7",
+      "productName": "Casual Dress Basic",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 286,
+      "skuCount": 3,
+      "totalSkuStock": 151,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjrg00tjs3cpb9wht85z",
+      "productName": "Denim Jeans Pro",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 282,
+      "skuCount": 3,
+      "totalSkuStock": 51,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjhl00ncs3cpsw4rpxfg",
+      "productName": "Harry Potter Box Set Elite",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 277,
+      "skuCount": 1,
+      "totalSkuStock": 100,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprj7900h3s3cpywbs0tha",
+      "productName": "Sofa Set Premium",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 265,
+      "skuCount": 3,
+      "totalSkuStock": 176,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjuc00vts3cpixx7arzz",
+      "productName": "Seat Covers Set Plus",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 264,
+      "skuCount": 1,
+      "totalSkuStock": 77,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjna00qss3cpw5h5poea",
+      "productName": "Samsung Galaxy S24 Elite",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 241,
+      "skuCount": 3,
+      "totalSkuStock": 114,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjsp00uls3cpgei43mcy",
+      "productName": "Curtain Set Plus",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 222,
+      "skuCount": 3,
+      "totalSkuStock": 225,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjem00lcs3cpab85hb72",
+      "productName": "Torque Wrench Plus",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 209,
+      "skuCount": 1,
+      "totalSkuStock": 59,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjig00nvs3cp4c20nsp9",
+      "productName": "Casual Dress Elite",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 207,
+      "skuCount": 3,
+      "totalSkuStock": 237,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjj900oms3cpl1thn57z",
+      "productName": "Dune Pro",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 192,
+      "skuCount": 1,
+      "totalSkuStock": 84,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprj2z00fbs3cp69m1mbhx",
+      "productName": "Curtain Set Plus",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 186,
+      "skuCount": 3,
+      "totalSkuStock": 205,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprj5u00gls3cpx323vt9x",
+      "productName": "Atomic Habits Basic",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 172,
+      "skuCount": 1,
+      "totalSkuStock": 15,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjdi00kls3cpj3kppnhd",
+      "productName": "Lehenga Choli Premium",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 133,
+      "skuCount": 3,
+      "totalSkuStock": 183,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjqf00srs3cpzqkiqhzl",
+      "productName": "Dell XPS 15 Elite",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 124,
+      "skuCount": 3,
+      "totalSkuStock": 205,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjgs00mss3cp7dkj9vp2",
+      "productName": "MacBook Pro 14 Plus",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 122,
+      "skuCount": 3,
+      "totalSkuStock": 87,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjkz00pes3cpwb476vrx",
+      "productName": "Office Chair Elite",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 117,
+      "skuCount": 3,
+      "totalSkuStock": 151,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjr300tbs3cp85p4pjxk",
+      "productName": "The Alchemist Basic",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 116,
+      "skuCount": 1,
+      "totalSkuStock": 49,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprjod00rls3cpfv95r1zs",
+      "productName": "Pre-Workout Basic",
+      "sellerId": "cmsxprhk1004as3cpji93ectu",
+      "productStock": 90,
+      "skuCount": 1,
+      "totalSkuStock": 65,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprj8g00hns3cpxzq1t1ek",
+      "productName": "Anti-Dandruff Shampoo Elite",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 67,
+      "skuCount": 1,
+      "totalSkuStock": 90,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprj9w00i6s3cpvv93ugug",
+      "productName": "Triphala Powder Elite",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 34,
+      "skuCount": 1,
+      "totalSkuStock": 84,
+      "allSkusZero": false
+    },
+    {
+      "productId": "cmsxprj6p00gus3cp49ww5yhg",
+      "productName": "Steering Wheel Cover Elite",
+      "sellerId": "cmsxprhjs0048s3cpvjrt2tda",
+      "productStock": 23,
+      "skuCount": 1,
+      "totalSkuStock": 80,
+      "allSkusZero": false
+    }
+  ]
+}

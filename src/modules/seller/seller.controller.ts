@@ -265,6 +265,24 @@ export const sellerController = {
     }
   },
 
+  async listMembersBySellerId(req: Request, res: Response) {
+    try {
+      const { sellerId } = req.params;
+      const { search, page, limit } = req.query as Record<string, string>;
+      const result = await sellerService.listMembers(sellerId, {
+        search,
+        page: page ? Number(page) : undefined,
+        limit: limit ? Number(limit) : undefined,
+      });
+      return res.json({ success: true, data: result.data, meta: result.meta });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "List members by sellerId failed");
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async addMember(req: Request, res: Response) {
     try {
       const sellerId = req.seller!.id;

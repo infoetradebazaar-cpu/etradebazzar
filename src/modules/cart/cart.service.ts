@@ -2,15 +2,30 @@ import { db } from "../../db/index";
 import { orderService } from "../order/order.service";
 import { couponService } from "../coupon/coupon.service";
 import { shipmentService } from "../shipment/shipment.service";
+import { withCustomerOrgScope } from "../../middleware/tenant";
+import type { Prisma } from "../../../prisma/generated/client";
 
-async function getOrCreateCart(userId: string) {
-  let cart = await db.cart.findUnique({ where: { userId } });
+type OrgId = string | null | undefined;
+
+function cartScope<T>(
+  orgId: OrgId,
+  fn: (client: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return orgId ? withCustomerOrgScope(orgId, fn) : fn(db);
+}
+
+async function getOrCreateCart(userId: string, orgId: OrgId) {
+  const where = orgId ? { orgId } : { userId, orgId: null };
+
+  let cart = await cartScope(orgId, (client) => client.cart.findFirst({ where }));
   if (!cart) {
     try {
-      cart = await db.cart.create({ data: { userId } });
+      cart = await cartScope(orgId, (client) =>
+        client.cart.create({ data: { userId, orgId: orgId ?? null } }),
+      );
     } catch (err: any) {
       if (err.code === "P2002") {
-        cart = await db.cart.findUniqueOrThrow({ where: { userId } });
+        cart = await cartScope(orgId, (client) => client.cart.findFirstOrThrow({ where }));
       } else {
         throw err;
       }
@@ -19,8 +34,8 @@ async function getOrCreateCart(userId: string) {
   return cart;
 }
 
-async function getCartWithItems(userId: string) {
-  const cart = await getOrCreateCart(userId);
+async function getCartWithItems(userId: string, orgId: OrgId) {
+  const cart = await getOrCreateCart(userId, orgId);
 
   const items = await db.cartItem.findMany({
     where: { cartId: cart.id },
@@ -73,13 +88,14 @@ async function getCartWithItems(userId: string) {
 }
 
 export const cartService = {
-  async getCart(userId: string) {
-    return getCartWithItems(userId);
+  async getCart(userId: string, orgId?: OrgId) {
+    return getCartWithItems(userId, orgId);
   },
 
   async addItem(
     userId: string,
     data: { productId: string; skuId?: string; quantity: number },
+    orgId?: OrgId,
   ) {
     const product = await db.product.findUnique({
       where: { id: data.productId },
@@ -87,19 +103,23 @@ export const cartService = {
     if (!product) throw new Error("Product not found");
     if (product.status !== "LIVE" && product.status !== "APPROVED") throw new Error("Product not available");
 
-    const cart = await getOrCreateCart(userId);
+    const cart = await getOrCreateCart(userId, orgId);
 
     if (cart.sellerId && cart.sellerId !== product.sellerId) {
       await db.cartItem.deleteMany({ where: { cartId: cart.id } });
-      await db.cart.update({
-        where: { id: cart.id },
-        data: { sellerId: product.sellerId },
-      });
+      await cartScope(orgId, (client) =>
+        client.cart.update({
+          where: { id: cart.id },
+          data: { sellerId: product.sellerId },
+        }),
+      );
     } else if (!cart.sellerId) {
-      await db.cart.update({
-        where: { id: cart.id },
-        data: { sellerId: product.sellerId },
-      });
+      await cartScope(orgId, (client) =>
+        client.cart.update({
+          where: { id: cart.id },
+          data: { sellerId: product.sellerId },
+        }),
+      );
     }
 
     const availableStock = data.skuId
@@ -140,13 +160,13 @@ export const cartService = {
       });
     }
 
-    return getCartWithItems(userId);
+    return getCartWithItems(userId, orgId);
   },
 
-  async updateItem(userId: string, itemId: string, quantity: number) {
+  async updateItem(userId: string, itemId: string, quantity: number, orgId?: OrgId) {
     if (quantity <= 0) throw new Error("Quantity must be greater than 0");
 
-    const cart = await getOrCreateCart(userId);
+    const cart = await getOrCreateCart(userId, orgId);
     const item = await db.cartItem.findFirst({
       where: { id: itemId, cartId: cart.id },
       include: { product: true, sku: true },
@@ -157,11 +177,11 @@ export const cartService = {
     if (quantity > availableStock) throw new Error("Insufficient stock");
 
     await db.cartItem.update({ where: { id: itemId }, data: { quantity } });
-    return getCartWithItems(userId);
+    return getCartWithItems(userId, orgId);
   },
 
-  async removeItem(userId: string, itemId: string) {
-    const cart = await getOrCreateCart(userId);
+  async removeItem(userId: string, itemId: string, orgId?: OrgId) {
+    const cart = await getOrCreateCart(userId, orgId);
     const item = await db.cartItem.findFirst({
       where: { id: itemId, cartId: cart.id },
     });
@@ -171,18 +191,22 @@ export const cartService = {
 
     const remaining = await db.cartItem.count({ where: { cartId: cart.id } });
     if (remaining === 0)
-      await db.cart.update({
-        where: { id: cart.id },
-        data: { sellerId: null },
-      });
+      await cartScope(orgId, (client) =>
+        client.cart.update({
+          where: { id: cart.id },
+          data: { sellerId: null },
+        }),
+      );
 
-    return getCartWithItems(userId);
+    return getCartWithItems(userId, orgId);
   },
 
-  async clearCart(userId: string) {
-    const cart = await getOrCreateCart(userId);
+  async clearCart(userId: string, orgId?: OrgId) {
+    const cart = await getOrCreateCart(userId, orgId);
     await db.cartItem.deleteMany({ where: { cartId: cart.id } });
-    await db.cart.update({ where: { id: cart.id }, data: { sellerId: null } });
+    await cartScope(orgId, (client) =>
+      client.cart.update({ where: { id: cart.id }, data: { sellerId: null } }),
+    );
     return { cleared: true };
   },
 
@@ -195,8 +219,9 @@ export const cartService = {
       couponCode?: string;
       paymentMethod?: "ONLINE" | "COD";
     },
+    orgId?: OrgId,
   ) {
-    const { cart, items, subtotal, sellerId } = await getCartWithItems(userId);
+    const { cart, items, subtotal, sellerId } = await getCartWithItems(userId, orgId);
     if (!items.length) throw new Error("Cart is empty");
     if (!sellerId) throw new Error("Cart has no seller assigned");
 
@@ -242,6 +267,7 @@ export const cartService = {
       items: items.map((i) => ({
         productId: i.productId,
         quantity: i.quantity,
+        skuId: i.skuId ?? undefined,
       })),
       deliveryAddress: {
         receiverName: deliveryAddress.receiverName,
@@ -260,6 +286,7 @@ export const cartService = {
       discountAmount: discount > 0 ? discount : undefined,
       couponCode,
       paymentMethod,
+      orgId: orgId ?? undefined,
     });
 
     let order;
@@ -278,7 +305,9 @@ export const cartService = {
     }
 
     await db.cartItem.deleteMany({ where: { cartId: cart.id } });
-    await db.cart.update({ where: { id: cart.id }, data: { sellerId: null } });
+    await cartScope(orgId, (client) =>
+      client.cart.update({ where: { id: cart.id }, data: { sellerId: null } }),
+    );
 
     return order;
   },

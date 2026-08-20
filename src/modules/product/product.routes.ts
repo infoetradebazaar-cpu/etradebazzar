@@ -8,6 +8,8 @@ import { productBulkController } from "./product-bulk.controller";
 import { commissionNegotiationController } from "./commission-negotiation.controller";
 import { productModel3dController } from "./product-model3d.controller";
 import { productModel3DParamSchema } from "./product-model3d.schema";
+import { productVideoController } from "./product-video.controller";
+import { productVideoParamSchema } from "./product-video.schema";
 import { protect } from "../../middleware/auth";
 import { resolveTenant } from "../../middleware/tenant";
 import { requirePermission, requirePlatformAdminAndPermission } from "../../middleware/permission";
@@ -33,6 +35,7 @@ import {
   productImageParamSchema,
   deleteImageSchema,
   reorderImagesSchema,
+  uploadImageSchema,
 } from "./product-image.schema";
 import {
   createVariantSchema,
@@ -59,6 +62,10 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 const upload3d = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+const uploadVideo = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
 });
@@ -102,6 +109,14 @@ router.get(
   sellerLimiter,
   requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_VIEW]),
   productController.listAllProducts,
+);
+router.get(
+  "/export",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_EXPORT),
+  productController.exportProductsCsv,
 );
 
 router.get(
@@ -269,15 +284,6 @@ router.post(
   productController.bulkAction,
 );
 
-router.get(
-  "/export",
-  protect,
-  sellerLimiter,
-  resolveTenant,
-  requirePermission(PERMISSIONS.PRODUCTS_EXPORT),
-  productController.exportProductsCsv,
-);
-
 // Product Images
 router.get(
   "/:productId/images",
@@ -292,7 +298,7 @@ router.post(
   resolveTenant,
   requirePermission(PERMISSIONS.PRODUCTS_IMAGES),
   upload.single("image"),
-  validate(productImageParamSchema),
+  validate(uploadImageSchema),
   productImageController.uploadImage,
 );
 router.patch(
@@ -339,6 +345,33 @@ router.delete(
   requirePermission(PERMISSIONS.PRODUCTS_IMAGES),
   validate(productModel3DParamSchema),
   productModel3dController.delete,
+);
+
+// Product Video
+router.get(
+  "/:productId/video",
+  publicLimiter,
+  validate(productVideoParamSchema),
+  productVideoController.get,
+);
+router.post(
+  "/:productId/video",
+  protect,
+  uploadLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_IMAGES),
+  uploadVideo.single("file"),
+  validate(productVideoParamSchema),
+  productVideoController.upload,
+);
+router.delete(
+  "/:productId/video",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_IMAGES),
+  validate(productVideoParamSchema),
+  productVideoController.delete,
 );
 
 // Product Variants

@@ -2,8 +2,9 @@ import { StorageProvider } from "./storage.interface";
 import { S3Provider } from "./s3.provider";
 import { DigitalOceanSpacesProvider } from "./digitalocean.provider";
 import { RailwayBucketProvider } from "./railway.provider";
+import { MinioProvider } from "./minio.provider";
 
-type StorageProviderType = "aws" | "do" | "railway";
+type StorageProviderType = "aws" | "do" | "railway" | "minio";
 
 class StorageFactory {
   private static instance: StorageProvider | null = null;
@@ -26,6 +27,8 @@ class StorageFactory {
         return new DigitalOceanSpacesProvider();
       case "railway":
         return new RailwayBucketProvider();
+      case "minio":
+        return new MinioProvider();
       default:
         throw new Error(`Unsupported storage provider: ${provider}`);
     }

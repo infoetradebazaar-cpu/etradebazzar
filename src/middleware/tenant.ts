@@ -155,6 +155,27 @@ export async function withSystemScope<T>(
   });
 }
 
+export async function withCustomerOrgScope<T>(
+  orgId: string,
+  fn: (tx: Parameters<Parameters<typeof db.$transaction>[0]>[0]) => Promise<T>
+): Promise<T> {
+  if (!orgId) {
+    throw new Error("withCustomerOrgScope called without an org id - refusing to run unscoped query on RLS-protected table");
+  }
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.current_customer_org', ${orgId}, true)`;
+    return fn(tx);
+  });
+}
+
+export async function setCustomerOrgScope(
+  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  orgId: string | null | undefined
+): Promise<void> {
+  if (!orgId) return;
+  await tx.$executeRaw`SELECT set_config('app.current_customer_org', ${orgId}, true)`;
+}
+
 export async function withOptionalTenantScope<T>(
   fn: (tx: Parameters<Parameters<typeof db.$transaction>[0]>[0]) => Promise<T>
 ): Promise<T> {

@@ -23,6 +23,10 @@ export function generateProductModel3DKey(sellerId: string, productId: string, f
     return `sellers/${sellerId}/products/${productId}/model3d/${randomUUID()}.${format}`;
 }
 
+export function generateProductVideoKey(sellerId: string, productId: string, format: "mp4" | "webm" | "mov" | "mkv"): string {
+    return `sellers/${sellerId}/products/${productId}/video/${randomUUID()}.${format}`;
+}
+
 export function validateImageFile(file: { mimetype: string; size: number }): void {
     if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
         throw new Error(`Invalid file type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}`);

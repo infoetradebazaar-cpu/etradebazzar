@@ -6,6 +6,7 @@ import { withTenantScope, platformRoleCheckPasses } from "./tenant";
 import { runWithTenantContext } from "./tenant-context";
 import { EmailFactory } from "../lib/notifications/email/email.factory";
 import { config } from "../../config/config";
+import { getCustomerOrgMemberPermissions } from "../lib/permission/customer-org-permission.service";
 
 async function getSellerMemberPermissions(userId: string, sellerId: string): Promise<string[]> {
     const cacheKey = RedisKeys.userPermissions(userId, sellerId);
@@ -66,6 +67,60 @@ export const requirePermissionIfSeller = (...keys: string[]) => {
             next();
         } catch (error: any) {
             logger.error({ err: error.message }, "Permission check failed");
+            return res.status(500).json({ error: "Internal server error" });
+        }
+    };
+};
+
+export const requireCustomerOrgPermission = (...keys: string[]) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
+        if (!req.user) {
+            return res.status(401).json({ error: "Not authenticated" });
+        }
+        if (!req.customerOrg) {
+            return res.status(403).json({
+                error: "No active organization for this request",
+                code: "NO_ACTIVE_ORG",
+            });
+        }
+
+        try {
+            const permissions = await getCustomerOrgMemberPermissions(
+                req.user.id,
+                req.customerOrg.orgId,
+            );
+            const ok = keys.every((k) => permissions.includes(k));
+            if (!ok) {
+                return res.status(403).json({ error: "Insufficient organization permissions" });
+            }
+
+            next();
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Customer org permission check failed");
+            return res.status(500).json({ error: "Internal server error" });
+        }
+    };
+};
+
+export const requireCustomerOrgPermissionIfOrg = (...keys: string[]) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
+        if (!req.user) {
+            return res.status(401).json({ error: "Not authenticated" });
+        }
+        if (!req.customerOrg) return next();
+
+        try {
+            const permissions = await getCustomerOrgMemberPermissions(
+                req.user.id,
+                req.customerOrg.orgId,
+            );
+            const ok = keys.every((k) => permissions.includes(k));
+            if (!ok) {
+                return res.status(403).json({ error: "Insufficient organization permissions" });
+            }
+            next();
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Customer org permission check failed");
             return res.status(500).json({ error: "Internal server error" });
         }
     };

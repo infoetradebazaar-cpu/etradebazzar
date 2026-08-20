@@ -17,9 +17,19 @@ export async function resolveImageUrls<T extends { key: string; url: string }>(
 }
 
 export const productImageService = {
-    async uploadImage(sellerId: string, productId: string, file: Express.Multer.File) {
+    async uploadImage(
+        sellerId: string,
+        productId: string,
+        file: Express.Multer.File,
+        skuId?: string | null,
+    ) {
         const product = await db.product.findFirst({ where: { id: productId, sellerId } });
         if (!product) throw new Error("Product not found");
+
+        if (skuId) {
+            const sku = await db.productSKU.findFirst({ where: { id: skuId, productId } });
+            if (!sku) throw new Error("SKU not found");
+        }
 
         validateImageFile({ mimetype: file.mimetype, size: file.size });
 
@@ -39,7 +49,7 @@ export const productImageService = {
         });
 
         return db.productImage.create({
-            data: { productId, url, key, order: count },
+            data: { productId, skuId: skuId ?? null, url, key, order: count },
         });
     },
 
@@ -89,9 +99,9 @@ export const productImageService = {
         });
     },
 
-    async listImages(productId: string) {
+    async listImages(productId: string, skuId?: string) {
         const images = await db.productImage.findMany({
-            where: { productId },
+            where: skuId ? { productId, skuId } : { productId },
             orderBy: { order: "asc" },
         });
         return resolveImageUrls(images);

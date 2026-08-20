@@ -23,7 +23,7 @@ export function PayoutPaidEmail({ sellerName, netAmount, utrRef, payoutUrl }: Pa
             {utrRef ? (
               <>
                 {" "}
-                UTR reference: <strong>{utrRef}</strong>.
+                reference: <strong>{utrRef}</strong>.
               </>
             ) : null}
           </Text>

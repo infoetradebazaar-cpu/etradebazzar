@@ -117,14 +117,14 @@ export const productController = {
   async listProducts(req: Request, res: Response) {
     try {
       const sellerId = req.seller!.id;
-      const { shopId, status, search, page, limit } = req.query as Record<
+      const { status, search, category, page, limit } = req.query as Record<
         string,
         string
       >;
       const result = await productService.listProducts(sellerId, {
-        shopId,
         status,
         search,
+        category,
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
       });
@@ -286,8 +286,7 @@ export const productController = {
   async exportProductsCsv(req: Request, res: Response) {
     try {
       const sellerId = req.seller!.id;
-      const { shopId } = req.query as Record<string, string>;
-      const products = await productService.exportProductsCsv(sellerId, shopId);
+      const products = await productService.exportProductsCsv(sellerId);
 
       const rows = products.map((p) => ({
         productId: p.displayId ?? p.id,
@@ -296,7 +295,6 @@ export const productController = {
         price: p.price ? Number(p.price) : "",
         stock: p.stock ?? "",
         status: p.status,
-        shop: p.shop?.name ?? "",
         category: p.category.name,
         createdAt: p.createdAt.toISOString(),
       }));
@@ -307,7 +305,6 @@ export const productController = {
         "price",
         "stock",
         "status",
-        "shop",
         "category",
         "createdAt",
       ]);

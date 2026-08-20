@@ -4,7 +4,6 @@ import { logger } from "../../utils/logger";
 interface BulkProductRow {
     name: string;
     categorySlug: string;
-    shopId: string;
     price?: number;
     stock?: number;
     description?: string;
@@ -25,7 +24,7 @@ interface RowResult {
     error?: string;
 }
 
-const REQUIRED_COLS = ["name", "categorySlug", "shopId"];
+const REQUIRED_COLS = ["name"];
 const MAX_ROWS = 500;
 
 export const productBulkService = {
@@ -62,13 +61,6 @@ export const productBulkService = {
         });
         const categoryMap = new Map(categories.map((c) => [c.slug, c.id]));
 
-        const shopIds = [...new Set(rows.map((r: any) => String(r.shopId)))];
-        const shops = await db.shop.findMany({
-            where: { id: { in: shopIds }, sellerId, status: "APPROVED" },
-            select: { id: true },
-        });
-        const shopSet = new Set(shops.map((s) => s.id));
-
         const results: RowResult[] = [];
         let created = 0;
         let failed = 0;
@@ -85,10 +77,6 @@ export const productBulkService = {
                     throw new Error(`Category "${parsed.categorySlug}" not found`);
                 }
 
-                if (!shopSet.has(parsed.shopId)) {
-                    throw new Error(`Shop "${parsed.shopId}" not found or not approved`);
-                }
-
                 if (parsed.sku) {
                     const existing = await db.product.findUnique({ where: { sku: parsed.sku } });
                     if (existing) throw new Error(`SKU "${parsed.sku}" already exists`);
@@ -97,7 +85,6 @@ export const productBulkService = {
                 const product = await db.product.create({
                     data: {
                         sellerId,
-                        shopId: parsed.shopId,
                         categoryId,
                         name: parsed.name,
                         description: parsed.description,
@@ -143,7 +130,6 @@ export const productBulkService = {
         const headers = [
             "name",
             "categorySlug",
-            "shopId",
             "price",
             "stock",
             "description",
@@ -159,7 +145,6 @@ export const productBulkService = {
         const example = [
             "Business Cards",
             "business-cards",
-            "shop_id_here",
             "299",
             "100",
             "Premium matte business cards",
@@ -184,22 +169,11 @@ function parseRow(row: any): BulkProductRow {
     const name = String(row.name ?? "").trim();
     if (!name) throw new Error("name is required");
 
-    const categorySlug = String(row.categorySlug ?? "").trim();
-    if (!categorySlug) throw new Error("categorySlug is required");
-
-    const shopId = String(row.shopId ?? "").trim();
-    if (!shopId) throw new Error("shopId is required");
-
-    const price = row.price !== undefined && row.price !== "" ? Number(row.price) : undefined;
-    if (price !== undefined && (isNaN(price) || price < 0)) throw new Error("price must be a positive number");
-
-    const stock = row.stock !== undefined && row.stock !== "" ? Number(row.stock) : undefined;
-    if (stock !== undefined && (isNaN(stock) || stock < 0)) throw new Error("stock must be a non-negative number");
+    const categorySlug = String(row.categorySlug ?? "").trim() || "uncategorized";
 
     return {
         name,
         categorySlug,
-        shopId,
         price,
         stock,
         description: row.description ? String(row.description).trim() : undefined,

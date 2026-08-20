@@ -5,6 +5,8 @@ import { redis } from "./db/redis";
 import { connectDb, disconnectDb } from "./db/index";
 import { startSlaMonitor, stopSlaMonitor } from "./lib/sla/sla-monitor";
 import { startNegotiationNudgeMonitor, stopNegotiationNudgeMonitor } from "./lib/negotiation/nudge-monitor";
+import { startPricingCircuitBreakerMonitor, stopPricingCircuitBreakerMonitor } from "./lib/negotiation/pricing-circuit-breaker-monitor";
+import { startManualNegotiationExpiryMonitor, stopManualNegotiationExpiryMonitor } from "./lib/negotiation/manual-negotiation-expiry-monitor";
 import { startNotificationRetryWorker, stopNotificationRetryWorker } from "./lib/notifications/notification-retry.worker";
 import { startSseRedisSubscriber, stopSseRedisSubscriber } from "./lib/notifications/sse/sse.redis";
 
@@ -28,6 +30,8 @@ async function start() {
   });
   startSlaMonitor();
   startNegotiationNudgeMonitor();
+  startPricingCircuitBreakerMonitor();
+  startManualNegotiationExpiryMonitor();
   startNotificationRetryWorker();
   startSseRedisSubscriber();
 }
@@ -48,6 +52,8 @@ const shutdown = (signal: string) => {
   server?.close(async () => {
     stopSlaMonitor();
     stopNegotiationNudgeMonitor();
+    stopPricingCircuitBreakerMonitor();
+    stopManualNegotiationExpiryMonitor();
     stopNotificationRetryWorker();
     await stopSseRedisSubscriber();
     try {

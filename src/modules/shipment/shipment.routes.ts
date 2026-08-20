@@ -43,6 +43,15 @@ router.get(
     shipmentController.checkServiceability
 );
 
+router.post(
+    "/retry/:orderId",
+    protect,
+    sellerLimiter,
+    resolveTenant,
+    requirePermission(PERMISSIONS.SHIPMENTS_MANAGE),
+    shipmentController.retryShipmentBooking
+);
+
 router.get(
     "/:shipmentId/with-order",
     protect,

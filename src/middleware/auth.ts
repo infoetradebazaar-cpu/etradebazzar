@@ -5,6 +5,10 @@ import { logger } from "../utils/logger";
 
 import { db } from "../db/index";
 import { redis, RedisKeys } from "../db/redis";
+import {
+  getCustomerOrgMemberships,
+  type CustomerOrgMembershipContext,
+} from "../lib/permission/customer-org-permission.service";
 
 declare global {
   namespace Express {
@@ -14,14 +18,17 @@ declare global {
         email?: string;
         role?: string;
         sellerId?: string;
+        customerOrgMemberships?: CustomerOrgMembershipContext[];
         [key: string]: any;
       };
+      customerOrg?: CustomerOrgMembershipContext;
       sessionId?: string;
     }
   }
 }
 
 const ROLE_CACHE_TTL = 300;
+export const ACTIVE_ORG_HEADER = "x-active-org-id";
 
 async function resolveUserFromToken(
   token: string,
@@ -49,6 +56,7 @@ async function resolveUserFromToken(
     isActive: boolean;
     sellerId?: string;
     role: string;
+    passwordChangedAt: string | null;
   };
 
   if (cachedCtx) {
@@ -90,9 +98,19 @@ async function resolveUserFromToken(
       isActive: user.isActive,
       sellerId: member?.sellerId,
       role,
+      passwordChangedAt: user.passwordChangedAt ? user.passwordChangedAt.toISOString() : null,
     };
 
     await redis.setex(roleCacheKey, ROLE_CACHE_TTL, JSON.stringify(userCtx));
+  }
+
+  if (userCtx.passwordChangedAt && payload.iat) {
+    const passwordChangedAtSecs = Math.floor(new Date(userCtx.passwordChangedAt).getTime() / 1000);
+    if (payload.iat < passwordChangedAtSecs) {
+      const err: any = new Error("Token revoked due to password change");
+      err.code = "TOKEN_REVOKED";
+      throw err;
+    }
   }
 
   return {
@@ -105,6 +123,41 @@ async function resolveUserFromToken(
     },
     sessionId: payload.jti,
   };
+}
+
+async function attachCustomerOrgContext(
+  req: Request,
+  res: Response,
+  user: NonNullable<Request["user"]>,
+): Promise<boolean> {
+  const memberships = await getCustomerOrgMemberships(user.id);
+  user.customerOrgMemberships = memberships;
+
+  if (memberships.length === 0) return true;
+
+  const rawHeader = req.headers[ACTIVE_ORG_HEADER];
+  const requestedOrgId = (Array.isArray(rawHeader) ? rawHeader[0] : rawHeader)?.trim();
+
+  if (!requestedOrgId) {
+    req.customerOrg = memberships[0];
+    return true;
+  }
+
+  const match = memberships.find((m) => m.orgId === requestedOrgId);
+  if (!match) {
+    logger.warn(
+      { userId: user.id, requestedOrgId, path: req.originalUrl },
+      "Rejected X-Active-Org-Id for an org the user is not an active member of",
+    );
+    res.status(403).json({
+      error: "Not an active member of the requested organization",
+      code: "INVALID_ACTIVE_ORG",
+    });
+    return false;
+  }
+
+  req.customerOrg = match;
+  return true;
 }
 
 function handleAuthError(req: Request, res: Response, error: any) {
@@ -131,6 +184,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     const { user, sessionId } = await resolveUserFromToken(token as string);
     req.user = user;
     req.sessionId = sessionId;
+    if (!(await attachCustomerOrgContext(req, res, user))) return;
     next();
   } catch (error: any) {
     return handleAuthError(req, res, error);
@@ -152,6 +206,7 @@ export const protectSse = async (req: Request, res: Response, next: NextFunction
       : await resolveUserFromToken(queryToken!, "sse");
     req.user = user;
     req.sessionId = sessionId;
+    if (!(await attachCustomerOrgContext(req, res, user))) return;
     next();
   } catch (error: any) {
     return handleAuthError(req, res, error);
@@ -159,6 +214,10 @@ export const protectSse = async (req: Request, res: Response, next: NextFunction
 };
 export async function invalidateAuthContext(userId: string) {
   await redis.del(RedisKeys.authContext(userId));
+}
+
+export async function invalidateCustomerOrgContext(userId: string) {
+  await redis.del(RedisKeys.customerOrgMemberships(userId));
 }
 
 export const restrictTo = (...allowedRoles: string[]) => {

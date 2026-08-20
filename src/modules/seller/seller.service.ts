@@ -6,6 +6,7 @@ import {
   validateAccountNumber,
   lookupIfsc,
 } from "../../lib/bank/bank.validator";
+import { getBankBrand, type BankBrand } from "../../lib/bank/bank.registry";
 import { assignDefaultRolePermissions } from "../../lib/permission/permission.service";
 import { isPlatformPermissionKey } from "../../lib/permission/permission.constants";
 import { verifyGstAtRegistration, verifyPanAtRegistration } from "./registration-verification";
@@ -78,17 +79,24 @@ async function runBankVerification(
 }
 
 function toClientBankDetail<
-  T extends { accountNumber: string; verificationStatus: string; fundAccountId?: string | null },
->(detail: T): Omit<T, "fundAccountId"> & { isVerified: boolean } {
+  T extends {
+    accountNumber: string;
+    verificationStatus: string;
+    fundAccountId?: string | null;
+    ifscCode: string;
+    bankName: string;
+  },
+>(detail: T): Omit<T, "fundAccountId"> & { isVerified: boolean; bankBrand: BankBrand } {
   const { fundAccountId: _fundAccountId, ...rest } = detail;
   return {
     ...rest,
     accountNumber: decrypt(detail.accountNumber),
     isVerified: detail.verificationStatus === "VERIFIED",
+    bankBrand: getBankBrand(detail.ifscCode, detail.bankName),
   };
 }
 
-async function resolveKycDocumentUrls(kyc: { documents: string[] } | null) {
+export async function resolveKycDocumentUrls(kyc: { documents: string[] } | null) {
   if (!kyc || !kyc.documents?.length) return kyc;
   const storage = StorageFactory.get();
   const signedDocuments = await Promise.all(

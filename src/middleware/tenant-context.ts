@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "async_hooks";
 export interface TenantContext {
     sellerId?: string;
     isPlatformAdmin?: boolean;
+    customerOrgId?: string;
 }
 
 const storage = new AsyncLocalStorage<TenantContext>();

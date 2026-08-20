@@ -146,20 +146,34 @@ export const shipmentService = {
       );
     }
 
+    const existingShipment = await db.shipment.findFirst({ where: { orderId } });
+
     const shipment = await db.$transaction(async (tx) => {
-      const displayId = await generateDisplayId("shipment");
-      const created = await tx.shipment.create({
-        data: {
-          orderId,
-          shopId,
-          orderAddressId: orderAddressId ?? null,
-          displayId,
-          provider: process.env.SHIPMENT_PROVIDER ?? "shiprocket",
-          trackingId,
-          trackingUrl,
-          status: trackingId ? "BOOKED" : "PENDING",
-        },
-      });
+      let created;
+      if (existingShipment) {
+        created = await tx.shipment.update({
+          where: { id: existingShipment.id },
+          data: {
+            trackingId,
+            trackingUrl,
+            status: trackingId ? "BOOKED" : "PENDING",
+          },
+        });
+      } else {
+        const displayId = await generateDisplayId("shipment");
+        created = await tx.shipment.create({
+          data: {
+            orderId,
+            shopId,
+            orderAddressId: orderAddressId ?? null,
+            displayId,
+            provider: process.env.SHIPMENT_PROVIDER ?? "shiprocket",
+            trackingId,
+            trackingUrl,
+            status: trackingId ? "BOOKED" : "PENDING",
+          },
+        });
+      }
 
       if (trackingId) {
         await tx.order.update({
@@ -180,7 +194,7 @@ export const shipmentService = {
           sellerId: order.sellerId,
           actorId: shopId,
           actorType: "shop",
-          action: "SHIPMENT_CREATED",
+          action: existingShipment ? "SHIPMENT_BOOKING_RETRIED" : "SHIPMENT_CREATED",
           entityType: "shipment",
           entityId: created.id,
           metadata: { trackingId, orderId },
@@ -213,6 +227,35 @@ export const shipmentService = {
     }
 
     return shipment;
+  },
+
+  async retryShipmentBooking(sellerId: string, orderId: string) {
+    const order = await db.order.findFirst({
+      where: { id: orderId, sellerId },
+      include: { addresses: true },
+    });
+    if (!order) throw new Error("Order not found");
+    if (order.status !== "PACKED") {
+      throw new Error(`Cannot retry booking - order status is ${order.status}`);
+    }
+    if (!order.assignedShopId) throw new Error("Order has no shop assigned yet");
+
+    const existing = await db.shipment.findFirst({ where: { orderId } });
+    if (existing?.trackingId) {
+      throw new Error("Shipment already booked for this order");
+    }
+
+    const address =
+      order.addresses.find((a) => a.assignedShopId === order.assignedShopId) ??
+      order.addresses[0];
+    if (!address) throw new Error("Order address not found");
+
+    return this.createShipmentForPackedOrder(
+      orderId,
+      sellerId,
+      order.assignedShopId,
+      address.id,
+    );
   },
 
   async trackShipment(sellerId: string, shipmentId: string) {
@@ -510,7 +553,6 @@ export const shipmentService = {
       PENDING: "pending",
       CONFIRMED: "confirmed",
       PROCESSING: "processing",
-      NEGOTIATING: "negotiating",
       SHIPPED: "shipped",
       DELIVERED: "delivered",
       CANCELLED: "cancelled",

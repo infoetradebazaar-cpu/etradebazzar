@@ -5,7 +5,11 @@ export type DetectedFileType =
   | "image/gif"
   | "application/pdf"
   | "model/gltf-binary"
-  | "model/gltf+json";
+  | "model/gltf+json"
+  | "video/mp4"
+  | "video/quicktime"
+  | "video/webm"
+  | "video/x-matroska";
 
 const MAX_GLTF_JSON_PARSE_SIZE = 20 * 1024 * 1024;
 
@@ -54,6 +58,19 @@ export function detectFileSignature(buffer: Buffer): DetectedFileType | null {
   }
   if (looksLikeGltfJson(buffer)) {
     return "model/gltf+json";
+  }
+  // ISO-BMFF container (mp4/mov share the same "ftyp" box at offset 4).
+  if (buffer.length >= 12 && matchesAscii(buffer, 4, "ftyp")) {
+    const majorBrand = buffer.subarray(8, 12).toString("ascii");
+    return majorBrand === "qt  " ? "video/quicktime" : "video/mp4";
+  }
+  if (
+    buffer.length >= 4 &&
+    buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3
+  ) {
+    const head = buffer.subarray(0, Math.min(buffer.length, 4096)).toString("latin1");
+    if (head.includes("webm")) return "video/webm";
+    return "video/x-matroska";
   }
   return null;
 }

@@ -16,7 +16,6 @@ const ASSUMED_GST_RATE = 18;
 
 const NON_CONFIRMED_ORDER_STATUSES = new Set([
     "PENDING",
-    "NEGOTIATING",
     "PENDING_ASSIGNMENT",
     "CANCELLED",
     "UNFULFILLABLE",
@@ -26,7 +25,7 @@ function asPdfDocument(element: React.ReactElement): React.ReactElement<Document
     return element as React.ReactElement<DocumentProps>;
 }
 
-async function loadOrderForBillingDocument(orderId: string) {
+export async function loadOrderForBillingDocument(orderId: string) {
     const order = await db.order.findUnique({
         where: { id: orderId },
         include: {
@@ -68,7 +67,7 @@ function assertActorCanAccessOrder(
     }
 }
 
-function buildLineItems(order: Awaited<ReturnType<typeof loadOrderForBillingDocument>>): BillingDocumentLineItem[] {
+export function buildLineItems(order: Awaited<ReturnType<typeof loadOrderForBillingDocument>>): BillingDocumentLineItem[] {
     return order.items.map((item) => {
         const unitPrice = Number(item.finalUnitPrice ?? item.unitPrice);
         return {
@@ -81,7 +80,7 @@ function buildLineItems(order: Awaited<ReturnType<typeof loadOrderForBillingDocu
     });
 }
 
-function buildSellerParty(order: Awaited<ReturnType<typeof loadOrderForBillingDocument>>): BillingDocumentParty {
+export function buildSellerParty(order: Awaited<ReturnType<typeof loadOrderForBillingDocument>>): BillingDocumentParty {
     return {
         name: order.seller.name,
         email: order.seller.email,
@@ -96,7 +95,7 @@ function buildSellerParty(order: Awaited<ReturnType<typeof loadOrderForBillingDo
     };
 }
 
-function buildBuyerParty(order: Awaited<ReturnType<typeof loadOrderForBillingDocument>>): BillingDocumentParty {
+export function buildBuyerParty(order: Awaited<ReturnType<typeof loadOrderForBillingDocument>>): BillingDocumentParty {
     const address = order.addresses[0];
     return {
         name: order.customer.name ?? "Customer",

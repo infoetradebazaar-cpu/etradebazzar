@@ -6,6 +6,15 @@ export const productImageParamSchema = z.object({
     }),
 });
 
+export const uploadImageSchema = z.object({
+    params: z.object({
+        productId: z.string(),
+    }),
+    body: z.object({
+        skuId: z.string().optional(),
+    }),
+});
+
 export const deleteImageSchema = z.object({
     params: z.object({
         productId: z.string(),

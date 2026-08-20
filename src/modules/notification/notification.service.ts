@@ -286,10 +286,39 @@ export const notificationService = {
             channels: ["email", "sse"],
             emailTemplate: "negotiation-nudge",
             emailData: {
+                reason: "auto_rejected",
                 customerName: params.customerName,
                 productName: params.productName,
                 quantity: params.quantity,
                 lastOfferedPrice: params.lastOfferedPrice,
+                negotiationUrl: `${config.appUrl}/negotiations/${params.sessionId}`,
+            },
+        });
+    },
+
+    async manualNegotiationExpiredNudge(params: {
+        userId: string;
+        email: string;
+        customerName: string;
+        productName: string;
+        quantity: number;
+        visiblePrice: number;
+        sessionId: string;
+    }) {
+        return this.notify({
+            userId: params.userId,
+            email: params.email,
+            type: "NEGOTIATION_NUDGE",
+            title: "Your negotiation is still open",
+            message: `Your negotiation for ${params.productName} didn't conclude - it's still available at the listed price.`,
+            channels: ["email", "sse"],
+            emailTemplate: "negotiation-nudge",
+            emailData: {
+                reason: "manual_expired",
+                customerName: params.customerName,
+                productName: params.productName,
+                quantity: params.quantity,
+                visiblePrice: params.visiblePrice,
                 negotiationUrl: `${config.appUrl}/negotiations/${params.sessionId}`,
             },
         });

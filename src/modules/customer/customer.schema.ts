@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { strongPasswordSchema } from "../../utils/password-policy";
 
 export const registerCustomerSchema = z.object({
   body: z.object({
     name: z.string().min(2).max(100),
     email: z.string().email(),
-    password: z.string().min(8),
+    password: strongPasswordSchema,
     phone: z.string().min(10).max(15),
     address: z.object({
       street: z.string().min(3),

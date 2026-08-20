@@ -3,6 +3,7 @@ import { orderService } from "./order.service";
 import { logger } from "../../utils/logger";
 import { toCsv } from "../../utils/csv";
 import { createBulkOrderSchema } from "./order.schema";
+import { InsufficientStockError } from "../../lib/inventory/stock.errors";
 
 export const orderController = {
   async createOrder(req: Request, res: Response) {
@@ -17,10 +18,14 @@ export const orderController = {
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "Create order failed");
+      if (error instanceof InsufficientStockError) {
+        return res.status(409).json({ success: false, error: error.message, code: "INSUFFICIENT_STOCK" });
+      }
       const clientErrors = [
         "One or more products not found or not approved",
         "Sample orders limited to 2 items",
         "Duplicate order submission detected, please wait",
+        "Invalid SKU for product",
       ];
       if (clientErrors.includes(error.message)) {
         return res
@@ -71,10 +76,14 @@ export const orderController = {
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "Create bulk order failed");
+      if (error instanceof InsufficientStockError) {
+        return res.status(409).json({ success: false, error: error.message, code: "INSUFFICIENT_STOCK" });
+      }
       const clientErrors = [
         "XLS file is empty",
         "One or more products invalid",
         "Duplicate order submission detected, please wait",
+        "Invalid SKU for product",
       ];
       if (
         clientErrors.includes(error.message) ||
@@ -83,46 +92,6 @@ export const orderController = {
       ) {
         return res
           .status(error.message.includes("Duplicate") ? 409 : 400)
-          .json({ success: false, error: error.message });
-      }
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
-    }
-  },
-
-  async submitProposalAsCustomer(req: Request, res: Response) {
-    return submitProposalImpl(req, res, "customer");
-  },
-
-  async submitProposalAsSeller(req: Request, res: Response) {
-    return submitProposalImpl(req, res, "seller");
-  },
-
-  async respondToProposal(req: Request, res: Response) {
-    try {
-      const { orderId, negotiationId } = req.params;
-      const actorId = req.user!.id;
-      const actorType = req.seller ? "seller" : "customer";
-      const result = await orderService.respondToProposal(
-        orderId as string,
-        negotiationId as string,
-        actorId,
-        actorType,
-        req.seller?.id,
-        req.body,
-      );
-      return res.json({ success: true, data: result });
-    } catch (error: any) {
-      logger.error({ err: error.message }, "Respond to proposal failed");
-      const clientErrors = [
-        "Negotiation not found",
-        "Proposal already responded to",
-        "Order not found",
-      ];
-      if (clientErrors.includes(error.message)) {
-        return res
-          .status(error.message === "Order not found" ? 404 : 400)
           .json({ success: false, error: error.message });
       }
       return res
@@ -193,67 +162,6 @@ export const orderController = {
         .json({ success: false, error: "Internal server error" });
     }
   },
-  async setThreshold(req: Request, res: Response) {
-    try {
-      const sellerId = req.seller!.id;
-      const result = await orderService.setThreshold(sellerId, req.body);
-      return res.json({ success: true, data: result });
-    } catch (error: any) {
-      logger.error({ err: error.message }, "Set threshold failed");
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
-    }
-  },
-
-  async getThresholds(req: Request, res: Response) {
-    try {
-      const sellerId = req.seller!.id;
-      const result = await orderService.getThresholds(sellerId);
-      return res.json({ success: true, data: result });
-    } catch (error: any) {
-      logger.error({ err: error.message }, "Get thresholds failed");
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
-    }
-  },
-
-  async deleteThreshold(req: Request, res: Response) {
-    try {
-      const sellerId = req.seller!.id;
-      const { productCategory } = req.params;
-      await orderService.deleteThreshold(sellerId, productCategory as string);
-      return res.json({ success: true, data: null });
-    } catch (error: any) {
-      logger.error({ err: error.message }, "Delete threshold failed");
-      if (error?.code === "P2025") {
-        return res
-          .status(404)
-          .json({ success: false, error: "Threshold not found" });
-      }
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
-    }
-  },
-
-  async setCommission(req: Request, res: Response) {
-    try {
-      const actorId = req.user!.id;
-      const result = await orderService.setCommission(actorId, req.body);
-      return res.status(201).json({ success: true, data: result });
-    } catch (error: any) {
-      logger.error({ err: error.message }, "Set commission failed");
-      if (error.message === "Provide productId or category") {
-        return res.status(400).json({ success: false, error: error.message });
-      }
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
-    }
-  },
-
   async getOrder(req: Request, res: Response) {
     try {
       const { orderId } = req.params;
@@ -397,24 +305,6 @@ export const orderController = {
     }
   },
 
-  async bulkRespondNegotiations(req: Request, res: Response) {
-    try {
-      const sellerId = req.seller!.id;
-      const actorId = req.user!.id;
-      const result = await orderService.bulkRespondNegotiations(
-        sellerId,
-        actorId,
-        req.body,
-      );
-      return res.json({ success: true, data: result });
-    } catch (error: any) {
-      logger.error({ err: error.message }, "Bulk respond negotiations failed");
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
-    }
-  },
-
   async getActionRequired(req: Request, res: Response) {
     try {
       const sellerId = req.seller!.id;
@@ -487,33 +377,3 @@ export const orderController = {
     }
   },
 };
-
-async function submitProposalImpl(
-  req: Request,
-  res: Response,
-  actorType: "customer" | "seller",
-) {
-  try {
-    const { orderId } = req.params;
-    const actorId = req.user!.id;
-    const result = await orderService.submitProposal(
-      orderId as string,
-      actorId,
-      actorType,
-      req.seller?.id,
-      req.body,
-    );
-    return res.status(201).json({ success: true, data: result });
-  } catch (error: any) {
-    logger.error({ err: error.message }, "Submit proposal failed");
-    const clientErrors = ["Order not found", "Order is not in negotiation"];
-    if (clientErrors.includes(error.message)) {
-      return res
-        .status(error.message === "Order not found" ? 404 : 400)
-        .json({ success: false, error: error.message });
-    }
-    return res
-      .status(500)
-      .json({ success: false, error: "Internal server error" });
-  }
-}

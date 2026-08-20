@@ -98,6 +98,25 @@ export const shipmentController = {
         }
     },
 
+    async retryShipmentBooking(req: Request, res: Response) {
+        try {
+            const sellerId = req.seller!.id;
+            const { orderId } = req.params;
+            const result = await shipmentService.retryShipmentBooking(sellerId, String(orderId));
+            return res.json({ success: true, data: result });
+        } catch (error: any) {
+            logger.error({ err: error.message }, "Retry shipment booking failed");
+            const clientErrors = [
+                "Order not found", "Order has no shop assigned yet",
+                "Order address not found", "Shipment already booked for this order",
+            ];
+            if (clientErrors.includes(error.message) || error.message.startsWith("Cannot retry booking")) {
+                return res.status(400).json({ success: false, error: error.message });
+            }
+            return res.status(500).json({ success: false, error: "Internal server error" });
+        }
+    },
+
     async handleWebhook(req: Request, res: Response) {
         try {
             const signature = req.headers["x-shiprocket-signature"] as string;

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { manualNegotiationService } from "./manual-negotiation.service";
+import { InsufficientStockError } from "./negotiation-order.helper";
 import { logger } from "../../utils/logger";
 
 const CLIENT_ERRORS = [
@@ -29,7 +30,7 @@ export const manualNegotiationController = {
     try {
       const customerId = req.user!.id;
       const { sellerId, productId, skuId, quantity } = req.body;
-      const result = await manualNegotiationService.startSession(customerId, sellerId, productId, skuId, quantity);
+      const result = await manualNegotiationService.startSession(customerId, sellerId, productId, skuId, quantity, req.customerOrg?.orgId);
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "Start manual negotiation failed");
@@ -121,6 +122,9 @@ export const manualNegotiationController = {
       return res.json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "Accept manual negotiation failed");
+      if (error instanceof InsufficientStockError) {
+        return res.status(409).json({ success: false, error: error.message, code: "INSUFFICIENT_STOCK" });
+      }
       if (isClientError(error.message)) {
         return res.status(400).json({ success: false, error: error.message });
       }
