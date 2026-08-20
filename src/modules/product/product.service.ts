@@ -9,6 +9,14 @@ import {
 import { resolveImageUrls } from "./product-image.service";
 import { syncProductSearchIndexInBackground } from "../../lib/search/product-search-document";
 import { sanitizeSpecificationHtml } from "../../lib/sanitize/html-sanitizer";
+import {
+  findCategoryVariantAttribute,
+  resolveVariantValues,
+  dedupeCaseInsensitive,
+  validateSkuOptions,
+  validateTierRange,
+  translateTierTriggerError,
+} from "./product-variant.service";
 
 const SKU_UNIQUE_CONSTRAINT = "sku";
 
@@ -63,30 +71,57 @@ async function validateProductAttributes(
   }
 }
 
+type CreateProductInput = {
+  name: string;
+  description?: string;
+  price?: number;
+  compareAtPrice?: number;
+  sku?: string;
+  stock?: number;
+  lowStockThreshold?: number;
+  categoryId: string;
+  weightGrams?: number;
+  length?: number;
+  width?: number;
+  height?: number;
+  isDigital: boolean;
+  attributes?: Record<string, string | number | boolean | null>;
+  negotiationThresholdQty?: number;
+  customizationEnabled?: boolean;
+  customizationAcceptedFormats?: string[];
+  specification?: string;
+};
+
+async function reclaimAbandonedDraftSku(
+  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  sellerId: string,
+  sku: string,
+): Promise<void> {
+  const existing = await tx.product.findUnique({
+    where: { sku },
+    include: {
+      _count: { select: { images: true, variants: true, skus: true } },
+    },
+  });
+  if (!existing) return;
+  if (existing.sellerId !== sellerId) return;
+  if (existing.status !== "DRAFT") return;
+  if (
+    existing._count.images > 0 ||
+    existing._count.variants > 0 ||
+    existing._count.skus > 0
+  ) {
+    return;
+  }
+
+  await tx.product.delete({ where: { id: existing.id } });
+}
+
 export const productService = {
   async createProduct(
     sellerId: string,
     actorId: string,
-    data: {
-      name: string;
-      description?: string;
-      price?: number;
-      compareAtPrice?: number;
-      sku?: string;
-      stock?: number;
-      lowStockThreshold?: number;
-      categoryId: string;
-      weightGrams?: number;
-      length?: number;
-      width?: number;
-      height?: number;
-      isDigital: boolean;
-      attributes?: Record<string, string | number | boolean | null>;
-      negotiationThresholdQty?: number;
-      customizationEnabled?: boolean;
-      customizationAcceptedFormats?: string[];
-      specification?: string;
-    },
+    data: CreateProductInput,
   ) {
     const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
     if (!kyc) throw new Error("KYC not submitted");
@@ -103,6 +138,10 @@ export const productService = {
 
     try {
       return await withTenantScope(async (tx) => {
+        if (data.sku) {
+          await reclaimAbandonedDraftSku(tx, sellerId, data.sku);
+        }
+
         const product = await tx.product.create({
           data: {
             sellerId,
@@ -141,6 +180,169 @@ export const productService = {
             metadata: { name: data.name },
           },
         });
+
+        return product;
+      });
+    } catch (err: any) {
+      if (isUniqueConstraintError(err, SKU_UNIQUE_CONSTRAINT)) {
+        throw new Error("SKU already exists");
+      }
+      throw err;
+    }
+  },
+
+  async createProductComplete(
+    sellerId: string,
+    actorId: string,
+    data: {
+      product: CreateProductInput;
+      variants: { name: string; values: string[] }[];
+      skus: {
+        sku: string;
+        price: number;
+        stock: number;
+        minQuantity?: number;
+        options: Record<string, string>;
+        priceTiers: {
+          minQty: number;
+          maxQty?: number;
+          price: number;
+          hiddenFloorPrice?: number;
+        }[];
+      }[];
+    },
+  ) {
+    const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
+    if (!kyc) throw new Error("KYC not submitted");
+    if (kyc.status !== "VERIFIED") throw new Error("KYC not verified");
+
+    const category = await db.category.findUnique({
+      where: { id: data.product.categoryId },
+    });
+    if (!category) throw new Error("Category not found");
+
+    await validateProductAttributes(data.product.categoryId, data.product.attributes);
+
+    const displayId = await generateDisplayId("product");
+
+    try {
+      return await withTenantScope(async (tx) => {
+        const product = await tx.product.create({
+          data: {
+            sellerId,
+            categoryId: data.product.categoryId,
+            displayId,
+            name: data.product.name,
+            description: data.product.description,
+            specification: data.product.specification !== undefined
+              ? sanitizeSpecificationHtml(data.product.specification)
+              : undefined,
+            price: data.product.price,
+            compareAtPrice: data.product.compareAtPrice,
+            sku: data.product.sku,
+            stock: data.product.stock,
+            lowStockThreshold: data.product.lowStockThreshold,
+            weightGrams: data.product.weightGrams,
+            length: data.product.length,
+            width: data.product.width,
+            height: data.product.height,
+            isDigital: data.product.isDigital,
+            attributes: data.product.attributes ?? undefined,
+            negotiationThresholdQty: data.product.negotiationThresholdQty,
+            customizationEnabled: data.product.customizationEnabled,
+            customizationAcceptedFormats: data.product.customizationAcceptedFormats,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            sellerId,
+            actorId,
+            actorType: "seller",
+            action: "PRODUCT_CREATED",
+            entityType: "product",
+            entityId: product.id,
+            metadata: { name: data.product.name },
+          },
+        });
+
+        const variantsByName = new Map<string, Set<string>>();
+
+        for (const variant of data.variants) {
+          const categoryAttribute = await findCategoryVariantAttribute(
+            product.categoryId,
+            variant.name,
+          );
+          const values = dedupeCaseInsensitive(
+            categoryAttribute
+              ? await resolveVariantValues(categoryAttribute, sellerId, variant.values)
+              : variant.values,
+          );
+
+          await tx.variantOption.create({
+            data: {
+              productId: product.id,
+              name: variant.name,
+              values: { create: values.map((value) => ({ value })) },
+            },
+          });
+
+          variantsByName.set(variant.name, new Set(values));
+        }
+
+        const variantsForValidation = Array.from(variantsByName.entries()).map(
+          ([name, values]) => ({
+            name,
+            values: Array.from(values).map((value) => ({ value })),
+          }),
+        );
+
+        let skuCount = 0;
+        for (const skuInput of data.skus) {
+          await validateSkuOptions(variantsForValidation, skuInput.options);
+
+          const createdSku = await tx.productSKU.create({
+            data: {
+              productId: product.id,
+              sku: skuInput.sku,
+              price: skuInput.price,
+              stock: skuInput.stock,
+              minQuantity: skuInput.minQuantity ?? 1,
+              options: skuInput.options,
+            },
+          });
+          skuCount += 1;
+
+          const createdTiers: { id: string; minQty: number; maxQty: number | null }[] = [];
+          for (const tier of skuInput.priceTiers) {
+            validateTierRange(createdTiers, tier.minQty, tier.maxQty ?? null);
+            try {
+              const createdTier = await tx.skuPriceTier.create({
+                data: {
+                  skuId: createdSku.id,
+                  minQty: tier.minQty,
+                  maxQty: tier.maxQty,
+                  price: tier.price,
+                  hiddenFloorPrice: tier.hiddenFloorPrice,
+                },
+              });
+              createdTiers.push({
+                id: createdTier.id,
+                minQty: createdTier.minQty,
+                maxQty: createdTier.maxQty,
+              });
+            } catch (err: any) {
+              if (err?.code === "P2002") {
+                throw new Error(`A tier at minQty=${tier.minQty} already exists for this SKU`);
+              }
+              throw translateTierTriggerError(err);
+            }
+          }
+        }
+
+        if (skuCount > 0) {
+          await tx.product.update({ where: { id: product.id }, data: { stock: 0 } });
+        }
 
         return product;
       });

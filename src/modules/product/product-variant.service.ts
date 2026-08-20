@@ -90,6 +90,16 @@ function dedupeCaseInsensitive(values: string[]): string[] {
   return result;
 }
 
+export {
+  findCategoryVariantAttribute,
+  resolveVariantValues,
+  dedupeCaseInsensitive,
+  validateSkuOptions,
+  validateTierRange,
+  translateTierTriggerError,
+  sortObject,
+};
+
 export const productVariantService = {
   async createVariant(
     sellerId: string,

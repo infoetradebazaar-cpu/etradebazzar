@@ -30,6 +30,7 @@ import {
   listProductsSchema,
   bulkProductActionSchema,
   submitForReviewSchema,
+  createProductCompleteSchema,
 } from "./product.schema";
 import {
   productImageParamSchema,
@@ -201,6 +202,15 @@ router.post(
   requirePermission(PERMISSIONS.PRODUCTS_CREATE),
   validate(createProductSchema),
   productController.createProduct,
+);
+router.post(
+  "/complete",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermission(PERMISSIONS.PRODUCTS_CREATE),
+  validate(createProductCompleteSchema),
+  productController.createProductComplete,
 );
 router.get(
   "/",

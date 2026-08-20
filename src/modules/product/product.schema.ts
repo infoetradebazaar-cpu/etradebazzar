@@ -51,6 +51,44 @@ export const updateProductSchema = z.object({
   }),
 });
 
+export const createProductCompleteSchema = z.object({
+  body: z.object({
+    product: createProductSchema.shape.body,
+    variants: z
+      .array(
+        z.object({
+          name: z.string().min(1).max(50),
+          values: z.array(z.string().min(1).max(100)).min(1),
+        }),
+      )
+      .default([]),
+    skus: z
+      .array(
+        z.object({
+          sku: z.string().min(1).max(100),
+          price: z.number().positive(),
+          stock: z.number().int().min(0),
+          minQuantity: z.number().int().min(1).optional(),
+          options: z.record(z.string(), z.string()),
+          priceTiers: z
+            .array(
+              z.object({
+                minQty: z.number().int().min(2),
+                maxQty: z.number().int().positive().optional(),
+                price: z.number().positive(),
+                hiddenFloorPrice: z.number().positive().optional(),
+              }).refine((data) => data.maxQty === undefined || data.maxQty > data.minQty, {
+                message: "maxQty must be greater than minQty",
+                path: ["maxQty"],
+              }),
+            )
+            .default([]),
+        }),
+      )
+      .default([]),
+  }),
+});
+
 export const productParamSchema = z.object({
   params: z.object({ productId: z.string() }),
 });

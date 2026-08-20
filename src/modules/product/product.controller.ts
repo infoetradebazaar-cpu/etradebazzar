@@ -46,6 +46,48 @@ export const productController = {
     }
   },
 
+  async createProductComplete(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const actorId = req.user!.id;
+      const result = await productService.createProductComplete(
+        sellerId,
+        actorId,
+        req.body,
+      );
+      return res.status(201).json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Create product (complete) failed");
+      const clientErrors = [
+        "Shop not found",
+        "Shop not approved",
+        "SKU already exists",
+        "SKU code already exists",
+        "KYC not submitted",
+        "KYC not verified",
+        "Category not found",
+      ];
+      if (
+        clientErrors.includes(error.message) ||
+        isAttributeError(error.message) ||
+        error.message.startsWith("Variant attribute") ||
+        error.message.startsWith("Variant value") ||
+        error.message.startsWith("Invalid variant option") ||
+        error.message.startsWith("Invalid value") ||
+        error.message.startsWith("Missing option") ||
+        error.message.startsWith("Product has no variant options") ||
+        error.message.startsWith("A tier at minQty") ||
+        error.message.startsWith("Tier ") ||
+        error.message.startsWith("Tier range")
+      ) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async updateProduct(req: Request, res: Response) {
     try {
       const sellerId = req.seller!.id;
