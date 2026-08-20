@@ -180,7 +180,7 @@ export const sellerProfileService = {
                 _count: { id: true },
             }),
             db.review.aggregate({
-                where: { product: { shopId }, status: "APPROVED" },
+                where: { product: { sellerId: shop.sellerId }, status: "APPROVED" },
                 _avg: { rating: true },
             }),
             db.order.count({ where: { assignedShopId: shopId } }),

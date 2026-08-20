@@ -275,9 +275,6 @@ export const shopService = {
     const shop = await withTenantScope((tx) =>
       tx.shop.findFirst({
         where: { id: shopId, sellerId },
-        include: {
-          _count: { select: { products: true } },
-        },
       }),
     );
     if (!shop) throw new Error("Shop not found");
@@ -335,7 +332,6 @@ export const shopService = {
           createdAt: true,
           pickupCity: true,
           pickupState: true,
-          _count: { select: { products: true } },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
@@ -413,7 +409,6 @@ export const shopService = {
           pickupCity: true,
           pickupState: true,
           seller: { select: { id: true, name: true, businessName: true } },
-          _count: { select: { products: true } },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
