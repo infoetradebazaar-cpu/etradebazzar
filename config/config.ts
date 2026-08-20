@@ -1,3 +1,4 @@
+import { encodeBase64 } from "bcryptjs";
 import dotenv from "dotenv";
 import { z } from "zod";
 
@@ -49,6 +50,8 @@ const envSchema = z.object({
   MSG91_SHIPMENT_TEMPLATE_ID: z.string().min(1),
 
   APP_URL: z.string().url(),
+  SELLER_APP_URL: z.string().url().optional(),
+  PLATFORM_APP_URL: z.string().url().optional(),
 
   STORAGE_PROVIDER: z.enum(["aws", "do", "railway"]),
 
@@ -226,7 +229,8 @@ export const config = {
   msg91ShipmentTemplateId: env.MSG91_SHIPMENT_TEMPLATE_ID,
 
   appUrl: env.APP_URL,
-
+  sellerAppUrl: env.SELLER_APP_URL ?? "https://seller.etradebazaar.com",
+  platformAppUrl: env.PLATFORM_APP_URL ?? "https://platform.etradebazaar.com",
   storageProvider: env.STORAGE_PROVIDER,
 
   awsRegion: env.AWS_REGION ?? "",

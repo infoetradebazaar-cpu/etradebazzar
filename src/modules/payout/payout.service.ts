@@ -348,7 +348,7 @@ export const payoutService = {
                         sellerName: owner.user.name ?? "there",
                         businessName: seller.businessName,
                         netAmount,
-                        payoutUrl: `${config.appUrl}/payouts/${payout.id}`,
+                        payoutUrl: `${config.sellerAppUrl}/payouts/${payout.id}`,
                     },
                     data: { payoutId: payout.id, netAmount },
                 }).catch(() => null);
@@ -423,13 +423,13 @@ export const payoutService = {
                         sellerName: owner.user.name ?? "there",
                         netAmount: Number(payout.netAmount),
                         utrRef: result.utrRef,
-                        payoutUrl: `${config.appUrl}/payouts/${payout.id}`,
+                        payoutUrl: `${config.sellerAppUrl}/payouts/${payout.id}`,
                     }
                     : {
                         sellerName: owner.user.name ?? "there",
                         netAmount: Number(payout.netAmount),
                         failureReason: result.failureReason,
-                        payoutUrl: `${config.appUrl}/payouts/${payout.id}`,
+                        payoutUrl: `${config.sellerAppUrl}/payouts/${payout.id}`,
                     },
                 data: { payoutId: payout.id, utrRef: result.utrRef },
             }).catch(() => null);

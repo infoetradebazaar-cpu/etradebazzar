@@ -342,7 +342,14 @@ router.post("/forgot-password", authLimiter, passwordResetLimiter, validate(forg
 
     const user = await db.user.findUnique({
       where: { email },
-      select: { id: true, email: true, name: true, isActive: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        isActive: true,
+        platformMember: { select: { id: true } },
+        sellerMemberships: { select: { id: true }, take: 1 },
+      },
     });
 
     const ipAddress = req.ip;
@@ -361,7 +368,12 @@ router.post("/forgot-password", authLimiter, passwordResetLimiter, validate(forg
       await redis.setex(RedisKeys.passwordResetToken(tokenHash), RESET_TOKEN_TTL_SECS, user.id);
       await redis.setex(RedisKeys.passwordResetRequest(user.id), RESET_TOKEN_TTL_SECS, tokenHash);
 
-      const resetUrl = `${config.appUrl}/reset-password?token=${rawToken}`;
+      const resetBaseUrl = user.platformMember
+        ? config.platformAppUrl
+        : user.sellerMemberships.length > 0
+          ? config.sellerAppUrl
+          : config.appUrl;
+      const resetUrl = `${resetBaseUrl}/reset-password?token=${rawToken}`;
 
       EmailFactory.get()
         .send({

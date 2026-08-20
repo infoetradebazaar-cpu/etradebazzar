@@ -1096,7 +1096,7 @@ export const sellerService = {
           emailTemplate: "kyc-verified",
           emailData: {
             sellerName: seller.name,
-            dashboardUrl: `${config.appUrl}/dashboard`,
+            dashboardUrl: `${config.sellerAppUrl}/dashboard`,
           },
         })
         .catch(() => null);
@@ -1150,7 +1150,7 @@ export const sellerService = {
           emailData: {
             sellerName: seller.name,
             reason,
-            dashboardUrl: `${config.appUrl}/dashboard`,
+            dashboardUrl: `${config.sellerAppUrl}/dashboard`,
           },
         })
         .catch(() => null);
@@ -1227,7 +1227,7 @@ export const sellerService = {
       select: { businessName: true },
     });
 
-    const inviteUrl = `${config.appUrl}/team/accept-invite?token=${invite.token}`;
+    const inviteUrl = `${config.sellerAppUrl}/team/accept-invite?token=${invite.token}`;
     const teamInviteEmailData = {
       businessName: seller?.businessName ?? "a seller",
       roleName: role.name,
@@ -1470,7 +1470,7 @@ export const sellerService = {
       db.seller.findUnique({ where: { id: sellerId }, select: { businessName: true } }),
       db.user.findUnique({ where: { email: invite.email } }),
     ]);
-    const reminderInviteUrl = `${config.appUrl}/team/accept-invite?token=${invite.token}`;
+    const reminderInviteUrl = `${config.sellerAppUrl}/team/accept-invite?token=${invite.token}`;
     const reminderEmailData = {
       businessName: seller?.businessName ?? "a seller",
       roleName: (invite as any).role?.name ?? "a member",

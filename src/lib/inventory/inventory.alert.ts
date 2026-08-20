@@ -68,7 +68,7 @@ export async function checkLowStock(
         productName: product.name,
         currStock,
         threshold,
-        productUrl: `${config.appUrl}/products/${productId}`,
+        productUrl: `${config.sellerAppUrl}/products/${productId}`,
       },
       data: { productId, skuId, currStock, threshold },
     });

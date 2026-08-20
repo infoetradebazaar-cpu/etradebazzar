@@ -183,7 +183,7 @@ export const notificationService = {
             emailData: {
                 sellerName: params.sellerName,
                 businessName: params.businessName,
-                loginUrl: `${config.appUrl}/dashboard`,
+                loginUrl: `${config.sellerAppUrl}/dashboard`,
             },
         });
     },
@@ -217,7 +217,7 @@ export const notificationService = {
             emailData: {
                 sellerName: params.sellerName,
                 productName: params.productName,
-                dashboardUrl: `${config.appUrl}/products`,
+                dashboardUrl: `${config.sellerAppUrl}/products`,
                 note: params.note,
             },
         });
@@ -344,7 +344,7 @@ export const notificationService = {
                 sellerName: params.sellerName,
                 productName: params.productName,
                 quantity: params.quantity,
-                negotiationUrl: `${config.appUrl}/negotiations/manual/${params.sessionId}`,
+                negotiationUrl: `${config.sellerAppUrl}/negotiations/manual/${params.sessionId}`,
             },
         });
     },
