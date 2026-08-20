@@ -261,7 +261,7 @@ export const notificationService = {
                 orderType: params.orderType,
                 items: params.items,
                 totalAmount: params.totalAmount,
-                orderUrl: `${config.appUrl}/orders/${params.orderId}`,
+                orderUrl: `${config.customerAppUrl}/orders/${params.orderId}`,
             },
             smsTemplateId: config.msg91OrderPlacedTemplateId,
             smsVariables: { VAR1: params.orderId, VAR2: String(params.totalAmount) },
@@ -291,7 +291,7 @@ export const notificationService = {
                 productName: params.productName,
                 quantity: params.quantity,
                 lastOfferedPrice: params.lastOfferedPrice,
-                negotiationUrl: `${config.appUrl}/negotiations/${params.sessionId}`,
+                negotiationUrl: `${config.customerAppUrl}/negotiations/${params.sessionId}`,
             },
         });
     },
@@ -319,7 +319,7 @@ export const notificationService = {
                 productName: params.productName,
                 quantity: params.quantity,
                 visiblePrice: params.visiblePrice,
-                negotiationUrl: `${config.appUrl}/negotiations/${params.sessionId}`,
+                negotiationUrl: `${config.customerAppUrl}/negotiations/${params.sessionId}`,
             },
         });
     },
@@ -362,7 +362,7 @@ export const notificationService = {
                 customerName: params.customerName,
                 orderId: params.orderId,
                 finalAmount: params.finalAmount,
-                orderUrl: `${config.appUrl}/orders/${params.orderId}`,
+                orderUrl: `${config.customerAppUrl}/orders/${params.orderId}`,
             },
         });
     },
@@ -379,7 +379,7 @@ export const notificationService = {
             emailData: {
                 customerName: params.customerName,
                 orderId: params.orderId,
-                orderUrl: `${config.appUrl}/orders/${params.orderId}`,
+                orderUrl: `${config.customerAppUrl}/orders/${params.orderId}`,
             },
         });
     },

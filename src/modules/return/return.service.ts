@@ -97,7 +97,7 @@ export const returnService = {
           emailData: {
             sellerName: seller.name,
             orderId: data.orderId,
-            returnUrl: `${config.appUrl}/returns/${returnRequest.id}`,
+            returnUrl: `${config.customerAppUrl}/returns/${returnRequest.id}`,
           },
           data: { orderId: data.orderId, returnId: returnRequest.id },
         })
@@ -236,7 +236,7 @@ export const returnService = {
             orderId: returnRequest.orderId,
             trackingId,
             trackingUrl,
-            returnUrl: `${config.appUrl}/returns/${returnId}`,
+            returnUrl: `${config.customerAppUrl}/returns/${returnId}`,
           },
           data: { returnId, trackingId, trackingUrl },
         })
@@ -300,7 +300,7 @@ export const returnService = {
             customerName: customer.name ?? "there",
             orderId: returnRequest.orderId,
             reason: note,
-            returnUrl: `${config.appUrl}/returns/${returnId}`,
+            returnUrl: `${config.customerAppUrl}/returns/${returnId}`,
           },
         })
         .catch(() => null);

@@ -50,6 +50,7 @@ const envSchema = z.object({
   MSG91_SHIPMENT_TEMPLATE_ID: z.string().min(1),
 
   APP_URL: z.string().url(),
+  CUSTOMER_APP_URL: z.string().url(),
   SELLER_APP_URL: z.string().url().optional(),
   PLATFORM_APP_URL: z.string().url().optional(),
 
@@ -229,6 +230,7 @@ export const config = {
   msg91ShipmentTemplateId: env.MSG91_SHIPMENT_TEMPLATE_ID,
 
   appUrl: env.APP_URL,
+  customerAppUrl: env.CUSTOMER_APP_URL,
   sellerAppUrl: env.SELLER_APP_URL ?? "https://seller.etradebazaar.com",
   platformAppUrl: env.PLATFORM_APP_URL ?? "https://platform.etradebazaar.com",
   storageProvider: env.STORAGE_PROVIDER,

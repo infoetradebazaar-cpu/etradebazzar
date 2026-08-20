@@ -372,7 +372,7 @@ router.post("/forgot-password", authLimiter, passwordResetLimiter, validate(forg
         ? config.platformAppUrl
         : user.sellerMemberships.length > 0
           ? config.sellerAppUrl
-          : config.appUrl;
+          : config.customerAppUrl;
       const resetUrl = `${resetBaseUrl}/reset-password?token=${rawToken}`;
 
       EmailFactory.get()

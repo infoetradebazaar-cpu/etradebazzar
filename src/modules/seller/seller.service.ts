@@ -1517,6 +1517,24 @@ export const sellerService = {
 
     let user = await db.user.findUnique({ where: { email: invite.email } });
 
+    if (user) {
+      const existingOrgMembership = await db.customerOrgMember.findFirst({
+        where: { userId: user.id },
+      });
+      if (existingOrgMembership) {
+        throw new Error(
+          "This email is already registered as a customer organization member and cannot be used for a seller team.",
+        );
+      }
+
+      const passwordMatches = await bcrypt.compare(data.password, user.password);
+      if (!passwordMatches) {
+        throw new Error(
+          "An account with this email already exists. Enter its password to accept this invite.",
+        );
+      }
+    }
+
     return db.$transaction(async (tx) => {
       if (!user) {
         const hashedPassword = await bcrypt.hash(data.password, 12);
