@@ -400,7 +400,7 @@ export const productVariantService = {
         },
       });
     } catch (err: any) {
-      if (err?.code === "P2002") throw new Error(`A tier at minQty=${data.minQty} already exists for this SKU`);
+      if (err?.code === "P2002") throw new Error(`This SKU already has a tier that starts at quantity ${data.minQty} pick a different starting quantity.`);
       throw translateTierTriggerError(err);
     }
   },
@@ -430,7 +430,7 @@ export const productVariantService = {
     try {
       return await db.skuPriceTier.update({ where: { id: tierId }, data });
     } catch (err: any) {
-      if (err?.code === "P2002") throw new Error(`A tier at minQty=${data.minQty} already exists for this SKU`);
+      if (err?.code === "P2002") throw new Error(`This SKU already has a tier that starts at quantity ${data.minQty} pick a different starting quantity.`);
       throw translateTierTriggerError(err);
     }
   },
@@ -475,14 +475,18 @@ function validateTierRange(
     .filter((t) => t.minQty > minQty)
     .sort((a, b) => a.minQty - b.minQty)[0];
   if (maxQty !== null && next && maxQty >= next.minQty) {
-    throw new Error(`Tier range [${minQty}, ${maxQty}] overlaps the next tier starting at minQty=${next.minQty}`);
+    throw new Error(
+      `Quantity ${next.minQty} is already covered by the next tier — this tier must end at ${next.minQty - 1} or earlier.`,
+    );
   }
 
   const prev = others
     .filter((t) => t.minQty < minQty)
     .sort((a, b) => b.minQty - a.minQty)[0];
   if (prev && prev.maxQty !== null && prev.maxQty >= minQty) {
-    throw new Error(`Tier at minQty=${minQty} overlaps the previous tier's range ending at maxQty=${prev.maxQty}`);
+    throw new Error(
+      `Quantity ${minQty} is already covered by the previous tier, which runs up to ${prev.maxQty} this tier must start at ${prev.maxQty + 1} or later.`,
+    );
   }
 }
 
