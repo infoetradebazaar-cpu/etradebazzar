@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { redis, RedisKeys } from "../../db/redis";
 import { SmsFactory } from "../notifications/sms/sms.factory";
 
@@ -5,13 +6,17 @@ const OTP_TTL_SECONDS = 5 * 60;
 const MAX_ATTEMPTS = 5;
 
 function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function hashOtp(otp: string): string {
+  return crypto.createHash("sha256").update(otp).digest("hex");
 }
 
 export const otpService = {
   async requestOtp(purpose: string, phone: string): Promise<void> {
     const otp = generateOtp();
-    await redis.setex(RedisKeys.otpCode(purpose, phone), OTP_TTL_SECONDS, otp);
+    await redis.setex(RedisKeys.otpCode(purpose, phone), OTP_TTL_SECONDS, hashOtp(otp));
     await redis.del(RedisKeys.otpAttempts(purpose, phone));
     await SmsFactory.get().sendOtp({ to: phone, otp, expiry: OTP_TTL_SECONDS / 60 });
   },
@@ -27,7 +32,13 @@ export const otpService = {
 
     const codeKey = RedisKeys.otpCode(purpose, phone);
     const stored = await redis.get(codeKey);
-    if (!stored || stored !== code) return false;
+    if (!stored) return false;
+
+    const storedBuf = Buffer.from(stored, "hex");
+    const providedBuf = Buffer.from(hashOtp(code), "hex");
+    if (storedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(storedBuf, providedBuf)) {
+      return false;
+    }
 
     await redis.del(codeKey);
     await redis.del(attemptsKey);

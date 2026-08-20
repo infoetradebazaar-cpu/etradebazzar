@@ -132,7 +132,7 @@ export class ResendProvider implements EmailProvider {
             from: config.companyEmail,
             to: Array.isArray(input.to) ? input.to : [input.to],
             subject: input.subject ?? Subject[input.template],
-            ...(input.html ? { html } : { react: html as any }),
+            html,
         });
 
         if (error) throw new Error(`Resend error: ${error.message}`);
