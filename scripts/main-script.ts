@@ -1111,36 +1111,6 @@ async function seedComprehensive() {
     }
 
     // 21b. Notification Templates
-    logger.info("Seeding notification templates...");
-    const notifTemplateDefs: { type: string; subject: string; bodyHtml: string }[] = [
-      { type: "SELLER_APPROVED", subject: "Your seller account is approved", bodyHtml: "<p>Congratulations! Your seller account has been approved.</p>" },
-      { type: "SELLER_REJECTED", subject: "Seller account update", bodyHtml: "<p>Your seller account application was rejected.</p>" },
-      { type: "PRODUCT_APPROVED", subject: "Product approved", bodyHtml: "<p>Your product listing is now live.</p>" },
-      { type: "PRODUCT_REJECTED", subject: "Product needs changes", bodyHtml: "<p>Your product submission was rejected. Please review and resubmit.</p>" },
-      { type: "ORDER_PLACED", subject: "New order received", bodyHtml: "<p>You have received a new order.</p>" },
-      { type: "ORDER_CONFIRMED", subject: "Order confirmed", bodyHtml: "<p>Your order has been confirmed.</p>" },
-      { type: "ORDER_CANCELLED", subject: "Order cancelled", bodyHtml: "<p>Your order has been cancelled.</p>" },
-      { type: "SHIPMENT_UPDATED", subject: "Shipment update", bodyHtml: "<p>Your shipment status has been updated.</p>" },
-      { type: "PAYMENT_RECEIVED", subject: "Payment received", bodyHtml: "<p>Payment has been received for your order.</p>" },
-      { type: "KYC_VERIFIED", subject: "KYC verified", bodyHtml: "<p>Your KYC verification is complete.</p>" },
-      { type: "KYC_REJECTED", subject: "KYC rejected", bodyHtml: "<p>Your KYC submission was rejected. Please resubmit.</p>" },
-      { type: "RETURN_REQUESTED", subject: "Return request", bodyHtml: "<p>A return request has been raised.</p>" },
-      { type: "RETURN_APPROVED", subject: "Return approved", bodyHtml: "<p>The return request has been approved.</p>" },
-      { type: "RETURN_REJECTED", subject: "Return rejected", bodyHtml: "<p>The return request has been rejected.</p>" },
-      { type: "PAYOUT_INITIATED", subject: "Payout initiated", bodyHtml: "<p>Your payout has been initiated.</p>" },
-      { type: "PAYOUT_PAID", subject: "Payout sent", bodyHtml: "<p>Your payout has been processed.</p>" },
-      { type: "PAYOUT_FAILED", subject: "Payout failed", bodyHtml: "<p>Your payout could not be processed.</p>" },
-      { type: "PRODUCT_LOW_STOCK", subject: "Low stock alert", bodyHtml: "<p>Your product is running low on stock.</p>" },
-      { type: "REVIEW_RECEIVED", subject: "New review", bodyHtml: "<p>You received a new product review.</p>" },
-      { type: "REVIEW_REPLY", subject: "Review reply", bodyHtml: "<p>Your review has received a reply.</p>" },
-      { type: "COUPON_APPLIED", subject: "Coupon applied", bodyHtml: "<p>A coupon was applied to your order.</p>" },
-      { type: "TEAM_INVITE", subject: "Team invitation", bodyHtml: "<p>You have been invited to join a seller team.</p>" },
-      { type: "NEGOTIATION_NUDGE", subject: "Negotiation reminder", bodyHtml: "<p>You have a pending negotiation offer.</p>" },
-      { type: "MANUAL_NEGOTIATION_STARTED", subject: "New negotiation", bodyHtml: "<p>A customer started a manual negotiation.</p>" },
-    ];
-    for (const tpl of notifTemplateDefs) {
-      await db.notificationTemplate.upsert({ where: { type: tpl.type as any }, update: { subject: tpl.subject, bodyHtml: tpl.bodyHtml, updatedBy: adminUser.id }, create: { type: tpl.type as any, subject: tpl.subject, bodyHtml: tpl.bodyHtml, updatedBy: adminUser.id } });
-    }
 
     // 22. Notifications (with new types)
     logger.info("Seeding notifications...");
