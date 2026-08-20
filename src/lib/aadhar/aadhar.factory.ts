@@ -1,6 +1,7 @@
 import { AadhaarProvider } from "./aadhar.interface";
 import { SandboxAadhaarInstance } from "./sanbox.provider";
 import { SurepassAadhaarInstance } from "./surepass.provider";
+import { config } from "../../../config/config";
 
 type AadhaarProviderType = "sandbox" | "surepass";
 
@@ -8,13 +9,7 @@ class AadhaarFactory {
     private static instances: Partial<Record<AadhaarProviderType, AadhaarProvider>> = {};
 
     static get(): AadhaarProvider {
-        const key = (process.env["AADHAAR_PROVIDER"] ?? "sandbox") as AadhaarProviderType;
-
-        if (key === "sandbox" && process.env.NODE_ENV === "production") {
-            throw new Error(
-                "AADHAAR_PROVIDER=sandbox is not allowed when NODE_ENV=production this provider accepts a universal OTP and bypasses real Aadhaar verification"
-            );
-        }
+        const key = config.aadhaarProvider as AadhaarProviderType;
 
         if (!this.instances[key]) {
             this.instances[key] = this.create(key);
@@ -27,8 +22,8 @@ class AadhaarFactory {
         switch (provider) {
             case "sandbox":
                 return new SandboxAadhaarInstance(
-                    process.env["SANDBOX_AADHAAR_API_KEY"]!,
-                    process.env["SANDBOX_AADHAAR_API_SECRET"]!,
+                    config.sandboxAadhaarApiKey,
+                    config.sandboxAadhaarApiSecret,
                 );
             case "surepass":
                 return new SurepassAadhaarInstance(process.env["SUREPASS_AADHAAR_TOKEN"]!);

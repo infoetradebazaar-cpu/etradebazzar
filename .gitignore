@@ -5,3 +5,4 @@ ci.yml
 dist/
 prisma/generated/
 railway.env.json
+railway.env copy.json

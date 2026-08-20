@@ -75,6 +75,20 @@ const envSchema = z.object({
   OPENSEARCH_USERNAME: z.string().optional(),
   OPENSEARCH_PASSWORD: z.string().optional(),
   OPENSEARCH_TLS_REJECT_UNAUTHORIZED: z.enum(["true", "false"]).optional().default("true"),
+
+  GST_PROVIDER: z.enum(["sandbox", "surepass"]).optional().default("sandbox"),
+  AADHAAR_PROVIDER: z.enum(["sandbox", "surepass"]).optional().default("sandbox"),
+  PAN_PROVIDER: z.enum(["sandbox", "surepass"]).optional().default("sandbox"),
+  BANK_VERIFICATION_PROVIDER: z.enum(["sandbox", "razorpayx", "surepass"]).optional().default("sandbox"),
+
+  SANDBOX_GST_API_KEY: z.string().optional().default("sandbox-mock"),
+  SANDBOX_GST_API_SECRET: z.string().optional().default("sandbox-mock"),
+  SANDBOX_AADHAAR_API_KEY: z.string().optional().default("sandbox-mock"),
+  SANDBOX_AADHAAR_API_SECRET: z.string().optional().default("sandbox-mock"),
+  SANDBOX_PAN_API_KEY: z.string().optional().default("sandbox-mock"),
+  SANDBOX_PAN_API_SECRET: z.string().optional().default("sandbox-mock"),
+  SANDBOX_BANK_VERIFICATION_API_KEY: z.string().optional().default("sandbox-mock"),
+  SANDBOX_BANK_VERIFICATION_API_SECRET: z.string().optional().default("sandbox-mock"),
 }).superRefine((data, ctx) => {
   const requireFields = (fields: Record<string, string | undefined>, providerLabel: string) => {
     for (const [key, value] of Object.entries(fields)) {
@@ -239,4 +253,18 @@ export const config = {
   opensearchUsername: env.OPENSEARCH_USERNAME ?? "",
   opensearchPassword: env.OPENSEARCH_PASSWORD ?? "",
   opensearchTlsRejectUnauthorized: env.OPENSEARCH_TLS_REJECT_UNAUTHORIZED === "true",
+
+  gstProvider: env.GST_PROVIDER,
+  aadhaarProvider: env.AADHAAR_PROVIDER,
+  panProvider: env.PAN_PROVIDER,
+  bankVerificationProvider: env.BANK_VERIFICATION_PROVIDER,
+
+  sandboxGstApiKey: env.SANDBOX_GST_API_KEY,
+  sandboxGstApiSecret: env.SANDBOX_GST_API_SECRET,
+  sandboxAadhaarApiKey: env.SANDBOX_AADHAAR_API_KEY,
+  sandboxAadhaarApiSecret: env.SANDBOX_AADHAAR_API_SECRET,
+  sandboxPanApiKey: env.SANDBOX_PAN_API_KEY,
+  sandboxPanApiSecret: env.SANDBOX_PAN_API_SECRET,
+  sandboxBankVerificationApiKey: env.SANDBOX_BANK_VERIFICATION_API_KEY,
+  sandboxBankVerificationApiSecret: env.SANDBOX_BANK_VERIFICATION_API_SECRET,
 } as const;
