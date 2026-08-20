@@ -1,10 +1,16 @@
 import { db } from "../../db/index";
 import type { CategoryAttributeInput } from "./category-attribute.schema";
 
-const ATTRIBUTE_UNIQUE_CONSTRAINT = "category_attributes_categoryId_key_key";
+const ATTRIBUTE_UNIQUE_CONSTRAINT = "key";
 
-function isUniqueConstraintError(err: any, constraintName: string): boolean {
-  return err?.code === "P2002" && err?.meta?.target?.includes?.(constraintName);
+function isUniqueConstraintError(err: any, field: string): boolean {
+  if (err?.code !== "P2002") return false;
+  const target = err?.meta?.target;
+  const fields = err?.meta?.driverAdapterError?.cause?.constraint?.fields;
+  if (Array.isArray(target) && target.includes(field)) return true;
+  if (typeof target === "string" && target.includes(field)) return true;
+  if (Array.isArray(fields) && fields.includes(field)) return true;
+  return false;
 }
 
 function generateSlug(name: string): string {

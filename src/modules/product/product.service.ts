@@ -10,10 +10,16 @@ import { resolveImageUrls } from "./product-image.service";
 import { syncProductSearchIndexInBackground } from "../../lib/search/product-search-document";
 import { sanitizeSpecificationHtml } from "../../lib/sanitize/html-sanitizer";
 
-const SKU_UNIQUE_CONSTRAINT = "products_sku_key";
+const SKU_UNIQUE_CONSTRAINT = "sku";
 
-function isUniqueConstraintError(err: any, constraintName: string): boolean {
-  return err?.code === "P2002" && err?.meta?.target?.includes?.(constraintName);
+function isUniqueConstraintError(err: any, field: string): boolean {
+  if (err?.code !== "P2002") return false;
+  const target = err?.meta?.target;
+  const fields = err?.meta?.driverAdapterError?.cause?.constraint?.fields;
+  if (Array.isArray(target) && target.includes(field)) return true;
+  if (typeof target === "string" && target.includes(field)) return true;
+  if (Array.isArray(fields) && fields.includes(field)) return true;
+  return false;
 }
 
 async function validateProductAttributes(
