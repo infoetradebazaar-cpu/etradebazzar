@@ -1227,7 +1227,7 @@ export const sellerService = {
       select: { businessName: true },
     });
 
-    const inviteUrl = `${config.sellerAppUrl}/team/accept-invite?token=${invite.token}`;
+    const inviteUrl = `${config.sellerAppUrl}/invite-accept?token=${invite.token}`;
     const teamInviteEmailData = {
       businessName: seller?.businessName ?? "a seller",
       roleName: role.name,
@@ -1470,7 +1470,7 @@ export const sellerService = {
       db.seller.findUnique({ where: { id: sellerId }, select: { businessName: true } }),
       db.user.findUnique({ where: { email: invite.email } }),
     ]);
-    const reminderInviteUrl = `${config.sellerAppUrl}/team/accept-invite?token=${invite.token}`;
+    const reminderInviteUrl = `${config.sellerAppUrl}/invite-accept?token=${invite.token}`;
     const reminderEmailData = {
       businessName: seller?.businessName ?? "a seller",
       roleName: (invite as any).role?.name ?? "a member",

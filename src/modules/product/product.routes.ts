@@ -142,6 +142,13 @@ router.get(
   requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_VIEW]),
   productSearchController.reconcileIndex,
 );
+router.post(
+  "/search/reindex",
+  protect,
+  sellerLimiter,
+  requirePlatformAdminAndPermission(["super_admin", "product_reviewer"], [PLATFORM_PERMISSIONS.PLATFORM_PRODUCTS_VIEW]),
+  productSearchController.reindexAll,
+);
 
 // Platform Admin
 router.patch(
