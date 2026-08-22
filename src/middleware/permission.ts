@@ -252,14 +252,13 @@ export const requirePlatformAdminAndPermission = (roles: string[], permissionKey
                     legacyCheckPassed: legacyPassed,
                     permissionCheckPassed: permissionPassed,
                 };
-                logger.error(context, "RBAC dual-run disagreement");
-                await recordRbacDisagreement(context);
-                sendRbacDisagreementAlert(context).catch((err: any) =>
-                    logger.error({ err: err.message }, "Failed to send RBAC disagreement alert email"),
+                logger.warn(context, "RBAC dual-run disagreement (permission check is authoritative)");
+                recordRbacDisagreement(context).catch((err: any) =>
+                    logger.error({ err: err.message }, "Failed to record RBAC disagreement"),
                 );
             }
 
-            if (!legacyPassed || !permissionPassed) {
+            if (!permissionPassed) {
                 return res.status(403).json({ error: "Insufficient platform permissions" });
             }
 

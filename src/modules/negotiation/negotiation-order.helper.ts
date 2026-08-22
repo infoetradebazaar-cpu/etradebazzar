@@ -45,6 +45,10 @@ export async function createOrderFromNegotiation(
   if (skuStockUpdate.count === 0) {
     throw new InsufficientStockError(`Insufficient stock for product: ${product.name}`);
   }
+  await tx.product.update({
+    where: { id: session.productId },
+    data: { stock: { decrement: session.quantity } },
+  });
 
   const commissionRate = await getCommissionRate(session.productId, product.category.name);
   const commissionAmount = (finalPrice * commissionRate) / 100;

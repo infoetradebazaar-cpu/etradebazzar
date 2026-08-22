@@ -270,6 +270,10 @@ export const orderService = {
           if (updated.count === 0) {
             throw new InsufficientStockError(`Insufficient stock for product: ${product.name}`);
           }
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          });
         } else {
           const prevStock = product.stock ?? 0;
           const updated = await tx.product.updateMany({
@@ -512,6 +516,10 @@ export const orderService = {
           if (updated.count === 0) {
             throw new InsufficientStockError(`Insufficient stock for product: ${product.name}`);
           }
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          });
           continue;
         }
         const prevStock = product.stock ?? 0;
@@ -1052,12 +1060,11 @@ export const orderService = {
             where: { id: item.skuId },
             data: { stock: { increment: item.quantity } },
           });
-        } else {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { increment: item.quantity } },
-          });
         }
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
       }
 
       await tx.auditLog.create({

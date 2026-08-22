@@ -3,6 +3,28 @@ import  { Request, Response, NextFunction } from "express";
 
 import { logger } from "../utils/logger";
 
+function flattenZodErrors(
+  formatted: Record<string, any>,
+  prefix = "",
+): Array<{ field: string; message: string }> {
+  const results: Array<{ field: string; message: string }> = [];
+
+  for (const [key, value] of Object.entries(formatted)) {
+    if (key === "_errors") {
+      for (const msg of value as string[]) {
+        results.push({ field: prefix || "body", message: msg });
+      }
+    } else {
+      const fieldPath = prefix ? `${prefix}.${key}` : key;
+      if (value && typeof value === "object") {
+        results.push(...flattenZodErrors(value, fieldPath));
+      }
+    }
+  }
+
+  return results;
+}
+
 export const validate = (schema: z.ZodObject<any>) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -28,14 +50,7 @@ export const validate = (schema: z.ZodObject<any>) => {
         return res.status(400).json({
           success: false,
           error: "Validation failed",
-          details: Object.entries(formatted)
-            .filter(([key]) => key !== "_errors")
-            .flatMap(([key, value]: [string, any]) =>
-              (value._errors ?? []).map((msg: string) => ({
-                field: key,
-                message: msg,
-              }))
-            ),
+          details: flattenZodErrors(formatted),
         });
       }
 
