@@ -17,10 +17,10 @@ async function main() {
   }
 
   const provider = SearchIndexFactory.get();
-  await provider.ensureIndex();
+  await provider.recreateIndex();
 
-  const approvedCount = await db.product.count({ where: { status: "APPROVED" } });
-  console.log(`Reindexing search: ${approvedCount} APPROVED product(s) found in Postgres.\n`);
+  const productCount = await db.product.count({ where: { status: { in: ["LIVE", "APPROVED"] } } });
+  console.log(`Reindexing search: ${productCount} LIVE/APPROVED product(s) found in Postgres.\n`);
 
   let indexed = 0;
   let failed = 0;
@@ -29,7 +29,7 @@ async function main() {
 
   while (true) {
     const batch = await db.product.findMany({
-      where: { status: "APPROVED" },
+      where: { status: { in: ["LIVE", "APPROVED"] } },
       select: { id: true },
       orderBy: { id: "asc" },
       take: BATCH_SIZE,
@@ -52,7 +52,7 @@ async function main() {
     }
 
     cursor = batch[batch.length - 1]!.id;
-    console.log(`  ...${indexed + failed}/${approvedCount} processed`);
+    console.log(`  ...${indexed + failed}/${productCount} processed`);
   }
 
   console.log("\nChecking for orphaned index entries (indexed but no longer APPROVED)...");
