@@ -710,7 +710,7 @@ async function sendInviteEmail(input: {
     token: string;
     isReminder: boolean;
 }) {
-    const inviteUrl = `${config.customerAppUrl}/organization/invite?token=${input.token}`;
+    const inviteUrl = `${config.appUrl}/invite-accept?token=${input.token}`;
     const subject = input.isReminder
         ? "Reminder: You've been invited to join an organization"
         : "You've been invited to join an organization";

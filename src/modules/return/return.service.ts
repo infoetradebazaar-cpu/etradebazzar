@@ -560,12 +560,11 @@ export const returnService = {
               where: { id: item.skuId },
               data: { stock: { increment: item.quantity } },
             });
-          } else {
-            await tx.product.update({
-              where: { id: item.productId },
-              data: { stock: { increment: item.quantity } },
-            });
           }
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } },
+          });
         }
 
         return rr;
