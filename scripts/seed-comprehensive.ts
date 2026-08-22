@@ -7,6 +7,7 @@ import {
 import { generateDisplayId } from "../src/lib/uid/uid.generator";
 import { encrypt } from "../src/utils/encryption";
 import { logger } from "../src/utils/logger";
+import { analyticsRegistry } from "../src/lib/analytics/analytics.registry";
 import bcrypt from "bcryptjs";
 
 // Helpers
@@ -1640,10 +1641,13 @@ async function seedComprehensive() {
       "PROCESSING",
       "SHIPPED",
       "DELIVERED",
+      "DELIVERED",
+      "DELIVERED",
+      "DELIVERED",
       "CANCELLED",
     ];
 
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 120; i++) {
       const seller = randomItem([seller1, seller2]);
       const customer = randomItem(customers);
       const shopPool = shops.filter((s) => s.sellerId === seller.id);
@@ -1663,6 +1667,10 @@ async function seedComprehensive() {
       ]) as any;
       const oStatus = randomItem(orderStatuses) as any;
       const payS = randomItem(["UNPAID", "PAID", "PARTIALLY_PAID"]) as any;
+      const orderDate = randomDate(
+        new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+        new Date(),
+      );
 
       const orderDisplayId = await generateDisplayId("order");
       const order = await db.order.create({
@@ -1679,6 +1687,7 @@ async function seedComprehensive() {
           paymentStatus: payS,
           assignedShopId: shop.id,
           discountAmount: Math.random() > 0.7 ? randomDecimal(50, 500) : null,
+          createdAt: orderDate,
         },
       });
 
@@ -2036,6 +2045,11 @@ async function seedComprehensive() {
 
     // 23. Fix Permissions
     await fixSellerPermissions();
+
+    // 24. Refresh Materialized Views for Analytics
+    logger.info("Refreshing materialized views...");
+    await analyticsRegistry.refreshAll();
+    logger.info("Materialized views refreshed.");
 
     logger.info("✅ Seed completed!");
     logger.info(

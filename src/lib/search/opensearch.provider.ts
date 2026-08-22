@@ -71,6 +71,7 @@ export class OpenSearchIndexInstance implements SearchIndexProvider {
             categoryPath: { type: "keyword" },
             sellerId: { type: "keyword" },
             imageKey: { type: "keyword", index: false },
+            negotiationThresholdQty: { type: "integer" },
             attributes: {
               type: "nested",
               properties: {

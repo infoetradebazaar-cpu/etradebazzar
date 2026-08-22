@@ -15,6 +15,7 @@ export interface SearchProductDocument {
   categoryPath: string[];
   sellerId: string;
   imageKey: string | null;
+  negotiationThresholdQty: number | null;
   attributes: SearchProductAttribute[];
   createdAt: string;
 }

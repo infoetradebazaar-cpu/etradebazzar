@@ -26,6 +26,7 @@ import { generateDisplayId } from "../src/lib/uid/uid.generator";
 import { invoicingService } from "../src/modules/invoicing/invoicing.service";
 import { encrypt } from "../src/utils/encryption";
 import { logger } from "../src/utils/logger";
+import { analyticsRegistry } from "../src/lib/analytics/analytics.registry";
 import { SearchIndexFactory } from "../src/lib/search/search-index.factory";
 import { buildSearchDocument } from "../src/lib/search/product-search-document";
 import bcrypt from "bcryptjs";
@@ -875,8 +876,8 @@ async function seedComprehensive() {
     const usedCouponOrders = new Set<string>();
     const usedReviewCombos = new Set<string>();
     // Ensure each customer gets a spread of statuses
-    const orderStatuses = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
-    const ordersPerCustomer = 12; // 4 customers × 12 = 48 orders
+    const orderStatuses = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "DELIVERED", "DELIVERED", "DELIVERED", "CANCELLED"];
+    const ordersPerCustomer = 30; // more orders for richer analytics
     for (let ci = 0; ci < customers.length; ci++) {
       const customer = customers[ci]!;
       for (let oi = 0; oi < ordersPerCustomer; oi++) {
@@ -894,12 +895,14 @@ async function seedComprehensive() {
         const statusIndex = oi % orderStatuses.length;
         const oStatus = orderStatuses[statusIndex] as any;
         const payS = oStatus === "DELIVERED" || oStatus === "SHIPPED" ? "PAID" : randomItem(["UNPAID", "PAID", "PARTIALLY_PAID"]) as any;
+        const orderDate = randomDate(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), new Date());
         const order = await db.order.create({
           data: {
             sellerId: seller.id, customerId: customer.id, orgId: null, displayId: await generateDisplayId("order"),
             type: oType, status: oStatus, totalAmount: total, finalAmount: total - commA,
             commissionRate: commR, commissionAmount: commA, paymentStatus: payS,
             assignedShopId: shop.id, discountAmount: Math.random() > 0.7 ? randomDecimal(50, 500) : null,
+            createdAt: orderDate,
           }
         });
         const orderSkus = await db.productSKU.findMany({ where: { productId: product.id }, take: 1 });
@@ -1334,6 +1337,11 @@ async function seedComprehensive() {
         },
       }).catch(() => {});
     }
+
+    // 26. Refresh Materialized Views for Analytics
+    logger.info("Refreshing materialized views...");
+    await analyticsRegistry.refreshAll();
+    logger.info("Materialized views refreshed.");
 
     logger.info("✅ Seed completed!");
     logger.info(`  Sellers: ${allSellers.length}  |  Shops: ${shops.length}  |  Products: ${products.length}`);

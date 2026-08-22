@@ -1,7 +1,6 @@
 import { PanProvider } from "./pan.interface";
 import { SandboxPanInstance } from "./sanbox.provider";
 import { SurepassPanInstance } from "./surepass.provider";
-import { config } from "../../../config/config";
 
 
 type PanProviderType = "sandbox" | "surepass";
@@ -10,7 +9,13 @@ class PanFactory {
     private static instances: Partial<Record<PanProviderType, PanProvider>> = {};
 
     static get(): PanProvider {
-        const key = config.panProvider as PanProviderType;
+        const key = (process.env["PAN_PROVIDER"] ?? "sandbox") as PanProviderType;
+
+        if (key === "sandbox" && process.env.NODE_ENV === "production") {
+            throw new Error(
+                "PAN_PROVIDER=sandbox is not allowed when NODE_ENV=production this provider validates PAN format only and never calls a real verification service"
+            );
+        }
 
         if (!this.instances[key]) {
             this.instances[key] = this.create(key);
@@ -23,8 +28,8 @@ class PanFactory {
         switch (provider) {
             case "sandbox":
                 return new SandboxPanInstance(
-                    config.sandboxPanApiKey,
-                    config.sandboxPanApiSecret,
+                    process.env["SANDBOX_PAN_API_KEY"]!,
+                    process.env["SANDBOX_PAN_API_SECRET"]!,
                 );
             case "surepass":
                 return new SurepassPanInstance(process.env["SUREPASS_PAN_TOKEN"]!);

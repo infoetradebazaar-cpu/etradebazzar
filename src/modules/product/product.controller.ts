@@ -76,9 +76,9 @@ export const productController = {
         error.message.startsWith("Invalid value") ||
         error.message.startsWith("Missing option") ||
         error.message.startsWith("Product has no variant options") ||
-        error.message.startsWith("This SKU already has a tier that starts at") ||
-        error.message.startsWith("Quantity ") ||
-        error.message.startsWith("Tier ")
+        error.message.startsWith("A tier at minQty") ||
+        error.message.startsWith("Tier ") ||
+        error.message.startsWith("Tier range")
       ) {
         return res.status(400).json({ success: false, error: error.message });
       }
