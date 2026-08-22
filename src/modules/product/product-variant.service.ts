@@ -98,7 +98,20 @@ export {
   validateTierRange,
   translateTierTriggerError,
   sortObject,
+  syncProductStockFromSkus,
 };
+
+async function syncProductStockFromSkus(
+  productId: string,
+  tx: Pick<typeof db, "productSKU" | "product"> = db,
+): Promise<void> {
+  const skus = await tx.productSKU.findMany({
+    where: { productId },
+    select: { stock: true },
+  });
+  const totalStock = skus.reduce((sum, sku) => sum + sku.stock, 0);
+  await tx.product.update({ where: { id: productId }, data: { stock: totalStock } });
+}
 
 export const productVariantService = {
   async createVariant(
@@ -276,8 +289,6 @@ export const productVariantService = {
       if (isDuplicate)
         throw new Error("A SKU with this option combination already exists");
 
-      const isFirstSku = allSkus.length === 0;
-
       const createdSku = await tx.productSKU.create({
         data: {
           productId,
@@ -288,9 +299,7 @@ export const productVariantService = {
           options: data.options,
         },
       });
-      if (isFirstSku) {
-        await tx.product.update({ where: { id: productId }, data: { stock: 0 } });
-      }
+      await syncProductStockFromSkus(productId, tx);
 
       return createdSku;
     });
@@ -315,7 +324,13 @@ export const productVariantService = {
     });
     if (!sku) throw new Error("SKU not found");
 
-    const updated = await db.productSKU.update({ where: { id: skuId }, data });
+    const updated = await db.$transaction(async (tx) => {
+      const result = await tx.productSKU.update({ where: { id: skuId }, data });
+      if (data.stock !== undefined) {
+        await syncProductStockFromSkus(productId, tx);
+      }
+      return result;
+    });
     syncProductSearchIndexInBackground(productId);
     return updated;
   },
@@ -335,7 +350,10 @@ export const productVariantService = {
     if (inUse)
       throw new Error("SKU is referenced by existing orders  cannot delete");
 
-    await db.productSKU.delete({ where: { id: skuId } });
+    await db.$transaction(async (tx) => {
+      await tx.productSKU.delete({ where: { id: skuId } });
+      await syncProductStockFromSkus(productId, tx);
+    });
     syncProductSearchIndexInBackground(productId);
   },
 
@@ -400,7 +418,7 @@ export const productVariantService = {
         },
       });
     } catch (err: any) {
-      if (err?.code === "P2002") throw new Error(`This SKU already has a tier that starts at quantity ${data.minQty} pick a different starting quantity.`);
+      if (err?.code === "P2002") throw new Error(`A tier at minQty=${data.minQty} already exists for this SKU`);
       throw translateTierTriggerError(err);
     }
   },
@@ -430,7 +448,7 @@ export const productVariantService = {
     try {
       return await db.skuPriceTier.update({ where: { id: tierId }, data });
     } catch (err: any) {
-      if (err?.code === "P2002") throw new Error(`This SKU already has a tier that starts at quantity ${data.minQty} pick a different starting quantity.`);
+      if (err?.code === "P2002") throw new Error(`A tier at minQty=${data.minQty} already exists for this SKU`);
       throw translateTierTriggerError(err);
     }
   },
@@ -475,18 +493,14 @@ function validateTierRange(
     .filter((t) => t.minQty > minQty)
     .sort((a, b) => a.minQty - b.minQty)[0];
   if (maxQty !== null && next && maxQty >= next.minQty) {
-    throw new Error(
-      `Quantity ${next.minQty} is already covered by the next tier — this tier must end at ${next.minQty - 1} or earlier.`,
-    );
+    throw new Error(`Tier range [${minQty}, ${maxQty}] overlaps the next tier starting at minQty=${next.minQty}`);
   }
 
   const prev = others
     .filter((t) => t.minQty < minQty)
     .sort((a, b) => b.minQty - a.minQty)[0];
   if (prev && prev.maxQty !== null && prev.maxQty >= minQty) {
-    throw new Error(
-      `Quantity ${minQty} is already covered by the previous tier, which runs up to ${prev.maxQty} this tier must start at ${prev.maxQty + 1} or later.`,
-    );
+    throw new Error(`Tier at minQty=${minQty} overlaps the previous tier's range ending at maxQty=${prev.maxQty}`);
   }
 }
 

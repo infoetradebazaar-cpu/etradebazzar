@@ -298,6 +298,7 @@ export const productService = {
         );
 
         let skuCount = 0;
+        let totalSkuStock = 0;
         for (const skuInput of data.skus) {
           await validateSkuOptions(variantsForValidation, skuInput.options);
 
@@ -312,6 +313,7 @@ export const productService = {
             },
           });
           skuCount += 1;
+          totalSkuStock += skuInput.stock;
 
           const createdTiers: { id: string; minQty: number; maxQty: number | null }[] = [];
           for (const tier of skuInput.priceTiers) {
@@ -341,7 +343,7 @@ export const productService = {
         }
 
         if (skuCount > 0) {
-          await tx.product.update({ where: { id: product.id }, data: { stock: 0 } });
+          await tx.product.update({ where: { id: product.id }, data: { stock: totalSkuStock } });
         }
 
         return product;
@@ -807,6 +809,7 @@ export const productService = {
           status: true,
           createdAt: true,
           sellerId: true,
+          images: { orderBy: { order: "asc" } },
         },
         orderBy: { createdAt: "asc" },
       }),
@@ -819,7 +822,14 @@ export const productService = {
     });
     const sellerMap = new Map(sellers.map((s) => [s.id, s]));
 
-    return products.map((p) => ({
+    const withSignedImages = await Promise.all(
+      products.map(async (p) => ({
+        ...p,
+        images: await resolveImageUrls(p.images),
+      })),
+    );
+
+    return withSignedImages.map((p) => ({
       ...p,
       seller: sellerMap.get(p.sellerId) ?? null,
       status: p.status,
@@ -872,6 +882,7 @@ export const productService = {
           status: true,
           createdAt: true,
           sellerId: true,
+          images: { orderBy: { order: "asc" } },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
@@ -888,7 +899,14 @@ export const productService = {
     });
     const sellerMap = new Map(sellers.map((s) => [s.id, s]));
 
-    const mapped = data.map((p) => ({
+    const withSignedImages = await Promise.all(
+      data.map(async (p) => ({
+        ...p,
+        images: await resolveImageUrls(p.images),
+      })),
+    );
+
+    const mapped = withSignedImages.map((p) => ({
       ...p,
       seller: sellerMap.get(p.sellerId) ?? null,
       status: p.status,

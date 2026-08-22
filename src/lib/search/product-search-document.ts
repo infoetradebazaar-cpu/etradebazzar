@@ -39,6 +39,7 @@ export async function buildSearchDocument(productId: string): Promise<SearchProd
       createdAt: true,
       images: { orderBy: { order: "asc" }, take: 1, select: { key: true } },
       skus: { select: { price: true, options: true } },
+      negotiationThresholdQty: true,
     },
   });
   if (!product) return null;
@@ -70,6 +71,7 @@ export async function buildSearchDocument(productId: string): Promise<SearchProd
     categoryPath,
     sellerId: product.sellerId,
     imageKey: product.images[0]?.key ?? null,
+    negotiationThresholdQty: product.negotiationThresholdQty ?? null,
     attributes: [...attributeSet.values()],
     createdAt: product.createdAt.toISOString(),
   };
