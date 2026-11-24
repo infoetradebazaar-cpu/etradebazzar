@@ -1,6 +1,6 @@
 import { db } from "../../db";
 
-type Entity = "product" | "shop" | "shipment" | "order" | "invoice" | "purchaseOrder";
+type Entity = "product" | "shop" | "shipment" | "order" | "invoice" | "purchaseOrder" | "quotation" | "proformaInvoice";
 
 const PREFIX: Record<Entity, string> = {
     product: "PROD",
@@ -9,6 +9,8 @@ const PREFIX: Record<Entity, string> = {
     order: "ORD",
     invoice: "INV",
     purchaseOrder: "PO",
+    quotation: "QUO",
+    proformaInvoice: "PI",
 };
 
 const SEQUENCE: Record<Entity, string> = {
@@ -18,6 +20,8 @@ const SEQUENCE: Record<Entity, string> = {
     order: "order_display_seq",
     invoice: "invoice_display_seq",
     purchaseOrder: "purchase_order_display_seq",
+    quotation: "quotation_display_seq",
+    proformaInvoice: "proforma_invoice_display_seq",
 };
 
 export async function generateDisplayId(entity: Entity): Promise<string> {

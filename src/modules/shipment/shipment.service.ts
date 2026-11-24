@@ -1,6 +1,7 @@
 import { db } from "../../db/index";
 import { ShipmentFactory } from "../../lib/shipment/shipment.factory";
 import { notificationService } from "../notification/notification.service";
+import { selectCourier } from "../../lib/shipment/courier-selection";
 import { logger } from "../../utils/logger";
 import { generateDisplayId } from "../../lib/uid/uid.generator";
 import { creditEngine } from "../../lib/credit-engine/credit-rules";
@@ -107,8 +108,31 @@ export const shipmentService = {
     let trackingId: string | null = null;
     let trackingUrl: string | null = null;
 
+    const weightKg = order.items.reduce(
+      (acc, item) => acc + ((item.product.weightGrams ?? 500) * item.quantity) / 1000,
+      0,
+    );
+
+    let courierId: number | undefined;
+    let courierLabel: string | null = null;
+    const distinctProducts = new Set(order.items.map((i) => i.productId)).size;
+    if (distinctProducts === 1 && shop.pickupPincode) {
+      try {
+        const svc = await provider.getServiceability(shop.pickupPincode, address.pincode, weightKg, order.paymentMethod === "COD");
+        const chosen = selectCourier(svc.couriers, svc.recommendedCourierId);
+        if (chosen) {
+          courierId = chosen.courier_company_id;
+          courierLabel = chosen.courier_name ?? null;
+        }
+      } catch (err: any) {
+        logger.warn({ err: err.message, orderId }, "Courier selection failed - using provider auto-assignment");
+      }
+    }
+
     try {
       const result = await provider.createShipment({
+        courierId,
+        pickupPincode: shop.pickupPincode,
         orderId,
         pickupLocation: shop.name,
         receiverName: address.receiverName,
@@ -124,11 +148,7 @@ export const shipmentService = {
         length: 10,
         breadth: 10,
         height: 10,
-        weight: order.items.reduce(
-          (acc, item) =>
-            acc + ((item.product.weightGrams ?? 500) * item.quantity) / 1000,
-          0,
-        ),
+        weight: weightKg,
         items: order.items.map((item) => ({
           name: item.product.name,
           sku: item.product.sku ?? item.productId,
@@ -139,6 +159,7 @@ export const shipmentService = {
       });
       trackingId = result.trackingId;
       trackingUrl = result.trackingUrl;
+      courierLabel = result.courierName ?? courierLabel;
     } catch (err: any) {
       logger.warn(
         { err: err.message },
@@ -197,7 +218,7 @@ export const shipmentService = {
           action: existingShipment ? "SHIPMENT_BOOKING_RETRIED" : "SHIPMENT_CREATED",
           entityType: "shipment",
           entityId: created.id,
-          metadata: { trackingId, orderId },
+          metadata: { trackingId, orderId, courierId: courierId ?? null, courier: courierLabel },
         },
       });
 
@@ -355,6 +376,8 @@ export const shipmentService = {
       "Shipment webhook received",
     );
 
+    if (!event.trackingId) return { received: true };
+
     const shipment = await db.shipment.findFirst({
       where: { trackingId: event.trackingId },
     });
@@ -369,6 +392,7 @@ export const shipmentService = {
       "returned": "RETURNED",
       "canceled": "FAILED",
       "rto": "RETURNED",
+      "rto delivered": "RETURNED",
     };
 
     const mappedStatus = statusMap[event.status.toLowerCase()];
@@ -703,13 +727,24 @@ export const shipmentService = {
     return { success, failed: failures.length, failures };
   },
   async exportShipmentsCsv(sellerId?: string) {
-    return db.shipment.findMany({
-      where: sellerId ? { order: { sellerId } } : {},
-      select: {
-        id: true, displayId: true, status: true, provider: true, trackingId: true,
-        createdAt: true, order: { select: { displayId: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const BATCH = 1000;
+    return (async function* () {
+      let cursor: string | undefined;
+      while (true) {
+        const batch = await db.shipment.findMany({
+          where: sellerId ? { order: { sellerId } } : {},
+          select: {
+            id: true, displayId: true, status: true, provider: true, trackingId: true,
+            createdAt: true, order: { select: { displayId: true } },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: BATCH,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        });
+        if (batch.length) yield batch;
+        if (batch.length < BATCH) return;
+        cursor = batch[batch.length - 1]!.id;
+      }
+    })();
   },
 };

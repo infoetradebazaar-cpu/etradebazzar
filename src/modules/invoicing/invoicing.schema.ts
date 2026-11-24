@@ -26,3 +26,11 @@ export const invoiceIdParamSchema = z.object({
 export const poIdParamSchema = z.object({
     params: z.object({ poId: z.string() }),
 });
+
+export const quotationIdParamSchema = z.object({
+    params: z.object({ quotationId: z.string() }),
+});
+
+export const proformaInvoiceIdParamSchema = z.object({
+    params: z.object({ piId: z.string() }),
+});

@@ -22,6 +22,9 @@ export class RazorpayInstance implements PaymentGateway {
         });
     }
 
+    getPublicKey(): string {
+        return config.razorpayKeyId;
+    }
     async createOrder(data: CreateOrderInput): Promise<GatewayOrder> {
         const order = await this.client.orders.create({
             amount: Math.round(data.amount * 100), //convert to paise

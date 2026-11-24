@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { sellerService } from "./seller.service";
 import { logger } from "../../utils/logger";
+import { sendClientError } from "../../utils/http-error";
 
 export const sellerController = {
   async register(req: Request, res: Response) {
@@ -269,7 +270,7 @@ export const sellerController = {
     try {
       const { sellerId } = req.params;
       const { search, page, limit } = req.query as Record<string, string>;
-      const result = await sellerService.listMembers(sellerId, {
+      const result = await sellerService.listMembers(sellerId as string, {
         search,
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
@@ -382,7 +383,7 @@ export const sellerController = {
       const clientErrors = [
         "KYC not found",
         "KYC already verified",
-        "Aadhaar must be verified before overall KYC can be verified",
+        "GST Certificate is required, along with either an MSME Certificate or an Incorporation Certificate, before overall KYC can be verified",
         "Government ID must be verified before overall KYC can be verified",
       ];
       if (clientErrors.includes(error.message)) {
@@ -599,7 +600,7 @@ export const sellerController = {
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {
       if (error.message === "Role with this name already exists")
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -625,7 +626,7 @@ export const sellerController = {
         "Role with this name already exists",
       ];
       if (clientErrors.includes(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -650,7 +651,7 @@ export const sellerController = {
         "Cannot delete role with active members",
       ];
       if (clientErrors.includes(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -683,7 +684,7 @@ export const sellerController = {
         "Invite already used or expired",
       ];
       if (clientErrors.includes(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -702,7 +703,7 @@ export const sellerController = {
         "Invite already used or expired",
       ];
       if (clientErrors.includes(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -721,7 +722,7 @@ export const sellerController = {
         "Invite expired",
       ];
       if (clientErrors.includes(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -740,7 +741,7 @@ export const sellerController = {
     } catch (error: any) {
       const clientErrors = ["Role not found"];
       if (clientErrors.includes(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -766,7 +767,7 @@ export const sellerController = {
         "Cannot modify owner role permissions",
       ];
       if (clientErrors.includes(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });

@@ -1,9 +1,13 @@
+import { getPlatformConfigNumber } from "../../lib/platform-config/platform-config";
+
 import { db } from "../../db/index";
 import { orderService } from "../order/order.service";
 import { couponService } from "../coupon/coupon.service";
 import { shipmentService } from "../shipment/shipment.service";
 import { withCustomerOrgScope } from "../../middleware/tenant";
 import type { Prisma } from "../../../prisma/generated/client";
+
+export const COD_DEFAULT_MAX_ORDER_VALUE = 50000;
 
 type OrgId = string | null | undefined;
 
@@ -221,6 +225,9 @@ export const cartService = {
     },
     orgId?: OrgId,
   ) {
+    const existing = await orderService.findOrderByIdempotencyKey(userId, idempotencyKey, orgId);
+    if (existing) return existing;
+
     const { cart, items, subtotal, sellerId } = await getCartWithItems(userId, orgId);
     if (!items.length) throw new Error("Cart is empty");
     if (!sellerId) throw new Error("Cart has no seller assigned");
@@ -243,9 +250,17 @@ export const cartService = {
     if (paymentMethod === "COD") {
       const seller = await db.seller.findUnique({
         where: { id: sellerId },
-        select: { pincode: true },
+        select: { pincode: true, city: true },
       });
       if (!seller) throw new Error("Cart has no seller assigned");
+      const norm = (c?: string | null) => (c ?? "").trim().toLowerCase();
+      if (!norm(seller.city) || norm(seller.city) !== norm(deliveryAddress.city)) {
+        throw new Error("Cash on Delivery is only available when the seller is in your city");
+      }
+      const codLimit = await getPlatformConfigNumber("COD_MAX_ORDER_VALUE", COD_DEFAULT_MAX_ORDER_VALUE);
+      if (Number(subtotal) > codLimit) {
+        throw new Error(`Cash on Delivery is only available for orders up to ₹${codLimit}`);
+      }
 
       const weightKg =
         items.reduce((sum, i) => sum + i.weightGrams * i.quantity, 0) / 1000;
@@ -261,7 +276,7 @@ export const cartService = {
       }
     }
 
-    const buildOrderInput = (discount: number, couponCode?: string) => ({
+    const buildOrderInput = (discount: number, couponCode?: string, couponId?: string) => ({
       sellerId,
       type: "STANDARD" as const,
       items: items.map((i) => ({
@@ -285,6 +300,7 @@ export const cartService = {
       },
       discountAmount: discount > 0 ? discount : undefined,
       couponCode,
+      couponId,
       paymentMethod,
       orgId: orgId ?? undefined,
     });
@@ -296,8 +312,8 @@ export const cartService = {
         userId,
         subtotal,
         items.map((i) => i.productId),
-        (discount, couponCode) =>
-          orderService.createOrder(userId, idempotencyKey, buildOrderInput(discount, couponCode)),
+        (discount, couponCode, couponId) =>
+          orderService.createOrder(userId, idempotencyKey, buildOrderInput(discount, couponCode, couponId)),
       );
       order = result.order;
     } else {

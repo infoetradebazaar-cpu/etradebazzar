@@ -4,7 +4,18 @@ export const createShopSchema = z.object({
   body: z.object({
     name: z.string().min(2).max(100),
     description: z.string().optional(),
-    category: z.string().min(2),
+    category: z.string().min(2).optional(),
+    userName: z.string().optional(),
+    gstCertificateUrl: z.string().optional(),
+    contacts: z
+      .array(
+        z.object({
+          name: z.string(),
+          phone: z.string(),
+          designation: z.string(),
+        }),
+      )
+      .optional(),
     logo: z.string().url().optional(),
     logoKey: z.string().optional(),
     banner: z.string().url().optional(),
@@ -31,6 +42,17 @@ export const updateShopSchema = z.object({
     name: z.string().min(2).max(100).optional(),
     description: z.string().optional(),
     category: z.string().min(2).optional(),
+    userName: z.string().optional(),
+    gstCertificateUrl: z.string().optional(),
+    contacts: z
+      .array(
+        z.object({
+          name: z.string(),
+          phone: z.string(),
+          designation: z.string(),
+        }),
+      )
+      .optional(),
     logo: z.string().url().optional(),
     logoKey: z.string().optional(),
     banner: z.string().url().optional(),

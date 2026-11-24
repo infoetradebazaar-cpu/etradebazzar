@@ -95,8 +95,7 @@ export const userService = {
           select: {
             id: true,
             label: true,
-            line1: true,
-            line2: true,
+            street: true,
             city: true,
             state: true,
             pincode: true,
@@ -128,7 +127,7 @@ export const userService = {
       phoneVerifiedAt: user.phoneVerifiedAt?.toISOString() ?? null,
       seller: user.sellerMemberships[0]?.seller ?? null,
       customerOrg: user.customerOrgMemberships[0]?.org ?? null,
-      addresses: user.addresses,
+      addresses: user.addresses.map(({ street, ...a }) => ({ ...a, line1: street, line2: null })),
     };
   },
 };

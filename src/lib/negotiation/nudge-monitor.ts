@@ -1,6 +1,7 @@
 import { db } from "../../db";
 import { logger } from "../../utils/logger";
 import { notificationService } from "../../modules/notification/notification.service";
+import { scheduleExclusive } from "../jobs/run-exclusive";
 
 export async function checkNegotiationNudges(): Promise<void> {
   const now = new Date();
@@ -75,11 +76,7 @@ let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
 export function startNegotiationNudgeMonitor(intervalMs = 15 * 60 * 1000): void {
   if (intervalHandle) return;
-  intervalHandle = setInterval(() => {
-    checkNegotiationNudges().catch((err) => {
-      logger.error({ err: err.message }, "Negotiation nudge sweep failed");
-    });
-  }, intervalMs);
+  intervalHandle = scheduleExclusive("negotiation-nudge", intervalMs, checkNegotiationNudges);
   logger.info({ intervalMs }, "Negotiation nudge monitor started");
 }
 

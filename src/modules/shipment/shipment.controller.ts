@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { shipmentService } from "./shipment.service";
 import { logger } from "../../utils/logger";
-import { toCsv } from "../../utils/csv";
+import { streamCsv } from "../../utils/csv";
 import { db } from "../../db/index";
 
 export const shipmentController = {
@@ -119,16 +119,16 @@ export const shipmentController = {
 
     async handleWebhook(req: Request, res: Response) {
         try {
-            const signature = req.headers["x-shiprocket-signature"] as string;
-            if (!signature) {
-                return res.status(400).json({ error: "Missing signature" });
+            const token = (req.headers["x-api-key"] ?? req.headers["x-shiprocket-signature"]) as string | undefined;
+            if (!token) {
+                return res.status(401).json({ error: "Missing webhook token" });
             }
-            const result = await shipmentService.handleWebhook(req.body, signature);
+            const result = await shipmentService.handleWebhook(req.body, token);
             return res.json(result);
         } catch (error: any) {
             logger.error({ err: error.message }, "Shipment webhook failed");
             if (error.message === "Invalid webhook signature") {
-                return res.status(400).json({ error: error.message });
+                return res.status(401).json({ error: error.message });
             }
             return res.status(500).json({ error: "Internal server error" });
         }
@@ -173,19 +173,21 @@ export const shipmentController = {
     async exportShipmentsCsv(req: Request, res: Response) {
         try {
             const { sellerId } = req.query as Record<string, string>;
-            const shipments = await shipmentService.exportShipmentsCsv(sellerId);
+            const batches = await shipmentService.exportShipmentsCsv(sellerId);
 
-            const rows = shipments.map(s => ({
-                shipmentId: s.displayId ?? s.id, orderId: s.order.displayId ?? "",
-                status: s.status, courier: s.provider, awb: s.trackingId ?? "",
-                createdAt: s.createdAt.toISOString(),
-            }));
-            const csv = toCsv(rows, ["shipmentId", "orderId", "status", "courier", "awb", "createdAt"]);
-
-            res.setHeader("Content-Type", "text/csv");
-            res.setHeader("Content-Disposition", "attachment; filename=shipments.csv");
-            return res.send(csv);
+            const rows = (async function* () {
+                for await (const batch of batches) {
+                    yield batch.map(s => ({
+                        shipmentId: s.displayId ?? s.id, orderId: s.order.displayId ?? "",
+                        status: s.status, courier: s.provider, awb: s.trackingId ?? "",
+                        createdAt: s.createdAt.toISOString(),
+                    }));
+                }
+            })();
+            await streamCsv(res, "shipments.csv", ["shipmentId", "orderId", "status", "courier", "awb", "createdAt"], rows);
+            return;
         } catch (error: any) {
+            if (res.headersSent) return res.end();
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },

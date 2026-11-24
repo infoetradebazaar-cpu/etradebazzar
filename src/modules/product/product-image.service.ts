@@ -31,7 +31,7 @@ export const productImageService = {
             if (!sku) throw new Error("SKU not found");
         }
 
-        validateImageFile({ mimetype: file.mimetype, size: file.size });
+        const contentType = validateImageFile({ buffer: file.buffer, size: file.size });
 
         const count = await db.productImage.count({ where: { productId } });
         if (count >= MAX_IMAGES_PER_PRODUCT) {
@@ -44,7 +44,7 @@ export const productImageService = {
         const { url } = await storage.upload({
             key,
             buffer: file.buffer,
-            mimeType: file.mimetype,
+            mimeType: contentType,
             size: file.size,
         });
 

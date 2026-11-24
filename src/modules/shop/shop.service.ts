@@ -77,7 +77,10 @@ export const shopService = {
     data: {
       name: string;
       description?: string;
-      category: string;
+      category?: string;
+      userName?: string;
+      gstCertificateUrl?: string;
+      contacts?: { name: string; phone: string; designation: string }[];
       logo?: string;
       logoKey?: string;
       bannerKey?: string;
@@ -139,6 +142,10 @@ export const shopService = {
       });
     } catch (err: any) {
       if (err.code === "P2002") {
+        const target: string[] = err.meta?.target ?? [];
+        if (target.includes("userName")) {
+          throw new Error("This shop username is already taken");
+        }
         throw new Error(
           "A shop with a conflicting slug already exists, please try again",
         );
@@ -155,6 +162,9 @@ export const shopService = {
       name: string;
       description: string;
       category: string;
+      userName: string;
+      gstCertificateUrl: string;
+      contacts: { name: string; phone: string; designation: string }[];
       logo: string;
       banner: string;
       logoKey?: string;
@@ -242,6 +252,10 @@ export const shopService = {
       });
     } catch (err: any) {
       if (err.code === "P2002") {
+        const target: string[] = err.meta?.target ?? [];
+        if (target.includes("userName")) {
+          throw new Error("This shop username is already taken");
+        }
         throw new Error(
           "A shop with a conflicting slug already exists, please try again",
         );

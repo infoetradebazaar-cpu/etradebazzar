@@ -21,6 +21,7 @@ const envSchema = z.object({
   JWT_ISSUER: z.string().default("https://yourdomain.com"),
   JWT_AUDIENCE: z.string().default("https://yourdomain.com"),
   JWT_SECRET: z.string().optional(),
+  SERVER_SECRET: z.string().min(32, "SERVER_SECRET must be at least 32 characters").optional(),
 
   ACCESS_TOKEN_EXPIRES_IN: z.string().default("15m"),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default("7d"),
@@ -54,7 +55,7 @@ const envSchema = z.object({
   SELLER_APP_URL: z.string().url().optional(),
   PLATFORM_APP_URL: z.string().url().optional(),
 
-  STORAGE_PROVIDER: z.enum(["aws", "do", "railway"]),
+  STORAGE_PROVIDER: z.enum(["aws", "minio", "do", "railway"]),
 
   AWS_REGION: z.string().optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),
@@ -74,6 +75,13 @@ const envSchema = z.object({
   RAILWAY_BUCKET_NAME: z.string().optional(),
   RAILWAY_BUCKET_CDN_URL: z.string().optional().default(""),
 
+  MINIO_ENDPOINT: z.string().optional(),
+  MINIO_REGION: z.string().optional().default("us-east-1"),
+  MINIO_ACCESS_KEY: z.string().optional(),
+  MINIO_SECRET_KEY: z.string().optional(),
+  MINIO_BUCKET: z.string().optional(),
+  MINIO_PUBLIC_URL: z.string().optional(),
+
   SEARCH_INDEX_PROVIDER: z.enum(["opensearch", "sandbox"]).optional().default("sandbox"),
   OPENSEARCH_URL: z.string().optional(),
   OPENSEARCH_USERNAME: z.string().optional(),
@@ -81,14 +89,16 @@ const envSchema = z.object({
   OPENSEARCH_TLS_REJECT_UNAUTHORIZED: z.enum(["true", "false"]).optional().default("true"),
 
   GST_PROVIDER: z.enum(["sandbox", "surepass"]).optional().default("sandbox"),
-  AADHAAR_PROVIDER: z.enum(["sandbox", "surepass"]).optional().default("sandbox"),
+  /** @deprecated Aadhaar OTP/DigiLocker verification is discontinued (non-compliant). */
+  // AADHAAR_PROVIDER: z.enum(["sandbox", "surepass"]).optional().default("sandbox"),
   PAN_PROVIDER: z.enum(["sandbox", "surepass"]).optional().default("sandbox"),
   BANK_VERIFICATION_PROVIDER: z.enum(["sandbox", "razorpayx", "surepass"]).optional().default("sandbox"),
 
   SANDBOX_GST_API_KEY: z.string().optional().default("sandbox-mock"),
   SANDBOX_GST_API_SECRET: z.string().optional().default("sandbox-mock"),
-  SANDBOX_AADHAAR_API_KEY: z.string().optional().default("sandbox-mock"),
-  SANDBOX_AADHAAR_API_SECRET: z.string().optional().default("sandbox-mock"),
+  /** @deprecated see AADHAAR_PROVIDER above */
+  // SANDBOX_AADHAAR_API_KEY: z.string().optional().default("sandbox-mock"),
+  // SANDBOX_AADHAAR_API_SECRET: z.string().optional().default("sandbox-mock"),
   SANDBOX_PAN_API_KEY: z.string().optional().default("sandbox-mock"),
   SANDBOX_PAN_API_SECRET: z.string().optional().default("sandbox-mock"),
   SANDBOX_BANK_VERIFICATION_API_KEY: z.string().optional().default("sandbox-mock"),
@@ -113,6 +123,15 @@ const envSchema = z.object({
       AWS_SECRET_ACCESS_KEY: data.AWS_SECRET_ACCESS_KEY,
       AWS_S3_BUCKET: data.AWS_S3_BUCKET,
     }, "aws");
+  }
+
+  if (data.STORAGE_PROVIDER === "minio") {
+    requireFields({
+      MINIO_ENDPOINT: data.MINIO_ENDPOINT,
+      MINIO_ACCESS_KEY: data.MINIO_ACCESS_KEY,
+      MINIO_SECRET_KEY: data.MINIO_SECRET_KEY,
+      MINIO_BUCKET: data.MINIO_BUCKET,
+    }, "minio");
   }
 
   if (data.STORAGE_PROVIDER === "do") {
@@ -254,6 +273,13 @@ export const config = {
   railwayBucketName: env.RAILWAY_BUCKET_NAME ?? "",
   railwayBucketCdnUrl: env.RAILWAY_BUCKET_CDN_URL,
 
+  minioEndpoint: env.MINIO_ENDPOINT ?? "",
+  minioRegion: env.MINIO_REGION,
+  minioAccessKey: env.MINIO_ACCESS_KEY ?? "",
+  minioSecretKey: env.MINIO_SECRET_KEY ?? "",
+  minioBucket: env.MINIO_BUCKET ?? "",
+  minioPublicUrl: env.MINIO_PUBLIC_URL ?? "",
+
   searchIndexProvider: env.SEARCH_INDEX_PROVIDER,
   opensearchUrl: env.OPENSEARCH_URL ?? "",
   opensearchUsername: env.OPENSEARCH_USERNAME ?? "",
@@ -261,14 +287,17 @@ export const config = {
   opensearchTlsRejectUnauthorized: env.OPENSEARCH_TLS_REJECT_UNAUTHORIZED === "true",
 
   gstProvider: env.GST_PROVIDER,
-  aadhaarProvider: env.AADHAAR_PROVIDER,
+  /** @deprecated Aadhaar OTP/DigiLocker verification is discontinued not read into config. */
+  // aadhaarProvider: env.AADHAAR_PROVIDER,
   panProvider: env.PAN_PROVIDER,
   bankVerificationProvider: env.BANK_VERIFICATION_PROVIDER,
 
   sandboxGstApiKey: env.SANDBOX_GST_API_KEY,
   sandboxGstApiSecret: env.SANDBOX_GST_API_SECRET,
-  sandboxAadhaarApiKey: env.SANDBOX_AADHAAR_API_KEY,
-  sandboxAadhaarApiSecret: env.SANDBOX_AADHAAR_API_SECRET,
+  serverSecret: env.SERVER_SECRET,
+  /** @deprecated see aadhaarProvider above */
+  // sandboxAadhaarApiKey: env.SANDBOX_AADHAAR_API_KEY,
+  // sandboxAadhaarApiSecret: env.SANDBOX_AADHAAR_API_SECRET,
   sandboxPanApiKey: env.SANDBOX_PAN_API_KEY,
   sandboxPanApiSecret: env.SANDBOX_PAN_API_SECRET,
   sandboxBankVerificationApiKey: env.SANDBOX_BANK_VERIFICATION_API_KEY,

@@ -24,7 +24,7 @@ export const userController = {
   async getUserById(req: Request, res: Response) {
     try {
       const { userId } = req.params;
-      const result = await userService.getUserById(userId);
+      const result = await userService.getUserById(userId as string);
       if (!result)
         return res.status(404).json({ success: false, error: "User not found" });
       return res.json({ success: true, data: result });

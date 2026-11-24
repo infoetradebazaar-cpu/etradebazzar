@@ -312,7 +312,7 @@ export const customerOrgController = {
     async adminGetOrgById(req: Request, res: Response) {
         try {
             const { orgId } = req.params;
-            const result = await customerOrgAdminService.getOrgById(orgId);
+            const result = await customerOrgAdminService.getOrgById(orgId as string);
             if (!result)
                 return res.status(404).json({ success: false, error: "Organization not found" });
             return res.json({ success: true, data: result });

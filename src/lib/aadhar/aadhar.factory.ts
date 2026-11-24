@@ -1,3 +1,6 @@
+/**
+ * @deprecated Aadhaar OTP/DigiLocker verification is discontinued (non-compliant)
+ */
 import { AadhaarProvider } from "./aadhar.interface";
 import { SandboxAadhaarInstance } from "./sanbox.provider";
 import { SurepassAadhaarInstance } from "./surepass.provider";

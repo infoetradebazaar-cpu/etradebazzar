@@ -1,4 +1,5 @@
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import { BankDetailsBlock } from "./bank-details.block";
 import type { PurchaseOrderSnapshot } from "../../../modules/invoicing/invoicing.types";
 
 const styles = StyleSheet.create({
@@ -130,6 +131,8 @@ export function PurchaseOrderDocument({ snapshot }: { snapshot: PurchaseOrderSna
                         <Text>{formatMoney(snapshot.grandTotal)}</Text>
                     </View>
                 </View>
+
+                <BankDetailsBlock bank={snapshot.bankDetails} />
 
                 <Text style={styles.footer}>
                     This purchase order records the terms agreed at the time order{" "}

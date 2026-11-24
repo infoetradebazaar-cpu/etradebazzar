@@ -1,4 +1,5 @@
 import { db } from "../../db/index";
+import type { Prisma } from "../../../prisma/generated/client";
 
 export const storefrontService = {
     async getShopBySlug(slug: string) {
@@ -7,24 +8,26 @@ export const storefrontService = {
             select: {
                 id: true, displayId: true, name: true, slug: true, description: true,
                 category: true, logo: true, banner: true, returnPolicy: true, status: true,
-                _count: { select: { products: { where: { status: "LIVE" } } } },
+                sellerId: true,
             },
         });
         if (!shop || shop.status !== "APPROVED") throw new Error("Shop not found");
-        return shop;
+        const { sellerId, ...rest } = shop;
+        const products = await db.product.count({ where: { sellerId, status: "LIVE" } });
+        return { ...rest, _count: { products } };
     },
 
     async listShopProducts(
         slug: string,
         filters: { search?: string; categoryId?: string; page?: number; limit?: number }
     ) {
-        const shop = await db.shop.findUnique({ where: { slug }, select: { id: true, status: true } });
+        const shop = await db.shop.findUnique({ where: { slug }, select: { sellerId: true, status: true } });
         if (!shop || shop.status !== "APPROVED") throw new Error("Shop not found");
 
         const page = filters.page ?? 1;
         const limit = Math.min(filters.limit ?? 20, 100);
 
-        const where: any = { shopId: shop.id, status: "LIVE" };
+        const where: Prisma.ProductWhereInput = { sellerId: shop.sellerId, status: "LIVE" };
         if (filters.categoryId) where.categoryId = filters.categoryId;
         if (filters.search) where.name = { contains: filters.search, mode: "insensitive" };
 
@@ -59,11 +62,14 @@ export const storefrontService = {
                 images: { orderBy: { order: "asc" } },
                 variants: { include: { values: true } },
                 skus: true,
-                shop: { select: { id: true, name: true, slug: true, logo: true } },
                 category: { select: { id: true, name: true } },
             },
         });
         if (!product || (product.status !== "LIVE" && product.status !== "APPROVED")) throw new Error("Product not found");
-        return product;
+        const seller = await db.seller.findUnique({
+            where: { id: product.sellerId },
+            select: { id: true, businessName: true },
+        });
+        return { ...product, seller };
     },
 };

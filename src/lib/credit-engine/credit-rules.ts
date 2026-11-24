@@ -2,6 +2,7 @@ import { db } from "../../db/index";
 import { redis } from "../../db/redis";
 import { walletService } from "../../modules/wallet/wallet.service";
 import { logger } from "../../utils/logger";
+import { acquireLock, releaseLock } from "../locks/redis-lock";
 
 export const CREDIT_RULES = {
     ONBOARDING_BONUS: 100,
@@ -22,13 +23,13 @@ async function alreadyAwarded(userId: string, reason: string): Promise<boolean> 
 
 async function awardOnceWithLock(userId: string, reason: string, amount: number, referenceId?: string) {
     const lockKey = `credit-lock:${reason}:${userId}`;
-    const locked = await redis.set(lockKey, "1", "EX", CREDIT_LOCK_TTL, "NX");
+    const locked = await acquireLock(lockKey, CREDIT_LOCK_TTL);
     if (!locked) return;
     try {
         if (await alreadyAwarded(userId, reason)) return;
-        await walletService.credit(userId, amount, reason, referenceId);
+        await walletService.credit(userId, amount, reason, referenceId ?? reason);
     } finally {
-        await redis.del(lockKey);
+        await releaseLock(lockKey, locked);
     }
 }
 

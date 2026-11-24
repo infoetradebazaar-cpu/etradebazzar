@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { negotiationIntentSchema } from "./negotiation-gate";
 
 const deliveryAddressSchema = z.object({
   receiverName: z.string().min(1),
@@ -18,6 +19,7 @@ export const startAutoNegotiationSchema = z.object({
     skuId: z.string(),
     quantity: z.number().int().positive(),
     customerPrice: z.number().positive().optional(),
+    intent: negotiationIntentSchema,
   }),
 });
 
@@ -40,6 +42,7 @@ export const startManualNegotiationSchema = z.object({
     productId: z.string(),
     skuId: z.string(),
     quantity: z.number().int().positive(),
+    intent: negotiationIntentSchema.optional(),
   }),
 });
 
@@ -62,5 +65,15 @@ export const manualAcceptSchema = z.object({
   body: z.object({
     finalPrice: z.number().positive(),
     deliveryAddress: deliveryAddressSchema,
+  }),
+});
+
+export const sendOfferSchema = z.object({
+  params: z.object({ sessionId: z.string() }),
+  body: z.object({
+    unitPrice: z.number().positive(),
+    quantity: z.number().int().positive(),
+    deliveryDays: z.number().int().positive().max(365).optional(),
+    note: z.string().trim().max(500).optional(),
   }),
 });

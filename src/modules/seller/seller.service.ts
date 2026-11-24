@@ -96,19 +96,40 @@ function toClientBankDetail<
   };
 }
 
-export async function resolveKycDocumentUrls(kyc: { documents: string[] } | null) {
-  if (!kyc || !kyc.documents?.length) return kyc;
+export async function resolveKycDocumentUrls<
+  T extends {
+    documents: string[];
+    gstCertificateUrl?: string | null;
+    msmeCertificateUrl?: string | null;
+    incorporationCertificateUrl?: string | null;
+  },
+>(kyc: T | null) {
+  if (!kyc) return kyc;
   const storage = StorageFactory.get();
-  const signedDocuments = await Promise.all(
-    kyc.documents.map((doc) =>
-      storage.getSignedUrl({
-        key: extractStorageKey(doc),
-        expiresIn: 3600,
-        responseContentDisposition: "inline",
-      }),
-    ),
-  );
-  return { ...kyc, documents: signedDocuments };
+  const sign = (key: string) =>
+    storage.getSignedUrl({
+      key: extractStorageKey(key),
+      expiresIn: 3600,
+      responseContentDisposition: "inline",
+    });
+
+  const [signedDocuments, gstCertificateUrl, msmeCertificateUrl, incorporationCertificateUrl] =
+    await Promise.all([
+      kyc.documents?.length ? Promise.all(kyc.documents.map(sign)) : Promise.resolve(kyc.documents),
+      kyc.gstCertificateUrl ? sign(kyc.gstCertificateUrl) : Promise.resolve(kyc.gstCertificateUrl),
+      kyc.msmeCertificateUrl ? sign(kyc.msmeCertificateUrl) : Promise.resolve(kyc.msmeCertificateUrl),
+      kyc.incorporationCertificateUrl
+        ? sign(kyc.incorporationCertificateUrl)
+        : Promise.resolve(kyc.incorporationCertificateUrl),
+    ]);
+
+  return {
+    ...kyc,
+    documents: signedDocuments,
+    gstCertificateUrl,
+    msmeCertificateUrl,
+    incorporationCertificateUrl,
+  };
 }
 
 async function resolveAddressCityState(address: {
@@ -237,13 +258,17 @@ export const sellerService = {
   async completeKyc(
     sellerId: string,
     data: {
-      aadharNumber: string;
-      panNumber: string;
+      /** @deprecated Aadhaar/PAN are no longer required for KYC completion*/
+      aadharNumber?: string;
+      panNumber?: string;
       gstNumber?: string;
       businessRegNumber?: string;
       documents?: string[];
       govtIdType?: string;
-      govtIdNumber?: string;
+      govtIdNumber?: string; 
+      gstCertificateUrl: string;
+      msmeCertificateUrl?: string;
+      incorporationCertificateUrl?: string;
     },
   ) {
     const existing = await db.sellerKyc.findUnique({ where: { sellerId } });
@@ -252,8 +277,8 @@ export const sellerService = {
     return db.sellerKyc.create({
       data: {
         sellerId,
-        aadharNumber: encrypt(data.aadharNumber),
-        panNumber: encrypt(data.panNumber),
+        aadharNumber: data.aadharNumber ? encrypt(data.aadharNumber) : undefined,
+        panNumber: data.panNumber ? encrypt(data.panNumber) : undefined,
         gstNumber: data.gstNumber,
         businessRegNumber: data.businessRegNumber,
         documents: data.documents ?? [],
@@ -261,6 +286,9 @@ export const sellerService = {
         govtIdNumber: data.govtIdNumber
           ? encrypt(data.govtIdNumber)
           : undefined,
+        gstCertificateUrl: data.gstCertificateUrl,
+        msmeCertificateUrl: data.msmeCertificateUrl,
+        incorporationCertificateUrl: data.incorporationCertificateUrl,
       },
     });
   },
@@ -846,11 +874,13 @@ export const sellerService = {
             businessRegNumber: true,
             documents: true,
             govtIdType: true,
-            aadhaarStatus: true,
             govtIdStatus: true,
             rejectedReason: true,
             verifiedAt: true,
             createdAt: true,
+            gstCertificateUrl: true,
+            msmeCertificateUrl: true,
+            incorporationCertificateUrl: true,
           },
         },
         bankDetail: {
@@ -1048,8 +1078,14 @@ export const sellerService = {
     if (!kyc) throw new Error("KYC not found");
     if (kyc.status === "VERIFIED") throw new Error("KYC already verified");
 
-    if (kyc.aadhaarStatus !== "VERIFIED") {
-      throw new Error("Aadhaar must be verified before overall KYC can be verified");
+    const hasGstCertificate = !!kyc.gstCertificateUrl;
+    const hasSecondaryCertificate = !!(
+      kyc.msmeCertificateUrl || kyc.incorporationCertificateUrl
+    );
+    if (!hasGstCertificate || !hasSecondaryCertificate) {
+      throw new Error(
+        "GST Certificate is required, along with either an MSME Certificate or an Incorporation Certificate, before overall KYC can be verified",
+      );
     }
     if (kyc.govtIdType && kyc.govtIdStatus !== "VERIFIED") {
       throw new Error("Government ID must be verified before overall KYC can be verified");
@@ -1167,10 +1203,12 @@ export const sellerService = {
         gstNumber: true,
         businessRegNumber: true,
         govtIdType: true,
-        aadhaarStatus: true,
         govtIdStatus: true,
         rejectedReason: true,
         createdAt: true,
+        gstCertificateUrl: true,
+        msmeCertificateUrl: true,
+        incorporationCertificateUrl: true,
         seller: {
           select: {
             id: true,

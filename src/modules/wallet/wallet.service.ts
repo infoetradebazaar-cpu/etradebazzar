@@ -1,5 +1,14 @@
 import { db } from "../../db/index";
 
+async function ignoreDuplicateEntry<T>(walletId: string, write: () => Promise<T>) {
+    try {
+        return await write();
+    } catch (err: any) {
+        if (err?.code !== "P2002") throw err;
+        return db.wallet.findUniqueOrThrow({ where: { id: walletId } });
+    }
+}
+
 export const walletService = {
     async getOrCreateWallet(userId: string) {
         let wallet = await db.wallet.findUnique({ where: { userId } });
@@ -25,10 +34,8 @@ export const walletService = {
     async credit(userId: string, amount: number, reason: string, referenceId?: string) {
         if (amount <= 0) throw new Error("Credit amount must be positive");
 
-        return db.$transaction(async (tx) => {
-            let wallet = await tx.wallet.findUnique({ where: { userId } });
-            if (!wallet) wallet = await tx.wallet.create({ data: { userId } });
-
+        const wallet = await this.getOrCreateWallet(userId);
+        return ignoreDuplicateEntry(wallet.id, () => db.$transaction(async (tx) => {
             const updated = await tx.wallet.update({
                 where: { id: wallet.id },
                 data: { balance: { increment: amount } },
@@ -46,16 +53,16 @@ export const walletService = {
             });
 
             return updated;
-        });
+        }));
     },
 
     async debit(userId: string, amount: number, reason: string, referenceId?: string) {
         if (amount <= 0) throw new Error("Debit amount must be positive");
 
-        return db.$transaction(async (tx) => {
-            let wallet = await tx.wallet.findUnique({ where: { userId } });
-            if (!wallet) throw new Error("Wallet not found");
+        const wallet = await db.wallet.findUnique({ where: { userId } });
+        if (!wallet) throw new Error("Wallet not found");
 
+        return ignoreDuplicateEntry(wallet.id, () => db.$transaction(async (tx) => {
             const result = await tx.wallet.updateMany({
                 where: { id: wallet.id, balance: { gte: amount } },
                 data: { balance: { decrement: amount } },
@@ -79,7 +86,7 @@ export const walletService = {
             });
 
             return updated;
-        });
+        }));
     },
 
     async topup(

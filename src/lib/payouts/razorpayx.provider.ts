@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { CreateFundAccountInput, CreatePayoutInput, FundAccount, PayoutProvider, PayoutResult, WebhookResult } from './payout.interface';
 
 const BASE_URL = "https://api.razorpay.com/v1";
+const REQUEST_TIMEOUT_MS = 20_000;
 
 const STATUS_MAP: Record<string, PayoutResult["status"]> = {
     pending: "pending",
@@ -54,11 +55,16 @@ export class RazorpayXInstance implements PayoutProvider {
         const res = await fetch(`${BASE_URL}${endpoint}`, {
             ...options,
             headers: { ...headers, ...options.headers },
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
 
         if (!res.ok) {
-            const error = await res.json() as any;
-            throw new Error(`RazorpayX error: ${error?.error?.description ?? res.statusText}`);
+            const error = await res.json().catch(() => null) as any;
+            const err: Error & { httpStatus?: number } = new Error(
+                `RazorpayX error: ${error?.error?.description ?? res.statusText}`,
+            );
+            err.httpStatus = res.status;
+            throw err;
         }
 
         return res.json() as Promise<T>;
@@ -97,6 +103,7 @@ export class RazorpayXInstance implements PayoutProvider {
     async createPayout(input: CreatePayoutInput): Promise<PayoutResult> {
         const payout = await this.request<any>("/payouts", {
             method: "POST",
+            headers: { "X-Payout-Idempotency": input.refId },
             body: JSON.stringify({
                 account_number: this.sourceAccountNumber,
                 fund_account_id: input.fundAccountId,
@@ -196,11 +203,14 @@ export class RazorpayXInstance implements PayoutProvider {
             "payout.failed": "failed",
             "payout.queued": "queued",
             "payout.cancelled": "cancelled",
+            "payout.reversed": "failed",
+            "payout.rejected": "failed",
         };
 
         return {
             razorpayPayoutId: entity.id,
-            status: statusMap[event] ?? "failed",
+            referenceId: entity.reference_id ?? null,
+            status: statusMap[event] ?? "processing",
             utrRef: entity.utr ?? null,
             failureReason: entity.error?.description ?? null,
             raw: parsedPayload,

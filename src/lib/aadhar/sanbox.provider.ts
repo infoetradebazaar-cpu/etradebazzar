@@ -1,6 +1,8 @@
 import { AadhaarProvider, DigilockerInitInput, DigilockerSession, AadhaarDetails } from "./aadhar.interface";
 
-/** Deterministic fake DigiLocker provider for local/dev/test - never contacts Surepass or DigiLocker. */
+/**
+ * @deprecated Aadhaar OTP/DigiLocker verification is discontinued (non-compliant)
+ */
 export class SandboxAadhaarInstance implements AadhaarProvider {
     constructor(
         private apiKey: string,

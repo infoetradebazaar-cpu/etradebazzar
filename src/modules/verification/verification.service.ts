@@ -1,9 +1,12 @@
 import { db } from "../../db/index";
-import { AadhaarFactory } from "../../lib/aadhar/aadhar.factory";
+/** @deprecated Aadhaar OTP/DigiLocker verification is discontinued (non-compliant) */
+// import { AadhaarFactory } from "../../lib/aadhar/aadhar.factory";
 import { PanFactory } from "../../lib/pan/pan.factory";
 import { encrypt } from "../../utils/encryption";
 
 export const verificationService = {
+  /** @deprecated Aadhaar OTP/DigiLocker verification is discontinued (non-compliant) */
+  /*
   async initializeAadhaarDigilocker(sellerId: string, redirectUrl?: string) {
     const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
     if (!kyc) throw new Error("KYC record not found - complete KYC first");
@@ -69,6 +72,57 @@ export const verificationService = {
       return updated;
     });
   },
+  
+  async verifyAadhaar(sellerId: string, actorId: string) {
+    const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
+    if (!kyc) throw new Error("KYC record not found");
+    if (kyc.aadhaarStatus !== "PENDING") {
+      throw new Error(`Cannot verify current status is ${kyc.aadhaarStatus}`);
+    }
+  
+    return db.$transaction(async (tx) => {
+      const updated = await tx.sellerKyc.update({
+        where: { sellerId },
+        data: { aadhaarStatus: "VERIFIED", aadhaarVerifiedAt: new Date() },
+      });
+  
+      await tx.auditLog.create({
+        data: {
+          sellerId, actorId, actorType: "platform",
+          action: "AADHAAR_VERIFIED", entityType: "seller_kyc", entityId: sellerId,
+        },
+      });
+  
+      return updated;
+    });
+  },
+  
+  async rejectAadhaar(sellerId: string, actorId: string, reason: string) {
+    const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
+    if (!kyc) throw new Error("KYC record not found");
+    if (kyc.aadhaarStatus === "PENDING" || kyc.aadhaarStatus === "VERIFIED") {
+    } else {
+      throw new Error(`Cannot reject current status is ${kyc.aadhaarStatus}`);
+    }
+  
+    return db.$transaction(async (tx) => {
+      const updated = await tx.sellerKyc.update({
+        where: { sellerId },
+        data: { aadhaarStatus: "REJECTED", aadhaarRejectedReason: reason },
+      });
+  
+      await tx.auditLog.create({
+        data: {
+          sellerId, actorId, actorType: "platform",
+          action: "AADHAAR_REJECTED", entityType: "seller_kyc", entityId: sellerId,
+          metadata: { reason },
+        },
+      });
+  
+      return updated;
+    });
+  },
+  */
 
   async submitGovernmentId(
     sellerId: string,
@@ -140,9 +194,6 @@ export const verificationService = {
       where: { sellerId },
       select: {
         status: true,
-        aadhaarStatus: true,
-        aadhaarRejectedReason: true,
-        aadhaarVerifiedAt: true,
         govtIdType: true,
         govtIdStatus: true,
         govtIdRejectedReason: true,
@@ -151,57 +202,6 @@ export const verificationService = {
     });
     if (!kyc) throw new Error("KYC record not found");
     return kyc;
-  },
-
-  // Platform admin
-  async verifyAadhaar(sellerId: string, actorId: string) {
-    const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
-    if (!kyc) throw new Error("KYC record not found");
-    if (kyc.aadhaarStatus !== "PENDING") {
-      throw new Error(`Cannot verify current status is ${kyc.aadhaarStatus}`);
-    }
-
-    return db.$transaction(async (tx) => {
-      const updated = await tx.sellerKyc.update({
-        where: { sellerId },
-        data: { aadhaarStatus: "VERIFIED", aadhaarVerifiedAt: new Date() },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          sellerId, actorId, actorType: "platform",
-          action: "AADHAAR_VERIFIED", entityType: "seller_kyc", entityId: sellerId,
-        },
-      });
-
-      return updated;
-    });
-  },
-
-  async rejectAadhaar(sellerId: string, actorId: string, reason: string) {
-    const kyc = await db.sellerKyc.findUnique({ where: { sellerId } });
-    if (!kyc) throw new Error("KYC record not found");
-    if (kyc.aadhaarStatus === "PENDING" || kyc.aadhaarStatus === "VERIFIED") {
-    } else {
-      throw new Error(`Cannot reject current status is ${kyc.aadhaarStatus}`);
-    }
-
-    return db.$transaction(async (tx) => {
-      const updated = await tx.sellerKyc.update({
-        where: { sellerId },
-        data: { aadhaarStatus: "REJECTED", aadhaarRejectedReason: reason },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          sellerId, actorId, actorType: "platform",
-          action: "AADHAAR_REJECTED", entityType: "seller_kyc", entityId: sellerId,
-          metadata: { reason },
-        },
-      });
-
-      return updated;
-    });
   },
 
   async verifyGovernmentId(sellerId: string, actorId: string) {

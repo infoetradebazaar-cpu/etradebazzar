@@ -23,23 +23,46 @@ export const registerSellerSchema = z.object({
 });
 
 export const completeSellerKycSchema = z.object({
-  body: z.object({
-    aadharNumber: z.string().regex(/^\d{12}$/, "Invalid Aadhar number"),
-    panNumber: z
-      .string()
-      .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "Invalid PAN number"),
-    gstNumber: z
-      .string()
-      .regex(
-        /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/,
-        "Invalid GST number",
-      )
-      .optional(),
-    businessRegNumber: z.string().optional(),
-    documents: z.array(z.string()).optional(),
-    govtIdType: z.string().optional(),
-    govtIdNumber: z.string().optional(),
-  }),
+  body: z
+    .object({
+      /** @deprecated Aadhaar is no longer collected as part of KYC completion. */
+      aadharNumber: z
+        .string()
+        .regex(/^\d{12}$/, "Invalid Aadhar number")
+        .optional(),
+      /** @deprecated PAN is no longer a mandatory KYC field. Kept optional for */
+      // backward compatibility; registration-time PAN lives on `Seller.pan` instead.
+      panNumber: z
+        .string()
+        .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "Invalid PAN number")
+        .optional(),
+      gstNumber: z
+        .string()
+        .regex(
+          /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/,
+          "Invalid GST number",
+        )
+        .optional(),
+      businessRegNumber: z.string().optional(),
+      documents: z.array(z.string()).optional(),
+      govtIdType: z.string().optional(),
+      govtIdNumber: z.string().optional(),
+      gstCertificateUrl: z.string(),
+      msmeCertificateUrl: z.string().optional(),
+      incorporationCertificateUrl: z.string().optional(),
+    })
+    .refine((data) => !!data.gstCertificateUrl, {
+      message: "GST certificate is required",
+      path: ["gstCertificateUrl"],
+    })
+    .refine(
+      (data) => !!(data.msmeCertificateUrl || data.incorporationCertificateUrl),
+      {
+        message:
+          "Either an MSME certificate or an Incorporation certificate must be uploaded",
+        path: ["msmeCertificateUrl"],
+      },
+    ),
 });
 
 export const addBankDetailSchema = z.object({

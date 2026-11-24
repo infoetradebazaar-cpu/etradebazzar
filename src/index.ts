@@ -9,6 +9,7 @@ import { startPricingCircuitBreakerMonitor, stopPricingCircuitBreakerMonitor } f
 import { startManualNegotiationExpiryMonitor, stopManualNegotiationExpiryMonitor } from "./lib/negotiation/manual-negotiation-expiry-monitor";
 import { startNotificationRetryWorker, stopNotificationRetryWorker } from "./lib/notifications/notification-retry.worker";
 import { startSseRedisSubscriber, stopSseRedisSubscriber } from "./lib/notifications/sse/sse.redis";
+import { startAnalyticsRefresher, stopAnalyticsRefresher } from "./lib/analytics/analytics.events";
 
 let server: ReturnType<typeof app.listen>;
 
@@ -34,6 +35,7 @@ async function start() {
   startManualNegotiationExpiryMonitor();
   startNotificationRetryWorker();
   startSseRedisSubscriber();
+  startAnalyticsRefresher();
 }
 
 let shuttingDown = false;
@@ -55,6 +57,7 @@ const shutdown = (signal: string) => {
     stopPricingCircuitBreakerMonitor();
     stopManualNegotiationExpiryMonitor();
     stopNotificationRetryWorker();
+    stopAnalyticsRefresher();
     await stopSseRedisSubscriber();
     try {
       await disconnectDb();

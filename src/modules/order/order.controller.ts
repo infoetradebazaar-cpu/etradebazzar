@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { orderService } from "./order.service";
 import { logger } from "../../utils/logger";
-import { toCsv } from "../../utils/csv";
+import { streamCsv } from "../../utils/csv";
 import { createBulkOrderSchema } from "./order.schema";
 import { InsufficientStockError } from "../../lib/inventory/stock.errors";
 
@@ -121,6 +121,7 @@ export const orderController = {
         "Address not found",
         "Shop not found",
         "Shop not approved",
+        "Order not yet approved by seller",
       ];
       if (clientErrors.includes(error.message)) {
         return res.status(400).json({ success: false, error: error.message });
@@ -162,6 +163,92 @@ export const orderController = {
         .json({ success: false, error: "Internal server error" });
     }
   },
+  async approveOrder(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const actorId = req.user!.id;
+      const { orderId } = req.params;
+      const result = await orderService.approveOrder(
+        orderId as string,
+        sellerId,
+        actorId,
+      );
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Approve order failed");
+      const clientErrors = ["Order not found", "Order already approved"];
+      if (
+        clientErrors.includes(error.message) ||
+        error.message.startsWith("Cannot approve")
+      ) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async rejectOrder(req: Request, res: Response) {
+    try {
+      const { orderId } = req.params;
+      const actorId = req.user!.id;
+      const reason = req.body?.reason;
+      const result = await orderService.cancelOrder(
+        orderId as string,
+        actorId,
+        "seller",
+        req.user?.id,
+        req.seller?.id,
+        reason,
+      );
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Reject order failed");
+      if (error.message === "Order not found") {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      if (error.message === "Order cannot be cancelled") {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async confirmCashCollected(req: Request, res: Response) {
+    try {
+      const sellerId = req.seller!.id;
+      const actorId = req.user!.id;
+      const { orderId } = req.params;
+      const note = req.body?.note;
+      const result = await orderService.confirmCashCollected(
+        orderId as string,
+        sellerId,
+        actorId,
+        note,
+      );
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Confirm cash collected failed");
+      const clientErrors = [
+        "Order not found",
+        "Cash confirmation only applies to COD orders",
+        "Cash payment already recorded for this order",
+      ];
+      if (
+        clientErrors.includes(error.message) ||
+        error.message.startsWith("Cannot confirm cash")
+      ) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async getOrder(req: Request, res: Response) {
     try {
       const { orderId } = req.params;
@@ -214,7 +301,7 @@ export const orderController = {
     try {
       const sellerId = req.seller!.id;
       const userId = req.user!.id;
-      const { status, search, type, shopId, dateFrom, dateTo, page, limit } =
+      const { status, search, type, shopId, dateFrom, dateTo, page, limit, awaitingApproval } =
         req.query as Record<string, string>;
       const result = await orderService.listOrders(sellerId, userId, {
         status,
@@ -223,6 +310,7 @@ export const orderController = {
         shopId,
         dateFrom,
         dateTo,
+        awaitingApproval: awaitingApproval === "true",
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
       });
@@ -280,6 +368,7 @@ export const orderController = {
         "Order not found",
         "Shop not found",
         "Shop not approved",
+        "Order not yet approved by seller",
         "Order is not awaiting assignment",
       ];
       if (clientErrors.includes(error.message)) {
@@ -324,25 +413,29 @@ export const orderController = {
         string,
         string
       >;
-      const orders = await orderService.exportOrdersCsv(sellerId, {
+      const batches = await orderService.exportOrdersCsv(sellerId, {
         status,
         type,
         dateFrom,
         dateTo,
       });
 
-      const rows = orders.map((o) => ({
-        orderId: o.displayId ?? o.id,
-        type: o.type,
-        status: o.status,
-        totalAmount: Number(o.totalAmount),
-        finalAmount: o.finalAmount ? Number(o.finalAmount) : "",
-        paymentStatus: o.paymentStatus,
-        customerName: o.customer.name ?? "",
-        customerEmail: o.customer.email,
-        createdAt: o.createdAt.toISOString(),
-      }));
-      const csv = toCsv(rows, [
+      const rows = (async function* () {
+        for await (const batch of batches) {
+          yield batch.map((o) => ({
+            orderId: o.displayId ?? o.id,
+            type: o.type,
+            status: o.status,
+            totalAmount: Number(o.totalAmount),
+            finalAmount: o.finalAmount ? Number(o.finalAmount) : "",
+            paymentStatus: o.paymentStatus,
+            customerName: o.customer.name ?? "",
+            customerEmail: o.customer.email,
+            createdAt: o.createdAt.toISOString(),
+          }));
+        }
+      })();
+      await streamCsv(res, "orders.csv", [
         "orderId",
         "type",
         "status",
@@ -352,12 +445,10 @@ export const orderController = {
         "customerName",
         "customerEmail",
         "createdAt",
-      ]);
-
-      res.setHeader("Content-Type", "text/csv");
-      res.setHeader("Content-Disposition", "attachment; filename=orders.csv");
-      return res.send(csv);
+      ], rows);
+      return;
     } catch (error: any) {
+      if (res.headersSent) return res.end();
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });

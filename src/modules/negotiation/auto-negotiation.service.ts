@@ -1,5 +1,6 @@
 import { db } from "../../db/index";
 import { resolveTierPrice } from "../../utils/tier-pricing";
+import { notificationService } from "../notification/notification.service";
 import { createOrderFromNegotiation, DeliveryAddress } from "./negotiation-order.helper";
 import { NEGOTIATION_SESSION_OMIT } from "./negotiation.select";
 import { computeOfferV2 } from "./pricing-engine-v2/engine";
@@ -12,6 +13,9 @@ import { computeMomentumState } from "./momentum-gate";
 import { canAccessOrgResource } from "../../lib/permission/customer-org-permission.service";
 import { CUSTOMER_ORG_PERMISSIONS } from "../../lib/permission/customer-org-permission.constants";
 import { setCustomerOrgScope } from "../../middleware/tenant";
+import { invoicingService } from "../invoicing/invoicing.service";
+import { logger } from "../../utils/logger";
+import { chargeNegotiationFee, getNegotiationQuota, type NegotiationIntent } from "./negotiation-gate";
 
 export { MAX_ROUNDS, interpolateOffer, decideAcceptOutcome };
 export type { AcceptCase, AcceptDecision, NegotiationOutcome };
@@ -113,6 +117,7 @@ export const autoNegotiationService = {
     quantity: number,
     customerPrice?: number,
     orgId?: string | null,
+    intent?: NegotiationIntent,
   ) {
     const sku = await db.productSKU.findFirst({ where: { id: skuId, productId } });
     if (!sku) throw new Error("SKU not found");
@@ -136,8 +141,10 @@ export const autoNegotiationService = {
       throw new Error("A negotiation session is already open for this product respond to it instead");
     }
 
+    const quota = await getNegotiationQuota(customerId, orgId);
+    let created;
     try {
-      return await db.$transaction(async (tx) => {
+      created = await db.$transaction(async (tx) => {
         await setCustomerOrgScope(tx, orgId);
         const session = await tx.negotiationSession.create({
           data: {
@@ -151,6 +158,7 @@ export const autoNegotiationService = {
             visibleTierPrice: resolution.visiblePrice,
             hiddenFloorPrice: resolution.hiddenFloorPrice,
             round: 1,
+            intent: (intent ?? undefined) as any,
           },
           omit: NEGOTIATION_SESSION_OMIT,
         });
@@ -183,6 +191,13 @@ export const autoNegotiationService = {
       if (err?.code === "P2002") {
         throw new Error("A negotiation session is already open for this product respond to it instead");
       }
+      throw err;
+    }
+    try {
+      const creditsCharged = await chargeNegotiationFee(customerId, created.session.id, quota.feeCredits);
+      return { ...created, session: { ...created.session, creditsCharged } };
+    } catch (err) {
+      await db.negotiationSession.delete({ where: { id: created.session.id } }).catch(() => null);
       throw err;
     }
   },
@@ -341,6 +356,19 @@ export const autoNegotiationService = {
       return { status: newStatus, offeredPrice };
     });
 
+    if (result.status === "ACCEPTED" && "order" in result) {
+      invoicingService
+        .generateQuotation(result.order.id, { userId: "system", sellerId: session.sellerId, actorType: "system" })
+        .catch((err: any) => logger.error({ err: err.message, orderId: result.order.id }, "Quotation on acceptance failed"));
+      notificationService
+        .sellerNewOrder({
+          sellerId: session.sellerId,
+          orderId: result.order.id,
+          displayId: result.order.displayId,
+          totalAmount: Number(result.order.finalAmount ?? result.order.totalAmount),
+        })
+        .catch(() => null);
+    }
     return result;
   },
 };

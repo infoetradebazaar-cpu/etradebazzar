@@ -19,6 +19,13 @@ export const shopController = {
       if (clientErrors.includes(error.message)) {
         return res.status(400).json({ success: false, error: error.message });
       }
+      const conflictErrors = [
+        "This shop username is already taken",
+        "A shop with a conflicting slug already exists, please try again",
+      ];
+      if (conflictErrors.includes(error.message)) {
+        return res.status(409).json({ success: false, error: error.message });
+      }
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -46,6 +53,13 @@ export const shopController = {
       ];
       if (clientErrors.includes(error.message)) {
         return res.status(400).json({ success: false, error: error.message });
+      }
+      const conflictErrors = [
+        "This shop username is already taken",
+        "A shop with a conflicting slug already exists, please try again",
+      ];
+      if (conflictErrors.includes(error.message)) {
+        return res.status(409).json({ success: false, error: error.message });
       }
       return res
         .status(500)

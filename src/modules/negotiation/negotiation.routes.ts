@@ -19,9 +19,17 @@ import {
   confirmTimeSlotSchema,
   sendMessageSchema,
   manualAcceptSchema,
+  sendOfferSchema,
 } from "./negotiation.schema";
 
 const router = Router();
+
+router.get(
+  "/quota",
+  protect,
+  sellerLimiter,
+  negotiationController.getQuota,
+);
 
 // Auto-negotiation (buyer<->system, bounded between visible tier price and the seller's hidden floor)
 router.post(
@@ -77,6 +85,15 @@ router.post(
   requirePermissionIfSeller(PERMISSIONS.NEGOTIATIONS_RESPOND),
   validate(sendMessageSchema),
   manualNegotiationController.sendMessage,
+);
+router.post(
+  "/manual/:sessionId/offers",
+  protect,
+  sellerLimiter,
+  resolveTenant,
+  requirePermissionIfSeller(PERMISSIONS.NEGOTIATIONS_RESPOND),
+  validate(sendOfferSchema),
+  manualNegotiationController.sendOffer,
 );
 router.post(
   "/manual/:sessionId/time-slot",

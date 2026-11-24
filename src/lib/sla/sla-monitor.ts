@@ -2,6 +2,47 @@ import { db } from "../../db";
 import { logger } from "../../utils/logger";
 import { reliabilityService } from "../order-assignment/reliability.service";
 import { slaConfigService } from "../../modules/platform/sla-config.service";
+import { orderService } from "../../modules/order/order.service";
+import { SELLER_APPROVAL_WINDOW_HOURS } from "../../modules/invoicing/invoicing.service";
+import { addWorkingHours } from "./working-hours";
+import { scheduleExclusive } from "../jobs/run-exclusive";
+
+async function cancelUnapprovedPaidOrders(now: Date): Promise<number> {
+    const calendarCutoff = new Date(now.getTime() - SELLER_APPROVAL_WINDOW_HOURS * 60 * 60 * 1000);
+    const candidates = await db.order.findMany({
+        where: {
+            sellerApprovedAt: null,
+            paymentStatus: { in: ["PAID", "PARTIALLY_PAID"] },
+            status: { in: ["PENDING", "PENDING_ASSIGNMENT", "CONFIRMED"] },
+            payments: { some: { status: "PAID", updatedAt: { lt: calendarCutoff } } },
+        },
+        select: {
+            id: true,
+            payments: { where: { status: "PAID" }, select: { updatedAt: true }, orderBy: { updatedAt: "asc" }, take: 1 },
+        },
+        take: 200,
+    });
+
+    let cancelled = 0;
+    for (const order of candidates) {
+        const paidAt = order.payments[0]?.updatedAt;
+        if (!paidAt || addWorkingHours(paidAt, SELLER_APPROVAL_WINDOW_HOURS) > now) continue;
+        try {
+            await orderService.cancelOrder(
+                order.id,
+                "system",
+                "system",
+                undefined,
+                undefined,
+                `Seller did not approve within ${SELLER_APPROVAL_WINDOW_HOURS} working hours`,
+            );
+            cancelled++;
+        } catch (err: any) {
+            logger.error({ err: err.message, orderId: order.id }, "Auto-cancel of unapproved paid order failed");
+        }
+    }
+    return cancelled;
+}
 
 export async function checkSlaBreaches(): Promise<void> {
     const now = new Date();
@@ -66,9 +107,11 @@ export async function checkSlaBreaches(): Promise<void> {
         );
     }
 
-    if (packingBreaches.length || dispatchBreaches.length) {
+    const approvalTimeouts = await cancelUnapprovedPaidOrders(now);
+
+    if (packingBreaches.length || dispatchBreaches.length || approvalTimeouts) {
         logger.info(
-            { packingBreaches: packingBreaches.length, dispatchBreaches: dispatchBreaches.length },
+            { packingBreaches: packingBreaches.length, dispatchBreaches: dispatchBreaches.length, approvalTimeouts },
             "SLA monitor sweep completed",
         );
     }
@@ -78,11 +121,7 @@ let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
 export function startSlaMonitor(intervalMs = 15 * 60 * 1000): void {
     if (intervalHandle) return;
-    intervalHandle = setInterval(() => {
-        checkSlaBreaches().catch((err) => {
-            logger.error({ err: err.message }, "SLA monitor sweep failed");
-        });
-    }, intervalMs);
+    intervalHandle = scheduleExclusive("sla-monitor", intervalMs, checkSlaBreaches);
     logger.info({ intervalMs }, "SLA monitor started");
 }
 

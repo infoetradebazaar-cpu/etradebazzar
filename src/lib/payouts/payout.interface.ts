@@ -31,7 +31,8 @@ export interface PayoutResult {
 
 export interface WebhookResult {
     razorpayPayoutId: string;
-    status: "processed" | "failed" | "queued" | "cancelled";
+    referenceId: string | null;
+    status: "processed" | "failed" | "queued" | "cancelled" | "processing";
     utrRef: string | null;
     failureReason: string | null;
     raw: any;

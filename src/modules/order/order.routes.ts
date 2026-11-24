@@ -20,6 +20,9 @@ import {
   markPackedSchema,
   cancelOrderSchema,
   adminAssignShopSchema,
+  approveOrderSchema,
+  rejectOrderSchema,
+  confirmCashSchema,
 } from "./order.schema";
 
 const router = Router();
@@ -127,6 +130,36 @@ router.patch(
   requirePermission(PERMISSIONS.ORDERS_FULFILL),
   validate(markPackedSchema),
   orderController.markPacked,
+);
+
+router.patch(
+  "/:orderId/approve",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  requirePermission(PERMISSIONS.ORDERS_FULFILL),
+  validate(approveOrderSchema),
+  orderController.approveOrder,
+);
+
+router.patch(
+  "/:orderId/reject",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  requirePermission(PERMISSIONS.ORDERS_FULFILL),
+  validate(rejectOrderSchema),
+  orderController.rejectOrder,
+);
+
+router.post(
+  "/:orderId/confirm-cash",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  requirePermission(PERMISSIONS.ORDERS_FULFILL),
+  validate(confirmCashSchema),
+  orderController.confirmCashCollected,
 );
 
 // Seller

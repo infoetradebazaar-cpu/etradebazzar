@@ -940,7 +940,6 @@ async function seedComprehensive() {
           const attrs = generateProductAttributes(parentCatName, subCat);
           const product = await db.product.create({
             data: {
-              shopId: shop.id,
               sellerId: shop.sellerId,
               categoryId: catId,
               displayId: productDisplayId,
@@ -1428,7 +1427,6 @@ async function seedComprehensive() {
         const attrs = generateProductAttributes(parentCatName, subCat);
         const product = await db.product.create({
           data: {
-            shopId: shop.id,
             sellerId: shop.sellerId,
             categoryId: catId,
             displayId: productDisplayId,

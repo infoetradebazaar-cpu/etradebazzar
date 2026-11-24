@@ -1,7 +1,17 @@
 import { db } from "../../db/index";
+import { redis } from "../../db/redis";
 import type { CategoryAttributeInput } from "./category-attribute.schema";
 
 const ATTRIBUTE_UNIQUE_CONSTRAINT = "key";
+
+const CATEGORY_TREE_CACHE_KEY = "cache:category-tree";
+const CATEGORY_TREE_TTL_SECONDS = 300;
+
+async function afterCategoryWrite<T>(write: Promise<T>): Promise<T> {
+  const result = await write;
+  await redis.del(CATEGORY_TREE_CACHE_KEY).catch(() => null);
+  return result;
+}
 
 function isUniqueConstraintError(err: any, field: string): boolean {
   if (err?.code !== "P2002") return false;
@@ -53,7 +63,7 @@ export const categoryService = {
     }
 
     try {
-      return await db.$transaction(async (tx) => {
+      return await afterCategoryWrite(db.$transaction(async (tx) => {
         const category = await tx.category.create({
           data: {
             name: data.name,
@@ -82,7 +92,7 @@ export const categoryService = {
           where: { id: category.id },
           include: { attributes: { orderBy: { sortOrder: "asc" } } },
         });
-      });
+      }));
     } catch (err: any) {
       if (isUniqueConstraintError(err, ATTRIBUTE_UNIQUE_CONSTRAINT)) {
         throw new Error("Duplicate attribute key in request");
@@ -125,7 +135,7 @@ export const categoryService = {
     }
 
     try {
-      return await db.$transaction(async (tx) => {
+      return await afterCategoryWrite(db.$transaction(async (tx) => {
         await tx.category.update({ where: { id: categoryId }, data: updateData });
 
         if (data.attributes?.length) {
@@ -156,7 +166,7 @@ export const categoryService = {
           where: { id: categoryId },
           include: { attributes: { orderBy: { sortOrder: "asc" } } },
         });
-      });
+      }));
     } catch (err: any) {
       if (isUniqueConstraintError(err, ATTRIBUTE_UNIQUE_CONSTRAINT)) {
         throw new Error("Duplicate attribute key in request");
@@ -178,7 +188,7 @@ export const categoryService = {
     if (category._count.products > 0)
       throw new Error("Category has products  reassign before deleting");
 
-    return db.category.delete({ where: { id: categoryId } });
+    return afterCategoryWrite(db.category.delete({ where: { id: categoryId } }));
   },
 
   async listCategories(parentId?: string) {
@@ -198,6 +208,9 @@ export const categoryService = {
 
   // full nested tree for category picker
   async getCategoryTree() {
+    const cached = await redis.get(CATEGORY_TREE_CACHE_KEY).catch(() => null);
+    if (cached) return JSON.parse(cached);
+
     const all = await db.category.findMany({
       select: {
         id: true,
@@ -209,7 +222,9 @@ export const categoryService = {
       orderBy: { name: "asc" },
     });
 
-    return buildTree(all, null);
+    const tree = buildTree(all, null);
+    redis.setex(CATEGORY_TREE_CACHE_KEY, CATEGORY_TREE_TTL_SECONDS, JSON.stringify(tree)).catch(() => null);
+    return tree;
   },
 
   async getCategory(categoryId: string) {

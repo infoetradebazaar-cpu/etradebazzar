@@ -3,8 +3,11 @@ import { redis } from "../../db/redis";
 import { PaymentFactory } from "../../lib/payments/payment.factory";
 import { notificationService } from "../notification/notification.service";
 import { logger } from "../../utils/logger";
-import { getPlatformConfigBool } from "../../lib/platform-config/platform-config";
+import { getPlatformConfigBool, invalidatePlatformConfig } from "../../lib/platform-config/platform-config";
 import { encrypt } from "../../utils/encryption";
+import { invoicingService } from "../invoicing/invoicing.service";
+import { acquireLock, releaseLock } from "../../lib/locks/redis-lock";
+import { getAdvancePercent, getGatewaySurchargePercent, withSurcharge } from "../../lib/payments/payment-terms";
 
 const PAYMENT_LOCK_TTL = 15;
 const REFUND_CLAIM_TTL = 300;
@@ -17,17 +20,19 @@ async function assertOnlinePaymentsEnabled(): Promise<void> {
     }
 }
 
-function getAdvancePercent(orderType: string): number {
-    return orderType === "HIGH_TICKET" ? 50 : 20;
+
+export function sumPaidPayments(payments: { status: string; amount: unknown }[]): number {
+    return payments
+        .filter((p) => p.status === "PAID")
+        .reduce((sum, p) => sum + Number(p.amount), 0);
 }
 
-async function acquirePaymentLock(key: string): Promise<boolean> {
-    const result = await redis.set(`payment:lock:${key}`, "1", "EX", PAYMENT_LOCK_TTL, "NX");
-    return result === "OK";
+async function acquirePaymentLock(key: string): Promise<string | null> {
+  return acquireLock(`payment:lock:${key}`, PAYMENT_LOCK_TTL);
 }
 
-async function releasePaymentLock(key: string): Promise<void> {
-    await redis.del(`payment:lock:${key}`);
+async function releasePaymentLock(key: string, token: string): Promise<void> {
+  await releaseLock(`payment:lock:${key}`, token);
 }
 
 async function claimRefund(paymentId: string): Promise<boolean> {
@@ -58,7 +63,55 @@ async function notifyPaymentReceived(orderId: string, amount: number) {
         data: { orderId, amount },
     }).catch(() => null);
 }
+
+async function issueProformaAfterPayment(orderId: string, sellerId: string) {
+    try {
+        await invoicingService.generateProformaInvoice(orderId, { userId: "system", sellerId, actorType: "system" });
+    } catch (err: any) {
+        logger.error({ err: err.message, orderId }, "Auto PI generation after payment failed");
+    }
+}
+
+async function triggerOnlinePostPaymentDocs(orderId: string, sellerId: string) {
+    const actor = { userId: "system", sellerId, actorType: "system" as const };
+    const order = await db.order.findUnique({
+        where: { id: orderId },
+        select: { paymentStatus: true, sellerApprovedAt: true },
+    });
+    if (!order) return;
+
+    if (order.paymentStatus !== "UNPAID") await issueProformaAfterPayment(orderId, sellerId);
+
+    if (!order.sellerApprovedAt) {
+        const fromNegotiation = await db.negotiationSession.findFirst({
+            where: { orderId },
+            select: { id: true },
+        });
+        if (!fromNegotiation) return;
+        try {
+            await invoicingService.generateQuotation(orderId, actor);
+        } catch (err: any) {
+            logger.error({ err: err.message, orderId }, "Auto quotation generation on payment failed");
+        }
+        return;
+    }
+
+    try {
+        await invoicingService.generatePurchaseOrder(orderId, actor);
+    } catch (err: any) {
+        logger.error({ err: err.message, orderId }, "Auto PO generation on payment failed");
+    }
+    if (order.paymentStatus !== "PAID") return;
+    try {
+        await invoicingService.generateInvoice(orderId, actor);
+    } catch (err: any) {
+        logger.error({ err: err.message, orderId }, "Auto invoice generation on payment failed");
+    }
+}
+
 export const paymentService = {
+    issuePostPaymentDocs: triggerOnlinePostPaymentDocs,
+
     async createAdvancePayment(orderId: string) {
         await assertOnlinePaymentsEnabled();
 
@@ -72,7 +125,7 @@ export const paymentService = {
                 include: { payments: true },
             });
             if (!order) throw new Error("Order not found");
-            if (!["CONFIRMED"].includes(order.status)) {
+            if (!["PENDING_ASSIGNMENT", "CONFIRMED"].includes(order.status)) {
                 throw new Error("Order not in payable state");
             }
 
@@ -80,12 +133,14 @@ export const paymentService = {
             if (existingAdvance) throw new Error("Advance payment already initiated");
 
             const baseAmount = Number(order.finalAmount ?? order.totalAmount);
-            const percent = getAdvancePercent(order.type);
+            const percent = await getAdvancePercent();
             const advanceAmount = parseFloat(((baseAmount * percent) / 100).toFixed(2));
+            const surchargePercent = await getGatewaySurchargePercent();
+            const { surcharge, gatewayAmount } = withSurcharge(advanceAmount, surchargePercent);
 
             const gateway = PaymentFactory.get();
             const gatewayOrder = await gateway.createOrder({
-                amount: advanceAmount,
+                amount: gatewayAmount,
                 currency: "INR",
                 receipt: `adv_${orderId}`,
                 notes: { orderId, type: "ADVANCE", percent: String(percent) },
@@ -98,13 +153,13 @@ export const paymentService = {
                     amount: advanceAmount,
                     type: "ADVANCE",
                     status: "UNPAID",
-                    metadata: { percent, baseAmount },
+                    metadata: { percent, baseAmount, surchargePercent, surcharge, gatewayAmount },
                 },
             });
 
-            return { payment, gatewayOrder };
+            return { payment, gatewayOrder, key: gateway.getPublicKey(), surcharge, surchargePercent, gatewayAmount };
         } finally {
-            await releasePaymentLock(lockKey);
+            await releasePaymentLock(lockKey, locked);
         }
     },
 
@@ -131,9 +186,12 @@ export const paymentService = {
             const baseAmount = Number(order.finalAmount ?? order.totalAmount);
             const finalAmount = parseFloat((baseAmount - Number(advancePaid.amount)).toFixed(2));
 
+            const surchargePercent = await getGatewaySurchargePercent();
+            const { surcharge, gatewayAmount } = withSurcharge(finalAmount, surchargePercent);
+
             const gateway = PaymentFactory.get();
             const gatewayOrder = await gateway.createOrder({
-                amount: finalAmount,
+                amount: gatewayAmount,
                 currency: "INR",
                 receipt: `final_${orderId}`,
                 notes: { orderId, type: "FINAL" },
@@ -146,13 +204,13 @@ export const paymentService = {
                     amount: finalAmount,
                     type: "FINAL",
                     status: "UNPAID",
-                    metadata: { baseAmount, advancePaid: Number(advancePaid.amount) },
+                    metadata: { baseAmount, advancePaid: Number(advancePaid.amount), surchargePercent, surcharge, gatewayAmount },
                 },
             });
 
-            return { payment, gatewayOrder };
+            return { payment, gatewayOrder, key: gateway.getPublicKey(), surcharge, surchargePercent, gatewayAmount };
         } finally {
-            await releasePaymentLock(lockKey);
+            await releasePaymentLock(lockKey, locked);
         }
     },
 
@@ -239,6 +297,10 @@ export const paymentService = {
         if (updated) {
             await notifyPaymentReceived(payment.orderId, Number(payment.amount));
 
+            if (payment.order.paymentMethod === "ONLINE") {
+                await triggerOnlinePostPaymentDocs(payment.orderId, payment.order.sellerId);
+            }
+
             return updated;
         }
 
@@ -285,6 +347,10 @@ export const paymentService = {
 
                 if (captured) {
                     await notifyPaymentReceived(payment.orderId, Number(payment.amount));
+
+                    if (payment.order.paymentMethod === "ONLINE") {
+                        await triggerOnlinePostPaymentDocs(payment.orderId, payment.order.sellerId);
+                    }
                 }
                 break;
             }
@@ -346,6 +412,38 @@ export const paymentService = {
             const results = [];
 
             for (const payment of paidPayments) {
+                if (payment.method === "CASH") {
+                    const claimedCash = await claimRefund(payment.id);
+                    if (!claimedCash) {
+                        logger.warn({ paymentId: payment.id }, "Cash refund already claimed, skipping");
+                        continue;
+                    }
+
+                    await db.payment.update({
+                        where: { id: payment.id },
+                        data: { status: "REFUNDED", refundAmount: payment.amount },
+                    });
+
+                    await db.auditLog.create({
+                        data: {
+                            sellerId: order.sellerId,
+                            actorId,
+                            actorType: "system",
+                            action: "REFUND_COMPLETED_CASH",
+                            entityType: "payment",
+                            entityId: payment.id,
+                            metadata: {
+                                orderId,
+                                amount: Number(payment.amount),
+                                note: "Cash refund - manual reconciliation required outside the platform",
+                            },
+                        },
+                    });
+
+                    results.push({ paymentId: payment.id, refundId: null, manual: true });
+                    continue;
+                }
+
                 if (!payment.razorpayPaymentId) continue;
 
                 const claimed = await claimRefund(payment.id);
@@ -413,12 +511,60 @@ export const paymentService = {
 
             return results;
         } finally {
-            await releasePaymentLock(lockKey);
+            await releasePaymentLock(lockKey, locked);
         }
     },
 
     async getPayments(orderId: string) {
         return db.payment.findMany({ where: { orderId }, orderBy: { createdAt: "asc" } });
+    },
+
+    async _recordPaidCashPayment(
+        order: { id: string; sellerId: string; finalAmount: unknown; totalAmount: unknown; payments: { status: string; amount: unknown }[] },
+        actorId: string,
+        actorType: "platform" | "seller",
+        auditAction: "PAYMENT_RECORDED_MANUAL" | "PAYMENT_CASH_CONFIRMED",
+        data: { type: "ADVANCE" | "FINAL"; amount: number; note?: string },
+    ) {
+        return db.$transaction(async (tx) => {
+            const created = await tx.payment.create({
+                data: {
+                    orderId: order.id,
+                    amount: data.amount,
+                    type: data.type,
+                    status: "PAID",
+                    method: "CASH",
+                    recordedByActorId: actorId,
+                    note: data.note,
+                },
+            });
+
+            const totalPaid = sumPaidPayments(order.payments) + data.amount;
+            const baseAmount = Number(order.finalAmount ?? order.totalAmount);
+            const isFullyPaid = Math.abs(totalPaid - baseAmount) < 0.01;
+
+            await tx.order.update({
+                where: { id: order.id },
+                data: { paymentStatus: isFullyPaid ? "PAID" : "PARTIALLY_PAID" },
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    sellerId: order.sellerId,
+                    actorId,
+                    actorType,
+                    action: auditAction,
+                    entityType: "payment",
+                    entityId: created.id,
+                    metadata: { orderId: order.id, type: data.type, amount: data.amount, note: data.note ?? null },
+                },
+            });
+
+            return created;
+        }).then(async (created) => {
+            await issueProformaAfterPayment(order.id, order.sellerId);
+            return created;
+        });
     },
 
     async recordManualPayment(
@@ -445,44 +591,36 @@ export const paymentService = {
             if (existingFinal) throw new Error("Final payment already initiated");
         }
 
-        const payment = await db.$transaction(async (tx) => {
-            const created = await tx.payment.create({
-                data: {
-                    orderId,
-                    amount: data.amount,
-                    type: data.type,
-                    status: "PAID",
-                    method: "CASH",
-                    recordedByActorId: actorId,
-                    note: data.note,
-                },
-            });
+        const payment = await this._recordPaidCashPayment(
+            order,
+            actorId,
+            "platform",
+            "PAYMENT_RECORDED_MANUAL",
+            data,
+        );
 
-            const totalPaid = order.payments
-                .filter((p) => p.status === "PAID")
-                .reduce((sum, p) => sum + Number(p.amount), 0) + data.amount;
-            const baseAmount = Number(order.finalAmount ?? order.totalAmount);
-            const isFullyPaid = Math.abs(totalPaid - baseAmount) < 0.01;
+        await notifyPaymentReceived(orderId, data.amount);
+        return payment;
+    },
 
-            await tx.order.update({
-                where: { id: orderId },
-                data: { paymentStatus: isFullyPaid ? "PAID" : "PARTIALLY_PAID" },
-            });
-
-            await tx.auditLog.create({
-                data: {
-                    sellerId: order.sellerId,
-                    actorId,
-                    actorType: "platform",
-                    action: "PAYMENT_RECORDED_MANUAL",
-                    entityType: "payment",
-                    entityId: created.id,
-                    metadata: { orderId, type: data.type, amount: data.amount, note: data.note ?? null },
-                },
-            });
-
-            return created;
+    async recordCashPayment(
+        orderId: string,
+        actorId: string,
+        data: { amount: number; note?: string },
+    ) {
+        const order = await db.order.findUnique({
+            where: { id: orderId },
+            include: { payments: true },
         });
+        if (!order) throw new Error("Order not found");
+
+        const payment = await this._recordPaidCashPayment(
+            order,
+            actorId,
+            "seller",
+            "PAYMENT_CASH_CONFIRMED",
+            { type: "FINAL", amount: data.amount, note: data.note },
+        );
 
         await notifyPaymentReceived(orderId, data.amount);
         return payment;
@@ -498,6 +636,7 @@ export const paymentService = {
             update: { value: encrypt(String(enabled)) },
             create: { key: ONLINE_PAYMENTS_CONFIG_KEY, value: encrypt(String(enabled)) },
         });
+        invalidatePlatformConfig(ONLINE_PAYMENTS_CONFIG_KEY);
 
         await db.auditLog.create({
             data: {

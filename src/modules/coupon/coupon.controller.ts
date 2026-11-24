@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { couponService } from "./coupon.service";
 import { logger } from "../../utils/logger";
+import { sendClientError } from "../../utils/http-error";
 
 const clientErrors = [
   "Coupon code already exists",
@@ -31,7 +32,7 @@ export const couponController = {
     } catch (error: any) {
       logger.error({ err: error.message }, "Create coupon failed");
       if (isClientError(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -46,7 +47,7 @@ export const couponController = {
     } catch (error: any) {
       logger.error({ err: error.message }, "Bulk generate coupons failed");
       if (isClientError(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -68,7 +69,7 @@ export const couponController = {
     } catch (error: any) {
       logger.error({ err: error.message }, "Validate coupon failed");
       if (isClientError(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -86,7 +87,7 @@ export const couponController = {
     } catch (error: any) {
       logger.error({ err: error.message }, "Update coupon failed");
       if (isClientError(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -105,7 +106,7 @@ export const couponController = {
     } catch (error: any) {
       logger.error({ err: error.message }, "Deactivate coupon failed");
       if (isClientError(error.message))
-        return res.status(400).json({ success: false, error: error.message });
+        return sendClientError(res, error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });
@@ -136,7 +137,7 @@ export const couponController = {
     } catch (error: any) {
       logger.error({ err: error.message }, "Get coupon failed");
       if (error.message === "Coupon not found")
-        return res.status(404).json({ success: false, error: error.message });
+        return sendClientError(res, error, 404);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });

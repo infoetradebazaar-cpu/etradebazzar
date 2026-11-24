@@ -1,4 +1,5 @@
 import express from "express";
+import compression from "compression";
 import { Request, Response, NextFunction, Application } from "express";
 import { randomUUID } from "crypto";
 
@@ -41,7 +42,7 @@ import adminNotificationRoutes from "./modules/notification/admin-notification.r
 import addressRoutes from "./modules/address/address.routes";
 import locationRoutes from "./modules/location/location.routes";
 import negotiationRoutes from "./modules/negotiation/negotiation.routes";
-import { invoiceRoutes, purchaseOrderRoutes } from "./modules/invoicing/invoicing.routes";
+import { invoiceRoutes, purchaseOrderRoutes, quotationRoutes, proformaInvoiceRoutes } from "./modules/invoicing/invoicing.routes";
 
 
 declare global {
@@ -54,12 +55,17 @@ declare global {
 }
 const app: Application = express();
 
-const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+const trustProxyHops = Number(
+  process.env.TRUST_PROXY_HOPS ?? (process.env.TRUST_PROXY === "true" ? 1 : 0),
+);
 if (trustProxyHops > 0) {
   app.set("trust proxy", trustProxyHops);
+  if (process.env.TRUST_PROXY_HOPS === undefined) {
+    logger.warn("TRUST_PROXY=true is deprecated; set TRUST_PROXY_HOPS to the number of proxies (using 1)");
+  }
 } else {
   logger.warn(
-    "TRUST_PROXY_HOPS not set req.ip and X-Forwarded-For based rate limiting may be unreliable behind a proxy/load balancer"
+    "TRUST_PROXY_HOPS not set: behind a load balancer every client shares the proxy's IP for rate limiting"
   );
 }
 
@@ -71,6 +77,16 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.use(...security);
 
+app.use(
+  compression({
+    filter: (req, res) => {
+      if (req.headers.accept?.includes("text/event-stream")) return false;
+      if (String(res.getHeader("Content-Type") ?? "").includes("text/event-stream")) return false;
+      return compression.filter(req, res);
+    },
+  }),
+);
+
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.setTimeout(15000, () => {
     req.timedout = true;
@@ -81,7 +97,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-const RAW_BODY_WEBHOOK_PATHS = new Set(["/api/v1/payments/webhook", "/api/v1/shipments/webhook"]);
+const RAW_BODY_WEBHOOK_PATHS = new Set([
+  "/api/v1/payments/webhook",
+  "/api/v1/shipments/webhook",
+  "/api/v1/payouts/webhook",
+]);
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (RAW_BODY_WEBHOOK_PATHS.has(req.path)) return next();
   return express.json({ limit: "100kb" })(req, res, next);
@@ -98,8 +118,6 @@ app.get("/health", (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "unknown",
   });
-
-  logger.info({ ip: req.ip, requestId: req.id }, "Health check");
 });
 
 app.use("/api/v1/auth", authLimiter, authRoutes);
@@ -145,6 +163,8 @@ app.use("/api/v1/location", locationRoutes);
 app.use("/api/v1/negotiations", negotiationRoutes);
 app.use("/api/v1/invoices", invoiceRoutes);
 app.use("/api/v1/purchase-orders", purchaseOrderRoutes);
+app.use("/api/v1/quotations", quotationRoutes);
+app.use("/api/v1/proforma-invoices", proformaInvoiceRoutes);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({
@@ -172,7 +192,7 @@ app.use((err: any, req: Request, res: Response, _: NextFunction) => {
   );
 
   res.status(status).json({
-    error: message,
+    error: status >= 500 ? "Internal server error" : message,
     requestId: req.id,
     ...(process.env.NODE_ENV !== "production" ? { stack: err.stack } : {}),
   });

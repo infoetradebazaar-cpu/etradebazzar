@@ -1,20 +1,18 @@
 import { db } from "../../db/index";
 import { StorageFactory } from "../../lib/storage/storage.factory";
+import { validateFileContent, type DetectedFileType } from "../../lib/storage/file-signature";
 import { notificationService } from "../notification/notification.service";
-const ALLOWED_MEDIA_MIME_TYPES = new Set([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-]);
+const ALLOWED_MEDIA_TYPES: readonly DetectedFileType[] = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_MEDIA_SIZE_BYTES = 5 * 1024 * 1024;
 
-function validateReviewMediaFile(file: Express.Multer.File) {
-    if (!ALLOWED_MEDIA_MIME_TYPES.has(file.mimetype)) {
-        throw new Error(`Invalid file type: ${file.mimetype}. Only JPEG, PNG, WEBP, and GIF images are allowed`);
-    }
+function validateReviewMediaFile(file: Express.Multer.File): DetectedFileType {
     if (file.size > MAX_MEDIA_SIZE_BYTES) {
         throw new Error("File too large - maximum 5MB per file");
+    }
+    try {
+        return validateFileContent(file.buffer, ALLOWED_MEDIA_TYPES);
+    } catch {
+        throw new Error("Invalid file type. Only JPEG, PNG, WEBP, and GIF images are allowed");
     }
 }
 
@@ -55,16 +53,14 @@ export const reviewService = {
 
         let mediaUrls: string[] = [];
         if (data.mediaFiles?.length) {
-            for (const file of data.mediaFiles) {
-                validateReviewMediaFile(file);
-            }
+            const contentTypes = data.mediaFiles.map(validateReviewMediaFile);
             const storage = StorageFactory.get();
             const uploads = await Promise.all(
                 data.mediaFiles.map((file, i) =>
                     storage.upload({
                         key: `reviews/${data.orderId}/${data.productId}/${i}-${Date.now()}`,
                         buffer: file.buffer,
-                        mimeType: file.mimetype,
+                        mimeType: contentTypes[i]!,
                         size: file.size,
                     })
                 )
@@ -145,9 +141,23 @@ export const reviewService = {
         if (!review) throw new Error("Review not found");
         if (review.status !== "PENDING") throw new Error("Review already moderated");
 
-        return db.review.update({
-            where: { id: reviewId },
-            data: { status: action, moderatedBy: actorId, moderatedAt: new Date() },
+        return db.$transaction(async (tx) => {
+            const claimed = await tx.review.updateMany({
+                where: { id: reviewId, status: "PENDING" },
+                data: { status: action },
+            });
+            if (claimed.count === 0) throw new Error("Review already moderated");
+            await tx.auditLog.create({
+                data: {
+                    sellerId: review.sellerId,
+                    actorId,
+                    actorType: "platform",
+                    action: `REVIEW_${action}`,
+                    entityType: "review",
+                    entityId: reviewId,
+                },
+            });
+            return tx.review.findUniqueOrThrow({ where: { id: reviewId } });
         });
     },
 

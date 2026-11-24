@@ -239,6 +239,21 @@ export const notificationService = {
             },
         });
     },
+    async sellerNewOrder(params: { sellerId: string; orderId: string; displayId?: string | null; totalAmount: number }) {
+        const owner = await db.sellerMember.findFirst({
+            where: { sellerId: params.sellerId, role: { name: "owner" }, isActive: true },
+            select: { userId: true },
+        });
+        if (!owner) return null;
+        return this.notify({
+            userId: owner.userId,
+            type: "ORDER_PLACED",
+            title: "New order awaiting your approval",
+            message: `Order #${params.displayId ?? params.orderId} (₹${params.totalAmount}) needs your approval.`,
+            channels: ["sse"],
+            data: { audience: "seller", orderId: params.orderId, url: `/orders/${params.orderId}` },
+        });
+    },
 
     async orderPlaced(params: {
         userId: string; email: string; phone?: string;

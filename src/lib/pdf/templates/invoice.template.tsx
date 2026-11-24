@@ -1,4 +1,5 @@
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import { BankDetailsBlock } from "./bank-details.block";
 import type { InvoiceSnapshot } from "../../../modules/invoicing/invoicing.types";
 
 const styles = StyleSheet.create({
@@ -152,6 +153,8 @@ export function InvoiceDocument({ snapshot }: { snapshot: InvoiceSnapshot }) {
                         <Text>{formatMoney(snapshot.grandTotal)}</Text>
                     </View>
                 </View>
+
+                <BankDetailsBlock bank={snapshot.bankDetails} />
 
                 <Text style={styles.footer}>
                     This is a system-generated invoice for order {snapshot.orderDisplayId ?? snapshot.orderId}.

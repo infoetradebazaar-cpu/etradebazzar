@@ -1,5 +1,8 @@
 import { AadhaarProvider, DigilockerInitInput, DigilockerSession, AadhaarDetails } from "./aadhar.interface";
 
+/**
+ * @deprecated Aadhaar OTP/DigiLocker verification is discontinued (non-compliant)
+ */
 const BASE_URL = "https://sandbox.surepass.app/api/v1";
 
 const INITIALIZE_ENDPOINT = `${BASE_URL}/digilocker/initialize`;

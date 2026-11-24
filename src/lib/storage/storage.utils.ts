@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import path from "path";
+import { validateFileContent, type DetectedFileType } from "./file-signature";
 
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ALLOWED_IMAGE_TYPES: readonly DetectedFileType[] = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 export function generateProductImageKey(sellerId: string, productId: string, filename: string): string {
@@ -27,11 +28,9 @@ export function generateProductVideoKey(sellerId: string, productId: string, for
     return `sellers/${sellerId}/products/${productId}/video/${randomUUID()}.${format}`;
 }
 
-export function validateImageFile(file: { mimetype: string; size: number }): void {
-    if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
-        throw new Error(`Invalid file type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}`);
-    }
+export function validateImageFile(file: { buffer: Buffer; size: number }): DetectedFileType {
     if (file.size > MAX_IMAGE_SIZE) {
         throw new Error(`File too large. Max size: ${MAX_IMAGE_SIZE / 1024 / 1024}MB`);
     }
+    return validateFileContent(file.buffer, ALLOWED_IMAGE_TYPES);
 }

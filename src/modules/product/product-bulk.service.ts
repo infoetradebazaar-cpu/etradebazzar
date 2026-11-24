@@ -1,5 +1,6 @@
 import { db } from "../../db/index";
 import { logger } from "../../utils/logger";
+import { parseFirstSheet } from "../../lib/spreadsheet/parse-sheet";
 
 interface BulkProductRow {
     name: string;
@@ -24,6 +25,7 @@ interface RowResult {
     error?: string;
 }
 
+
 const REQUIRED_COLS = ["name"];
 const MAX_ROWS = 500;
 
@@ -33,14 +35,7 @@ export const productBulkService = {
         actorId: string,
         file: Express.Multer.File
     ): Promise<{ results: RowResult[]; created: number; failed: number }> {
-        const XLSX = await import("xlsx");
-        const workbook = XLSX.read(file.buffer, { type: "buffer" });
-        const sheetName = workbook.SheetNames[0];
-        if (!sheetName) throw new Error("XLS file is empty");
-        const sheet = workbook.Sheets[sheetName];
-        if (!sheet) throw new Error("XLS file is empty");
-
-        const rows = XLSX.utils.sheet_to_json<any>(sheet);
+        const rows: any[] = await parseFirstSheet(file.buffer, MAX_ROWS);
         if (!rows.length) throw new Error("XLS file is empty");
         if (rows.length > MAX_ROWS) {
             throw new Error(`Bulk upload exceeds maximum of ${MAX_ROWS} products`);
@@ -65,6 +60,13 @@ export const productBulkService = {
         let created = 0;
         let failed = 0;
 
+        const fileSkus = rows.map((r: any) => (r.sku ? String(r.sku).trim() : "")).filter(Boolean);
+        const takenSkus = new Set(
+            fileSkus.length
+                ? (await db.product.findMany({ where: { sku: { in: fileSkus } }, select: { sku: true } })).map((p) => p.sku!)
+                : [],
+        );
+
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i] as any;
             const rowNum = i + 2;
@@ -78,8 +80,8 @@ export const productBulkService = {
                 }
 
                 if (parsed.sku) {
-                    const existing = await db.product.findUnique({ where: { sku: parsed.sku } });
-                    if (existing) throw new Error(`SKU "${parsed.sku}" already exists`);
+                    if (takenSkus.has(parsed.sku)) throw new Error(`SKU "${parsed.sku}" already exists`);
+                    takenSkus.add(parsed.sku);
                 }
 
                 const product = await db.product.create({
@@ -104,7 +106,8 @@ export const productBulkService = {
                 created++;
             } catch (err: any) {
                 logger.warn({ row: rowNum, err: err.message }, "Bulk upload row failed");
-                results.push({ row: rowNum, status: "error", name: row.name, error: err.message });
+                const message = err?.code === "P2002" ? "SKU already exists" : err.message;
+                results.push({ row: rowNum, status: "error", name: row.name, error: message });
                 failed++;
             }
         }
@@ -170,6 +173,12 @@ function parseRow(row: any): BulkProductRow {
     if (!name) throw new Error("name is required");
 
     const categorySlug = String(row.categorySlug ?? "").trim() || "uncategorized";
+
+    const price = row.price !== undefined && row.price !== "" ? Number(row.price) : undefined;
+    if (price !== undefined && (isNaN(price) || price < 0)) throw new Error("price must be a positive number");
+
+    const stock = row.stock !== undefined && row.stock !== "" ? Number(row.stock) : undefined;
+    if (stock !== undefined && (isNaN(stock) || stock < 0)) throw new Error("stock must be a non-negative number");
 
     return {
         name,

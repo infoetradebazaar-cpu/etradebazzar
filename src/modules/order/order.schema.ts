@@ -101,3 +101,21 @@ export const cancelOrderSchema = z.object({
         reason: z.string().max(500).optional(),
     }).optional(),
 });
+
+export const approveOrderSchema = z.object({
+    params: z.object({ orderId: z.string() }),
+});
+
+export const rejectOrderSchema = z.object({
+    params: z.object({ orderId: z.string() }),
+    body: z.object({
+        reason: z.string().max(500).optional(),
+    }).optional(),
+});
+
+export const confirmCashSchema = z.object({
+    params: z.object({ orderId: z.string() }),
+    body: z.object({
+        note: z.string().max(500).optional(),
+    }).optional(),
+});

@@ -12,13 +12,6 @@ interface OrderedItem {
     quantity: number;
 }
 
-function normalizeOptions(options: unknown): string {
-    const obj = (options ?? {}) as Record<string, string>;
-    return JSON.stringify(
-        Object.fromEntries(Object.entries(obj).sort(([a], [b]) => a.localeCompare(b))),
-    );
-}
-
 export interface ShopRecommendation {
     shopId: string;
     shopName: string;
@@ -30,74 +23,31 @@ export interface ShopRecommendation {
 
 export const recommendationService = {
     async getCandidateShops(sellerId: string, items: OrderedItem[]) {
-        const orderedProducts = await db.product.findMany({
-            where: { id: { in: items.map((i) => i.productId) } },
-            select: {
-                id: true, sku: true, name: true, categoryId: true, shopId: true, stock: true,
-                skus: { select: { id: true, options: true, stock: true } },
-            },
-        });
+        const [orderedProducts, shops] = await Promise.all([
+            db.product.findMany({
+                where: { id: { in: items.map((i) => i.productId) }, sellerId },
+                select: { id: true, stock: true, skus: { select: { id: true, stock: true } } },
+            }),
+            db.shop.findMany({
+                where: { sellerId, status: "APPROVED" },
+                select: { id: true, name: true, priority: true, reliabilityScore: true, latitude: true, longitude: true, autoAssignEnabled: true },
+            }),
+        ]);
 
-        const shops = await db.shop.findMany({
-            where: { sellerId, status: "APPROVED" },
-            select: { id: true, name: true, priority: true, reliabilityScore: true, latitude: true, longitude: true, autoAssignEnabled: true },
-        });
-
-        const candidates = [];
-
-        for (const shop of shops) {
-            const stockRatios: number[] = [];
-            let fulfillable = true;
-
-            for (const item of items) {
-                const orderedProduct = orderedProducts.find((p) => p.id === item.productId)!;
-                const orderedSku = item.skuId
-                    ? orderedProduct.skus.find((s) => s.id === item.skuId)
-                    : undefined;
-
-                let stock: number | null = null;
-
-                if (orderedProduct.shopId === shop.id) {
-                    stock = orderedSku ? orderedSku.stock ?? 0 : orderedProduct.stock ?? 0;
-                } else {
-                    const sibling = await db.product.findFirst({
-                        where: {
-                            shopId: shop.id,
-                            status: "LIVE",
-                            OR: [
-                                ...(orderedProduct.sku ? [{ sku: orderedProduct.sku }] : []),
-                                { name: orderedProduct.name, categoryId: orderedProduct.categoryId },
-                            ],
-                        },
-                        select: {
-                            stock: true,
-                            skus: { select: { options: true, stock: true } },
-                        },
-                    });
-                    if (sibling) {
-                        if (orderedSku) {
-                            const match = sibling.skus.find(
-                                (s) => normalizeOptions(s.options) === normalizeOptions(orderedSku.options),
-                            );
-                            stock = match ? match.stock ?? 0 : 0;
-                        } else {
-                            stock = sibling.stock ?? 0;
-                        }
-                    }
-                }
-
-                if (stock === null) { fulfillable = false; break; }
-
-                stockRatios.push(Math.min(1, stock / item.quantity));
-            }
-
-            if (!fulfillable) continue;
-
-            const avgStockRatio = stockRatios.reduce((a, b) => a + b, 0) / stockRatios.length;
-            candidates.push({ shop, avgStockRatio });
+        const stockRatios: number[] = [];
+        for (const item of items) {
+            const product = orderedProducts.find((p) => p.id === item.productId);
+            if (!product) return [];
+            const stock = item.skuId
+                ? product.skus.find((s) => s.id === item.skuId)?.stock ?? 0
+                : product.stock ?? 0;
+            stockRatios.push(Math.min(1, stock / item.quantity));
         }
+        const avgStockRatio = stockRatios.length
+            ? stockRatios.reduce((a, b) => a + b, 0) / stockRatios.length
+            : 0;
 
-        return candidates;
+        return shops.map((shop) => ({ shop, avgStockRatio }));
     },
 
     async computeRecommendations(

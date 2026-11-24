@@ -16,6 +16,7 @@ import { EmailFactory } from "../lib/notifications/email/email.factory";
 import { config } from "../../config/config";
 import { strongPasswordSchema } from "../utils/password-policy";
 import { securityService } from "../modules/security/security.service";
+import { sendClientError } from "../utils/http-error";
 
 const router: Router = Router();
 
@@ -243,7 +244,7 @@ router.post("/2fa/login-verify", authLimiter, mfaLoginLimiter, validate(mfaLogin
     try {
       valid = await securityService.verifyTwoFactorToken(userId, token, "2fa-login");
     } catch (error: any) {
-      return res.status(400).json({ success: false, error: error.message });
+      return sendClientError(res, error);
     }
     if (!valid) {
       return res.status(401).json({ success: false, error: "Invalid or expired code" });

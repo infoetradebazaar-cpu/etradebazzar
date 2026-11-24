@@ -1,3 +1,6 @@
+/**
+ * @deprecated Aadhaar OTP/DigiLocker verification is discontinued (non-compliant).
+ */
 export interface DigilockerInitInput {
   redirectUrl?: string;
   prefill?: {

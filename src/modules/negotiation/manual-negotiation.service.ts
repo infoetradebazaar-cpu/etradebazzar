@@ -3,6 +3,9 @@ import { resolveTierPrice } from "../../utils/tier-pricing";
 import { createOrderFromNegotiation, DeliveryAddress } from "./negotiation-order.helper";
 import { NEGOTIATION_SESSION_OMIT } from "./negotiation.select";
 import { notificationService } from "../notification/notification.service";
+import { chargeNegotiationFee, getNegotiationQuota, type NegotiationIntent } from "./negotiation-gate";
+import { invoicingService } from "../invoicing/invoicing.service";
+import { getCommissionRate } from "../../utils/commission";
 import { logger } from "../../utils/logger";
 import { canAccessOrgResource } from "../../lib/permission/customer-org-permission.service";
 import { CUSTOMER_ORG_PERMISSIONS } from "../../lib/permission/customer-org-permission.constants";
@@ -82,7 +85,7 @@ async function loadSessionForActor(sessionId: string, actorId: string, actorType
 }
 
 export const manualNegotiationService = {
-  async startSession(customerId: string, sellerId: string, productId: string, skuId: string, quantity: number, orgId?: string | null) {
+  async startSession(customerId: string, sellerId: string, productId: string, skuId: string, quantity: number, orgId?: string | null, intent?: NegotiationIntent, requireIntent = false) {
     const sku = await db.productSKU.findFirst({ where: { id: skuId, productId } });
     if (!sku) throw new Error("SKU not found");
 
@@ -93,6 +96,11 @@ export const manualNegotiationService = {
       orderBy: { createdAt: "desc" },
       include: { rounds: { orderBy: { round: "asc" } } },
     });
+
+    const effectiveIntent = intent ?? (rejectedAuto?.intent as NegotiationIntent | null | undefined) ?? undefined;
+    if (!effectiveIntent && requireIntent) {
+      throw new Error("Requirements form must be filled before negotiating");
+    }
 
     let visiblePrice: number;
     if (rejectedAuto && rejectedAuto.quantity === quantity) {
@@ -127,6 +135,7 @@ export const manualNegotiationService = {
       throw new Error("A negotiation session is already open for this product use it instead");
     }
 
+    const quota = await getNegotiationQuota(customerId, orgId);
     let session;
     try {
       session = await runInOrgScope(orgId, (client) => client.negotiationSession.create({
@@ -141,6 +150,7 @@ export const manualNegotiationService = {
           visibleTierPrice: visiblePrice,
           hiddenFloorPrice: null,
           resumedFromSessionId: rejectedAuto?.id ?? null,
+          intent: (effectiveIntent ?? undefined) as any,
           chat: {
             create: rejectedAuto
               ? { messages: { create: { senderId: "system", senderType: "system", body: buildResumeSummaryMessage(rejectedAuto) } } }
@@ -154,6 +164,13 @@ export const manualNegotiationService = {
       if (err?.code === "P2002") {
         throw new Error("A negotiation session is already open for this product use it instead");
       }
+      throw err;
+    }
+
+    try {
+      session.creditsCharged = await chargeNegotiationFee(customerId, session.id, quota.feeCredits);
+    } catch (err) {
+      await db.negotiationSession.delete({ where: { id: session.id } }).catch(() => null);
       throw err;
     }
 
@@ -187,7 +204,8 @@ export const manualNegotiationService = {
           },
         })
       : null;
-    return { session, chat, customer, resumedFrom };
+    const platformFeePercent = await manualNegotiationService.getPlatformFeePercent(session.productId);
+    return { session, chat, customer, resumedFrom, platformFeePercent };
   },
 
   async sendMessage(actorId: string, actorType: ActorType, sessionId: string, body: string) {
@@ -199,6 +217,47 @@ export const manualNegotiationService = {
 
     return db.negotiationMessage.create({
       data: { chatSessionId: chat.id, senderId: actorId, senderType: actorType, body },
+    });
+  },
+
+  async getPlatformFeePercent(productId: string): Promise<number> {
+    const product = await db.product.findUnique({ where: { id: productId }, select: { category: { select: { name: true } } } });
+    return getCommissionRate(productId, product?.category?.name ?? "");
+  },
+
+  async sendOffer(
+    actorId: string,
+    actorType: ActorType,
+    sessionId: string,
+    input: { unitPrice: number; quantity: number; deliveryDays?: number; note?: string },
+  ) {
+    const session = await loadSessionForActor(sessionId, actorId, actorType);
+    if (session.status !== "PENDING") throw new Error("This negotiation is already resolved");
+
+    const chat = await db.negotiationChatSession.findUnique({ where: { sessionId } });
+    if (!chat) throw new Error("Chat session not found");
+
+    const feePercent = await manualNegotiationService.getPlatformFeePercent(session.productId);
+    const total = parseFloat((input.unitPrice * input.quantity).toFixed(2));
+    const platformFee = parseFloat(((total * feePercent) / 100).toFixed(2));
+    const offer = {
+      unitPrice: input.unitPrice,
+      quantity: input.quantity,
+      deliveryDays: input.deliveryDays ?? null,
+      note: input.note ?? null,
+      total,
+      platformFeePercent: feePercent,
+      platformFee,
+      sellerReceives: parseFloat((total - platformFee).toFixed(2)),
+    };
+    const who = actorType === "seller" ? "Seller" : "Buyer";
+    const body =
+      `${who} offer: Rs. ${input.unitPrice} x ${input.quantity} = Rs. ${total}` +
+      (input.deliveryDays ? `, delivery in ${input.deliveryDays} days` : "") +
+      (input.note ? `. ${input.note}` : "");
+
+    return db.negotiationMessage.create({
+      data: { chatSessionId: chat.id, senderId: actorId, senderType: actorType, body, kind: "OFFER", offer },
     });
   },
 
@@ -264,7 +323,7 @@ export const manualNegotiationService = {
     if (session.mode !== "MANUAL") throw new Error("This session is not a manual negotiation");
     if (session.status !== "PENDING") throw new Error("This negotiation is already resolved");
 
-    return db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       await setCustomerOrgScope(tx, session.orgId);
       const claimed = await tx.negotiationSession.updateMany({
         where: { id: sessionId, status: "PENDING" },
@@ -276,6 +335,21 @@ export const manualNegotiationService = {
       await tx.negotiationSession.update({ where: { id: sessionId }, data: { orderId: order.id } });
       return { status: "ACCEPTED" as const, order };
     });
+
+    if (result.status === "ACCEPTED" && "order" in result) {
+      invoicingService
+        .generateQuotation(result.order.id, { userId: "system", sellerId: session.sellerId, actorType: "system" })
+        .catch((err: any) => logger.error({ err: err.message, orderId: result.order.id }, "Quotation on acceptance failed"));
+      notificationService
+        .sellerNewOrder({
+          sellerId: session.sellerId,
+          orderId: result.order.id,
+          displayId: result.order.displayId,
+          totalAmount: Number(result.order.finalAmount ?? result.order.totalAmount),
+        })
+        .catch(() => null);
+    }
+    return result;
   },
 
   async reject(actorId: string, actorType: ActorType, sessionId: string) {

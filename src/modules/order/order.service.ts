@@ -14,26 +14,24 @@ import { reliabilityService } from "../../lib/order-assignment/reliability.servi
 import { OrderStatus } from "../../../prisma/generated/client";
 import { slaConfigService } from "../platform/sla-config.service";
 import { shipmentService } from "../shipment/shipment.service";
-import { paymentService } from "../payment/payment.service";
+import { paymentService, sumPaidPayments } from "../payment/payment.service";
+import { invoicingService } from "../invoicing/invoicing.service";
 import { canAccessOrgResource } from "../../lib/permission/customer-org-permission.service";
 import { CUSTOMER_ORG_PERMISSIONS } from "../../lib/permission/customer-org-permission.constants";
+import { parseFirstSheet } from "../../lib/spreadsheet/parse-sheet";
+import { couponService } from "../coupon/coupon.service";
+import { acquireLock, releaseLock } from "../../lib/locks/redis-lock";
 
 const ORDER_LOCK_TTL = 15;
 const IDEMPOTENCY_TTL_SECONDS = 60 * 60 * 24; // 24h durable window
+const EXPORT_BATCH_SIZE = 1000;
 
-async function acquireOrderLock(key: string): Promise<boolean> {
-  const result = await redis.set(
-    `order:lock:${key}`,
-    "1",
-    "EX",
-    ORDER_LOCK_TTL,
-    "NX",
-  );
-  return result === "OK";
+async function acquireOrderLock(key: string): Promise<string | null> {
+  return acquireLock(`order:lock:${key}`, ORDER_LOCK_TTL);
 }
 
-async function releaseOrderLock(key: string): Promise<void> {
-  await redis.del(`order:lock:${key}`);
+async function releaseOrderLock(key: string, token: string): Promise<void> {
+  await releaseLock(`order:lock:${key}`, token);
 }
 
 function idempotencyScope(customerId: string, orgId?: string | null): string {
@@ -48,6 +46,27 @@ function idempotencyRedisKey(
   return `order:idem:${idempotencyScope(customerId, orgId)}:${idempotencyKey}`;
 }
 
+function idempotencyDbKey(customerId: string, idempotencyKey: string, orgId?: string | null): string {
+  return `${idempotencyScope(customerId, orgId)}:${idempotencyKey}`;
+}
+
+async function findIdempotentOrderId(redisKey: string, dbKey: string): Promise<string | null> {
+  const cached = await redis.get(redisKey);
+  if (cached) return cached;
+  const row = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.is_system_operation', 'true', true)`;
+    return tx.order.findUnique({ where: { idempotencyKey: dbKey }, select: { id: true } });
+  });
+  if (row) await redis.setex(redisKey, IDEMPOTENCY_TTL_SECONDS, row.id).catch(() => null);
+  return row?.id ?? null;
+}
+
+function isIdempotencyConflict(err: any): boolean {
+  if (err?.code !== "P2002") return false;
+  const target = err?.meta?.target;
+  return !target || JSON.stringify(target).includes("idempotencyKey");
+}
+
 async function getCustomerContact(customerId: string) {
   return db.user.findUnique({
     where: { id: customerId },
@@ -56,6 +75,15 @@ async function getCustomerContact(customerId: string) {
 }
 
 export const orderService = {
+
+  async findOrderByIdempotencyKey(customerId: string, idempotencyKey: string, orgId?: string | null) {
+    const existingOrderId = await findIdempotentOrderId(
+      idempotencyRedisKey(customerId, idempotencyKey, orgId),
+      idempotencyDbKey(customerId, idempotencyKey, orgId),
+    );
+    return existingOrderId ? this.getOrder(existingOrderId, customerId) : null;
+  },
+
   async createOrder(
     customerId: string,
     idempotencyKey: string,
@@ -75,13 +103,15 @@ export const orderService = {
       };
       discountAmount?: number;
       couponCode?: string;
+      couponId?: string;
       paymentMethod?: "ONLINE" | "COD";
       orgId?: string;
     },
   ) {
     const idemKey = idempotencyRedisKey(customerId, idempotencyKey, data.orgId);
+    const dbKey = idempotencyDbKey(customerId, idempotencyKey, data.orgId);
 
-    const existingOrderId = await redis.get(idemKey);
+    const existingOrderId = await findIdempotentOrderId(idemKey, dbKey);
     if (existingOrderId) {
       return this.getOrder(existingOrderId, customerId);
     }
@@ -93,16 +123,24 @@ export const orderService = {
     }
 
     try {
-      const raceFixed = await redis.get(idemKey);
+      const raceFixed = await findIdempotentOrderId(idemKey, dbKey);
       if (raceFixed) {
         return this.getOrder(raceFixed, customerId);
       }
 
-      const order = await this._createOrderInner(customerId, data);
+      let order;
+      try {
+        order = await this._createOrderInner(customerId, data, dbKey);
+      } catch (err) {
+        if (!isIdempotencyConflict(err)) throw err;
+        const winner = await findIdempotentOrderId(idemKey, dbKey);
+        if (!winner) throw err;
+        return this.getOrder(winner, customerId);
+      }
       await redis.setex(idemKey, IDEMPOTENCY_TTL_SECONDS, order.id);
       return order;
     } finally {
-      await releaseOrderLock(lockKey);
+      await releaseOrderLock(lockKey, locked);
     }
   },
 
@@ -124,9 +162,11 @@ export const orderService = {
       };
       discountAmount?: number;
       couponCode?: string;
+      couponId?: string;
       paymentMethod?: "ONLINE" | "COD";
       orgId?: string;
     },
+    idempotencyKey?: string,
   ) {
     const products = await db.product.findMany({
       where: {
@@ -237,6 +277,7 @@ export const orderService = {
           sellerId: data.sellerId,
           customerId,
           orgId: data.orgId ?? null,
+          idempotencyKey,
           type: orderType,
           displayId,
           status: initialStatus,
@@ -289,6 +330,10 @@ export const orderService = {
             prevStock - item.quantity,
           ).catch(() => null);
         }
+      }
+
+      if (data.couponId && discountAmount > 0) {
+        await couponService.claimInTransaction(tx, data.couponId, customerId, created.id, discountAmount);
       }
 
       await tx.auditLog.create({
@@ -352,6 +397,10 @@ export const orderService = {
         .catch(() => null);
     }
 
+    notificationService
+      .sellerNewOrder({ sellerId: data.sellerId, orderId: order.id, displayId: order.displayId, totalAmount })
+      .catch(() => null);
+
     return order;
   },
 
@@ -363,8 +412,9 @@ export const orderService = {
     file: Express.Multer.File,
   ) {
     const idemKey = idempotencyRedisKey(customerId, idempotencyKey);
+    const dbKey = idempotencyDbKey(customerId, idempotencyKey);
 
-    const existingOrderId = await redis.get(idemKey);
+    const existingOrderId = await findIdempotentOrderId(idemKey, dbKey);
     if (existingOrderId) {
       return this.getOrder(existingOrderId, customerId);
     }
@@ -376,21 +426,24 @@ export const orderService = {
     }
 
     try {
-      const raceFixed = await redis.get(idemKey);
+      const raceFixed = await findIdempotentOrderId(idemKey, dbKey);
       if (raceFixed) {
         return this.getOrder(raceFixed, customerId);
       }
 
-      const order = await this._createBulkOrderInner(
-        customerId,
-        sellerId,
-        items,
-        file,
-      );
+      let order;
+      try {
+        order = await this._createBulkOrderInner(customerId, sellerId, items, file, dbKey);
+      } catch (err) {
+        if (!isIdempotencyConflict(err)) throw err;
+        const winner = await findIdempotentOrderId(idemKey, dbKey);
+        if (!winner) throw err;
+        return this.getOrder(winner, customerId);
+      }
       await redis.setex(idemKey, IDEMPOTENCY_TTL_SECONDS, order.id);
       return order;
     } finally {
-      await releaseOrderLock(lockKey);
+      await releaseOrderLock(lockKey, locked);
     }
   },
 
@@ -399,16 +452,11 @@ export const orderService = {
     sellerId: string,
     items: { productId: string; quantity: number; skuId?: string }[],
     file: Express.Multer.File,
+    idempotencyKey?: string,
   ) {
     const MAX_BULK_ROWS = 500;
 
-    const XLSX = await import("xlsx");
-    const workbook = XLSX.read(file.buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) throw new Error("XLS file is empty");
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) throw new Error("XLS file is empty");
-    const rows = XLSX.utils.sheet_to_json<any>(sheet);
+    const rows: any[] = await parseFirstSheet(file.buffer, MAX_BULK_ROWS);
 
     if (!rows.length) throw new Error("XLS file is empty");
     if (rows.length > MAX_BULK_ROWS) {
@@ -483,6 +531,7 @@ export const orderService = {
         data: {
           sellerId,
           customerId,
+          idempotencyKey,
           type: "BULK",
           displayId,
           status: "PENDING",
@@ -574,6 +623,7 @@ export const orderService = {
       where: { id: orderId, sellerId },
     });
     if (!order) throw new Error("Order not found");
+    if (!order.sellerApprovedAt) throw new Error("Order not yet approved by seller");
 
     const address = await db.orderAddress.findFirst({
       where: { id: addressId, orderId },
@@ -608,19 +658,38 @@ export const orderService = {
         select: { packingDeadline: true },
       });
       const { packing_sla_hours } = await slaConfigService.getSlaConfig();
-
-      await tx.order.update({
-        where: { id: orderId },
-        data: {
-          assignedShopId: shopId,
-          ...(!orderForDeadline?.packingDeadline &&
-            packing_sla_hours && {
+      const packingDeadlineUpdate =
+        !orderForDeadline?.packingDeadline && packing_sla_hours
+          ? {
               packingDeadline: new Date(
                 Date.now() + packing_sla_hours * 60 * 60 * 1000,
               ),
-            }),
-        },
+            }
+          : {};
+
+
+      const remainingUnassigned = await tx.orderAddress.count({
+        where: { orderId, fulfillmentStatus: { not: "ASSIGNED" } },
       });
+
+      if (remainingUnassigned === 0) {
+        await tx.order.updateMany({
+          where: { id: orderId, status: "PENDING_ASSIGNMENT" },
+          data: {
+            assignedShopId: shopId,
+            status: "CONFIRMED",
+            ...packingDeadlineUpdate,
+          },
+        });
+      } else {
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            assignedShopId: shopId,
+            ...packingDeadlineUpdate,
+          },
+        });
+      }
 
       await tx.bulkUpload.updateMany({
         where: { orderId },
@@ -717,6 +786,101 @@ export const orderService = {
 
     return this.getOrder(orderId, undefined, sellerId);
   },
+
+  async approveOrder(orderId: string, sellerId: string, actorId: string) {
+    const order = await db.order.findFirst({ where: { id: orderId, sellerId } });
+    if (!order) throw new Error("Order not found");
+    if (order.sellerApprovedAt) throw new Error("Order already approved");
+    if (["CANCELLED", "UNFULFILLABLE", "RETURNED"].includes(order.status)) {
+      throw new Error(`Cannot approve current status is ${order.status}`);
+    }
+
+    const updateResult = await db.order.updateMany({
+      where: { id: orderId, sellerApprovedAt: null },
+      data: { sellerApprovedAt: new Date() },
+    });
+    if (updateResult.count === 0) {
+      throw new Error("Order already approved");
+    }
+
+    await db.auditLog.create({
+      data: {
+        sellerId,
+        actorId,
+        actorType: "seller",
+        action: "ORDER_APPROVED",
+        entityType: "order",
+        entityId: orderId,
+      },
+    });
+
+    if (order.paymentMethod === "COD") {
+      try {
+        await invoicingService.generatePurchaseOrder(orderId, {
+          userId: "system",
+          sellerId,
+          actorType: "system",
+        });
+      } catch (err: any) {
+        await db.auditLog.create({
+          data: {
+            sellerId,
+            actorId: "system",
+            actorType: "system",
+            action: "PO_GENERATION_FAILED",
+            entityType: "order",
+            entityId: orderId,
+            metadata: { error: err.message },
+          },
+        });
+      }
+    } else if (order.paymentMethod === "ONLINE") {
+      if (order.paymentStatus === "PAID" || order.paymentStatus === "PARTIALLY_PAID") {
+        await paymentService.issuePostPaymentDocs(orderId, sellerId);
+      }
+    }
+
+    return this.getOrder(orderId, undefined, sellerId);
+  },
+
+  async confirmCashCollected(orderId: string, sellerId: string, actorId: string, note?: string) {
+    const order = await db.order.findFirst({
+      where: { id: orderId, sellerId },
+      include: { payments: true },
+    });
+    if (!order) throw new Error("Order not found");
+    if (order.paymentMethod !== "COD") {
+      throw new Error("Cash confirmation only applies to COD orders");
+    }
+    if (order.status !== "DELIVERED") {
+      throw new Error(`Cannot confirm cash current status is ${order.status}`);
+    }
+
+    const baseAmount = Number(order.finalAmount ?? order.totalAmount);
+    const alreadyPaid = sumPaidPayments(order.payments);
+    if (alreadyPaid >= baseAmount - 0.01) {
+      throw new Error("Cash payment already recorded for this order");
+    }
+    const remaining = parseFloat((baseAmount - alreadyPaid).toFixed(2));
+
+    await paymentService.recordCashPayment(orderId, actorId, {
+      amount: remaining,
+      note,
+    });
+
+    try {
+      await invoicingService.generateInvoice(orderId, {
+        userId: "system",
+        sellerId,
+        actorType: "system",
+      });
+    } catch (err: any) {
+      logger.error({ err: err.message, orderId }, "Auto invoice generation on cash confirmation failed");
+    }
+
+    return this.getOrder(orderId, undefined, sellerId);
+  },
+
   async getOrder(
     orderId: string,
     requesterId?: string,
@@ -772,6 +936,12 @@ export const orderService = {
       // }
     }
 
+    const baseAmount = Number(order.finalAmount ?? order.totalAmount);
+    const remainingCashAmount = Math.max(
+      0,
+      parseFloat((baseAmount - sumPaidPayments(order.payments)).toFixed(2)),
+    );
+
     return {
       ...order,
       shopId: order.assignedShopId,
@@ -779,6 +949,7 @@ export const orderService = {
       paymentStatus: (order.paymentStatus as string).toLowerCase(),
       totalAmount: order.totalAmount ? Number(order.totalAmount) : null,
       finalAmount: order.finalAmount ? Number(order.finalAmount) : null,
+      remainingCashAmount,
       items: order.items.map((item) => ({
         ...item,
         price: Number(item.unitPrice),
@@ -805,6 +976,7 @@ export const orderService = {
       shopId?: string;
       dateFrom?: string;
       dateTo?: string;
+      awaitingApproval?: boolean;
       page?: number;
       limit?: number;
     },
@@ -818,7 +990,12 @@ export const orderService = {
       sellerId,
       // NOT: { paymentMethod: "ONLINE", paymentStatus: { not: "PAID" } },
     };
-    if (filters.status) where.status = filters.status.toUpperCase();
+    if (filters.awaitingApproval) {
+      where.sellerApprovedAt = null;
+      where.status = { notIn: ["CANCELLED", "UNFULFILLABLE", "RETURNED"] };
+    } else if (filters.status) {
+      where.status = filters.status.toUpperCase();
+    }
     if (filters.type) where.type = filters.type.toUpperCase();
     if (filters.shopId) {
       where.assignedShopId = filters.shopId;
@@ -1005,6 +1182,7 @@ export const orderService = {
     actorType: string,
     requesterId?: string,
     requesterSellerId?: string,
+    reason?: string,
   ) {
     const order = await db.order.findUnique({
       where: { id: orderId },
@@ -1075,6 +1253,7 @@ export const orderService = {
           action: "ORDER_CANCELLED",
           entityType: "order",
           entityId: orderId,
+          ...(reason ? { metadata: { reason } } : {}),
         },
       });
 
@@ -1103,7 +1282,7 @@ export const orderService = {
     }
 
     if (order.payments.some((p) => p.status === "PAID")) {
-      paymentService.initiateRefund(orderId, actorId).catch((err) => {
+      paymentService.initiateRefund(orderId, actorId, reason).catch((err) => {
         logger.error(
           { err: err.message, orderId },
           "Auto-refund on cancel failed",
@@ -1145,35 +1324,33 @@ export const orderService = {
     } as const;
     const targetStatus = statusMap[data.action];
 
+    const orderIds = [...new Set(data.orderIds)];
+
+    if (data.action !== "cancel") {
+      const result = await db.order.updateMany({
+        where: {
+          id: { in: orderIds },
+          sellerId,
+          status: { in: VALID_SOURCE_STATUSES[data.action] },
+        },
+        data: { status: targetStatus },
+      });
+      return { success: result.count, failed: orderIds.length - result.count };
+    }
+
     let success = 0,
       failed = 0;
+    const owned = new Set(
+      (await db.order.findMany({ where: { id: { in: orderIds }, sellerId }, select: { id: true } })).map((o) => o.id),
+    );
 
-    for (const orderId of data.orderIds) {
+    for (const orderId of orderIds) {
       try {
-        const order = await db.order.findFirst({
-          where: { id: orderId, sellerId },
-        });
-        if (!order) {
+        if (!owned.has(orderId)) {
           failed++;
           continue;
         }
-
-        if (data.action === "cancel") {
-          await this.cancelOrder(orderId, actorId, "seller");
-        } else {
-          const updateResult = await db.order.updateMany({
-            where: {
-              id: orderId,
-              sellerId,
-              status: { in: VALID_SOURCE_STATUSES[data.action] },
-            },
-            data: { status: targetStatus },
-          });
-          if (updateResult.count === 0) {
-            failed++;
-            continue;
-          }
-        }
+        await this.cancelOrder(orderId, actorId, "seller");
         success++;
       } catch (err: any) {
         logger.error(
@@ -1188,22 +1365,45 @@ export const orderService = {
   },
 
   async getActionRequired(sellerId: string) {
-    const pendingOrders = await db.order.findMany({
-      where: { sellerId, status: { in: ["PENDING", "PROCESSING"] } },
-      select: {
-        id: true,
-        displayId: true,
-        type: true,
-        status: true,
-        totalAmount: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "asc" },
-      take: 50,
-    });
+    const [pendingOrders, awaitingApprovalOrders] = await Promise.all([
+      db.order.findMany({
+        where: { sellerId, status: { in: ["PENDING", "PROCESSING"] } },
+        select: {
+          id: true,
+          displayId: true,
+          type: true,
+          status: true,
+          totalAmount: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+      }),
+      db.order.findMany({
+        where: {
+          sellerId,
+          sellerApprovedAt: null,
+          status: { notIn: ["CANCELLED", "UNFULFILLABLE", "RETURNED"] },
+        },
+        select: {
+          id: true,
+          displayId: true,
+          type: true,
+          status: true,
+          totalAmount: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+      }),
+    ]);
 
     return {
       pendingOrders: pendingOrders.map((o) => ({
+        ...o,
+        status: o.status.toLowerCase(),
+      })),
+      awaitingApprovalOrders: awaitingApprovalOrders.map((o) => ({
         ...o,
         status: o.status.toLowerCase(),
       })),
@@ -1228,21 +1428,31 @@ export const orderService = {
       if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo);
     }
 
-    return db.order.findMany({
-      where,
-      select: {
-        id: true,
-        displayId: true,
-        type: true,
-        status: true,
-        totalAmount: true,
-        finalAmount: true,
-        paymentStatus: true,
-        createdAt: true,
-        customer: { select: { name: true, email: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    return (async function* () {
+      let cursor: string | undefined;
+      while (true) {
+        const batch = await db.order.findMany({
+          where,
+          select: {
+            id: true,
+            displayId: true,
+            type: true,
+            status: true,
+            totalAmount: true,
+            finalAmount: true,
+            paymentStatus: true,
+            createdAt: true,
+            customer: { select: { name: true, email: true } },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: EXPORT_BATCH_SIZE,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        });
+        if (batch.length) yield batch;
+        if (batch.length < EXPORT_BATCH_SIZE) return;
+        cursor = batch[batch.length - 1]!.id;
+      }
+    })();
   },
 
   async listBulkUploads(sellerId: string) {

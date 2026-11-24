@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+/**  @deprecated Aadhaar OTP/DigiLocker verification is discontinued (non-compliant).*/
 export const initializeDigilockerSchema = z.object({
     body: z.object({ redirectUrl: z.string().url().optional() }),
 });
@@ -26,6 +27,7 @@ export const verifyPanSchema = z.object({
     }),
 });
 
+/**  @deprecated see initializeDigilockerSchema above */
 export const verifyAadhaarSchema = z.object({
     body: z.object({
         aadhaarNumber: z.string().regex(/^\d{12}$/, "Aadhaar must be 12 digits"),

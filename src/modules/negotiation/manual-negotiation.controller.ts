@@ -4,6 +4,8 @@ import { InsufficientStockError } from "./negotiation-order.helper";
 import { logger } from "../../utils/logger";
 
 const CLIENT_ERRORS = [
+  "Requirements form must be filled",
+  "Insufficient credits",
   "SKU not found",
   "This quantity is eligible for auto-negotiation",
   "A negotiation session is already open",
@@ -29,8 +31,8 @@ export const manualNegotiationController = {
   async startSession(req: Request, res: Response) {
     try {
       const customerId = req.user!.id;
-      const { sellerId, productId, skuId, quantity } = req.body;
-      const result = await manualNegotiationService.startSession(customerId, sellerId, productId, skuId, quantity, req.customerOrg?.orgId);
+      const { sellerId, productId, skuId, quantity, intent } = req.body;
+      const result = await manualNegotiationService.startSession(customerId, sellerId, productId, skuId, quantity, req.customerOrg?.orgId, intent, true);
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {
       logger.error({ err: error.message }, "Start manual negotiation failed");
@@ -72,7 +74,22 @@ export const manualNegotiationController = {
     }
   },
 
-  async proposeTimeSlot(req: Request, res: Response) {
+  async sendOffer(req: Request, res: Response) {
+    try {
+      const { actorId, actorType } = actor(req);
+      const { sessionId } = req.params;
+      const result = await manualNegotiationService.sendOffer(actorId, actorType, String(sessionId), req.body);
+      return res.status(201).json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Send negotiation offer failed");
+      if (isClientError(error.message)) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+    async proposeTimeSlot(req: Request, res: Response) {
     try {
       const { actorId, actorType } = actor(req);
       const { sessionId } = req.params;

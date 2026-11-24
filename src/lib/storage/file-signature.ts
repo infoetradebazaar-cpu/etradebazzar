@@ -87,3 +87,19 @@ export function validateFileContent(
   }
   return detected;
 }
+
+export function isSpreadsheetContent(buffer: Buffer): boolean {
+  if (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04) {
+    return true;
+  }
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0 &&
+    buffer[4] === 0xa1 && buffer[5] === 0xb1 && buffer[6] === 0x1a && buffer[7] === 0xe1
+  ) {
+    return true;
+  }
+
+  if (buffer.length === 0 || detectFileSignature(buffer) !== null) return false;
+  return !buffer.subarray(0, Math.min(buffer.length, 8192)).includes(0);
+}

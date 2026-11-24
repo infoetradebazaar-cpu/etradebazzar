@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { paymentService } from "./payment.service";
 import { logger } from "../../utils/logger";
+import { alreadyProcessed, markProcessed } from "../../lib/webhooks/replay-guard";
 
 export const paymentController = {
     async createAdvancePayment(req: Request, res: Response) {
@@ -13,6 +14,7 @@ export const paymentController = {
             const clientErrors = [
                 "Order not found",
                 "Order not in payable state",
+                "Order not yet approved by seller",
                 "Advance payment already initiated",
                 "Payment initiation already in progress, please wait",
                 "Online payments are currently disabled - use manual/cash payment recording instead",
@@ -69,7 +71,12 @@ export const paymentController = {
             if (!signature) {
                 return res.status(400).json({ error: "Missing signature" });
             }
+            const eventId = req.headers["x-razorpay-event-id"] as string | undefined;
+            if (await alreadyProcessed("razorpay-payment", eventId)) {
+                return res.json({ received: true, duplicate: true });
+            }
             const result = await paymentService.handleWebhook(req.body, signature);
+            await markProcessed("razorpay-payment", eventId);
             return res.json(result);
         } catch (error: any) {
             logger.error({ err: error.message }, "Webhook failed");
@@ -122,6 +129,7 @@ export const paymentController = {
             const clientErrors = [
                 "Order not found",
                 "Order not in payable state",
+                "Order not yet approved by seller",
                 "Advance payment already initiated",
                 "Advance payment not completed",
                 "Final payment already initiated",

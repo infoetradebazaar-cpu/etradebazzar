@@ -79,6 +79,7 @@ export const sellerProfileService = {
                 kyc: {
                     select: {
                         id: true, status: true,
+                        /** @deprecated panNumber/aadharNumber/aadhaar* no longer required/collected */
                         panNumber: true, gstNumber: true, aadharNumber: true,
                         businessRegNumber: true, documents: true,
                         rejectedReason: true, verifiedAt: true, createdAt: true,
@@ -87,6 +88,8 @@ export const sellerProfileService = {
                         govtIdRejectedReason: true, govtIdVerifiedAt: true,
                         gstVerificationStatus: true, gstVerifiedAt: true,
                         panVerificationStatus: true, panVerifiedAt: true,
+                        gstCertificateUrl: true, msmeCertificateUrl: true,
+                        incorporationCertificateUrl: true,
                     },
                 },
             },
@@ -100,7 +103,9 @@ export const sellerProfileService = {
             ...seller,
             kyc: {
                 ...kycWithUrls,
-                aadharNumber: maskIdNumber(seller.kyc.aadharNumber),
+                aadharNumber: seller.kyc.aadharNumber
+                    ? maskIdNumber(seller.kyc.aadharNumber)
+                    : seller.kyc.aadharNumber,
                 govtIdNumber: seller.kyc.govtIdNumber
                     ? maskIdNumber(seller.kyc.govtIdNumber)
                     : seller.kyc.govtIdNumber,

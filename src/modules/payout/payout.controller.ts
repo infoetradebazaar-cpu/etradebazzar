@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { payoutService } from "./payout.service";
 import { logger } from "../../utils/logger";
 import { toCsv } from "../../utils/csv";
+import { alreadyProcessed, markProcessed } from "../../lib/webhooks/replay-guard";
 
 export const payoutController = {
   async getMyPayoutSummary(req: Request, res: Response) {
@@ -143,6 +144,25 @@ export const payoutController = {
     }
   },
 
+  async syncPayout(req: Request, res: Response) {
+    try {
+      const { payoutId } = req.params;
+      const result = await payoutService.syncPayout(payoutId as string);
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Sync payout failed");
+      if (error.message === "Payout not found") {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      if (error.message === "Payout has no fund account") {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async reconcilePayout(req: Request, res: Response) {
     try {
       const { payoutId } = req.params;
@@ -165,7 +185,12 @@ export const payoutController = {
       if (!signature) {
         return res.status(400).json({ error: "Missing signature" });
       }
+      const eventId = req.headers["x-razorpay-event-id"] as string | undefined;
+      if (await alreadyProcessed("razorpayx-payout", eventId)) {
+        return res.json({ received: true, duplicate: true });
+      }
       const result = await payoutService.handleWebhook(req.body, signature);
+      await markProcessed("razorpayx-payout", eventId);
       return res.json(result);
     } catch (error: any) {
       logger.error({ err: error.message }, "Payout webhook failed");

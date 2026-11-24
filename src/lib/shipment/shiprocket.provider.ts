@@ -104,11 +104,27 @@ export class ShiprocketInstance implements ShipmentProvider {
                 })),
             }),
         });
-        const trackingId = response?.payload?.awb_code ?? null;
+        let trackingId: string | null = response?.payload?.awb_code ?? response?.awb_code ?? null;
+        let courierName: string | null = null;
+        let assignRaw: any = null;
+        const shipmentId = response?.shipment_id ?? response?.payload?.shipment_id;
+        if (!trackingId && shipmentId) {
+            assignRaw = await this.request<any>("/courier/assign/awb", {
+                method: "POST",
+                body: JSON.stringify({
+                    shipment_id: shipmentId,
+                    ...(input.courierId ? { courier_id: input.courierId } : {}),
+                }),
+            });
+            const data = assignRaw?.response?.data;
+            trackingId = data?.awb_code || null;
+            courierName = data?.courier_name ?? null;
+        }
         return {
             trackingId,
+            courierName,
             trackingUrl: trackingId ? `https://shiprocket.co/tracking/${trackingId}` : null,
-            raw: response,
+            raw: { create: response, assign: assignRaw },
         };
     }
 
@@ -143,6 +159,7 @@ export class ShiprocketInstance implements ShipmentProvider {
         return {
             available: response?.status === 200,
             couriers: response?.data?.available_courier_companies ?? [],
+            recommendedCourierId: response?.data?.recommended_courier_company_id ?? null,
             raw: response,
         };
     }
@@ -178,15 +195,15 @@ export class ShiprocketInstance implements ShipmentProvider {
         };
     }
 
-    verifyWebhook(payload: Buffer | string, signature: string): boolean {
-        const rawBody = Buffer.isBuffer(payload) ? payload.toString("utf8") : payload;
+    verifyWebhook(payload: Buffer | string, token: string): boolean {
+        if (timingSafeEqualStr(config.shiprocketWebhookSecret, token)) return true;
 
+        const rawBody = Buffer.isBuffer(payload) ? payload.toString("utf8") : payload;
         const expected = crypto
             .createHmac("sha256", config.shiprocketWebhookSecret)
             .update(rawBody)
             .digest("hex");
-
-        return timingSafeEqualStr(expected, signature);
+        return timingSafeEqualStr(expected, token);
     }
 
     parseWebhookEvent(payload: Buffer | string): WebhookEvent {

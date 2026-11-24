@@ -1,22 +1,17 @@
 import { db } from "../../db/index";
+import type { Prisma } from "../../../prisma/generated/client";
 import { redis } from "../../db/redis";
 import { randomBytes } from "crypto";
+import { acquireLock, releaseLock } from "../../lib/locks/redis-lock";
 
 const COUPON_LOCK_TTL = 15;
 
-async function acquireCouponLock(couponId: string): Promise<boolean> {
-  const result = await redis.set(
-    `coupon:lock:${couponId}`,
-    "1",
-    "EX",
-    COUPON_LOCK_TTL,
-    "NX",
-  );
-  return result === "OK";
+async function acquireCouponLock(couponId: string): Promise<string | null> {
+  return acquireLock(`coupon:lock:${couponId}`, COUPON_LOCK_TTL);
 }
 
-async function releaseCouponLock(couponId: string): Promise<void> {
-  await redis.del(`coupon:lock:${couponId}`);
+async function releaseCouponLock(couponId: string, token: string): Promise<void> {
+  await releaseLock(`coupon:lock:${couponId}`, token);
 }
 
 function generateCode(prefix: string, length = 8): string {
@@ -202,52 +197,66 @@ export const couponService = {
   },
 
   /**
-   * @param createOrder Callback that creates the order given the validated
-   * discount amount. Must return the created order (with `.id`).
+   * @param createOrder Callback that creates the order given the discount and coupon.
    */
   async checkoutWithCoupon<T extends { id: string }>(
     code: string,
     userId: string,
     orderAmount: number,
     productIds: string[] | undefined,
-    createOrder: (discount: number, couponCode: string) => Promise<T>,
+    createOrder: (discount: number, couponCode: string, couponId: string) => Promise<T>,
   ): Promise<{ order: T; discount: number }> {
     const coupon = await db.coupon.findUnique({
       where: { code: code.toUpperCase() },
     });
     if (!coupon) throw new Error("Invalid coupon code");
 
-    const locked = await acquireCouponLock(coupon.id);
-    if (!locked) throw new Error("Coupon is being processed  try again in a moment");
+    await this._checkValidity(coupon, userId, orderAmount, productIds);
 
-    try {
-      await this._checkValidity(coupon, userId, orderAmount, productIds);
+    const discount =
+      coupon.type === "PERCENTAGE"
+        ? parseFloat(((orderAmount * Number(coupon.value)) / 100).toFixed(2))
+        : Math.min(Number(coupon.value), orderAmount);
 
-      const discount =
-        coupon.type === "PERCENTAGE"
-          ? parseFloat(((orderAmount * Number(coupon.value)) / 100).toFixed(2))
-          : Math.min(Number(coupon.value), orderAmount);
+    const order = await createOrder(discount, coupon.code, coupon.id);
+    return { order, discount };
+  },
 
-      const order = await createOrder(discount, coupon.code);
 
-      await db.$transaction(async (tx) => {
-        const updateResult = await tx.coupon.updateMany({
-          where: { id: coupon.id, usedCount: coupon.maxUses ? { lt: coupon.maxUses } : undefined },
-          data: { usedCount: { increment: 1 } },
-        });
-        if (coupon.maxUses && updateResult.count === 0) {
-          throw new Error("Coupon usage limit reached");
-        }
+  async claimInTransaction(
+    tx: Prisma.TransactionClient,
+    couponId: string,
+    userId: string,
+    orderId: string,
+    discount: number,
+  ) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`coupon:${couponId}:${userId}`}))`;
 
-        await tx.couponUsage.create({
-          data: { couponId: coupon.id, userId, orderId: order.id, discount },
-        });
-      });
+    const coupon = await tx.coupon.findUnique({
+      where: { id: couponId },
+      select: { perUserLimit: true, maxUses: true, isActive: true, expiresAt: true },
+    });
+    if (!coupon) throw new Error("Invalid coupon code");
 
-      return { order, discount };
-    } finally {
-      await releaseCouponLock(coupon.id);
+    const used = await tx.couponUsage.count({ where: { couponId, userId } });
+    if (used >= coupon.perUserLimit) throw new Error("You have already used this coupon");
+
+    const claimed = await tx.coupon.updateMany({
+      where: {
+        id: couponId,
+        isActive: true,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        ...(coupon.maxUses ? { usedCount: { lt: coupon.maxUses } } : {}),
+      },
+      data: { usedCount: { increment: 1 } },
+    });
+    if (claimed.count === 0) {
+      if (!coupon.isActive) throw new Error("Coupon is not active");
+      if (coupon.expiresAt && coupon.expiresAt <= new Date()) throw new Error("Coupon has expired");
+      throw new Error("Coupon usage limit reached");
     }
+
+    await tx.couponUsage.create({ data: { couponId, userId, orderId, discount } });
   },
 
   /**
@@ -294,7 +303,7 @@ export const couponService = {
         });
       });
     } finally {
-      await releaseCouponLock(couponId);
+      await releaseCouponLock(couponId, locked);
     }
   },
 

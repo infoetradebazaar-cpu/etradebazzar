@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { autoNegotiationService } from "./auto-negotiation.service";
 import { InsufficientStockError } from "./negotiation-order.helper";
 import { logger } from "../../utils/logger";
+import { getNegotiationQuota } from "./negotiation-gate";
 
 const CLIENT_ERRORS = [
   "SKU not found",
@@ -16,6 +17,8 @@ const CLIENT_ERRORS = [
   "Your offer meets our price",
   "This round has already been responded to",
   "Product not found",
+  "Requirements form must be filled",
+  "Insufficient credits",
 ];
 
 function isClientError(message: string): boolean {
@@ -23,10 +26,20 @@ function isClientError(message: string): boolean {
 }
 
 export const negotiationController = {
+  async getQuota(req: Request, res: Response) {
+    try {
+      const data = await getNegotiationQuota(req.user!.id, req.customerOrg?.orgId);
+      return res.json({ success: true, data });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Get negotiation quota failed");
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async startAutoSession(req: Request, res: Response) {
     try {
       const customerId = req.user!.id;
-      const { sellerId, productId, skuId, quantity, customerPrice } = req.body;
+      const { sellerId, productId, skuId, quantity, customerPrice, intent } = req.body;
       const result = await autoNegotiationService.startSession(
         customerId,
         sellerId,
@@ -35,6 +48,7 @@ export const negotiationController = {
         quantity,
         customerPrice,
         req.customerOrg?.orgId,
+        intent,
       );
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {

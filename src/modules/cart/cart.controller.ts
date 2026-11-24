@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { cartService } from "./cart.service";
 import { logger } from "../../utils/logger";
+import { sendClientError } from "../../utils/http-error";
 
 const clientErrors = [
     "Product not found", "Product not available", "Insufficient stock",
@@ -26,7 +27,7 @@ export const cartController = {
             return res.status(201).json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Add cart item failed");
-            if (clientErrors.includes(error.message)) return res.status(400).json({ success: false, error: error.message });
+            if (clientErrors.includes(error.message) || error.message.startsWith("Cash on Delivery")) return res.status(400).json({ success: false, error: error.message });
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },
@@ -40,7 +41,7 @@ export const cartController = {
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Update cart item failed");
-            if (clientErrors.includes(error.message)) return res.status(400).json({ success: false, error: error.message });
+            if (clientErrors.includes(error.message) || error.message.startsWith("Cash on Delivery")) return res.status(400).json({ success: false, error: error.message });
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },
@@ -53,7 +54,7 @@ export const cartController = {
             return res.json({ success: true, data: result });
         } catch (error: any) {
             logger.error({ err: error.message }, "Remove cart item failed");
-            if (clientErrors.includes(error.message)) return res.status(400).json({ success: false, error: error.message });
+            if (clientErrors.includes(error.message) || error.message.startsWith("Cash on Delivery")) return res.status(400).json({ success: false, error: error.message });
             return res.status(500).json({ success: false, error: "Internal server error" });
         }
     },
@@ -79,8 +80,8 @@ export const cartController = {
             if (error.message === "Duplicate order submission detected, please wait") {
                 return res.status(409).json({ success: false, error: error.message });
             }
-            if (clientErrors.includes(error.message)) return res.status(400).json({ success: false, error: error.message });
-            return res.status(400).json({ success: false, error: error.message });
+            if (clientErrors.includes(error.message) || error.message.startsWith("Cash on Delivery")) return res.status(400).json({ success: false, error: error.message });
+            return sendClientError(res, error);
         }
     },
 };

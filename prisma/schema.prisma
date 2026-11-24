@@ -9,37 +9,41 @@ datasource db {
 
 // PLATFORM LEVEL
 model User {
-  id                   String                @id @default(cuid())
-  email                String                @unique
-  name                 String?
-  password             String
-  phone                String?               @unique
-  phoneVerifiedAt      DateTime?
-  isActive             Boolean               @default(true)
-  lastLoginAt          DateTime?
-  createdAt            DateTime              @default(now())
-  twoFactorEnabled     Boolean               @default(false)
-  twoFactorSecret      String?
-  twoFactorMethod      String?
-  twoFactorBackupCodes String[]              @default([])
-  passwordChangedAt    DateTime?
-  sessions             Session[]
-  updatedAt            DateTime              @updatedAt
-  orders               Order[]               @relation("CustomerOrders")
-  platformMember       PlatformMember?
-  sellerMemberships    SellerMember[]
+  id                     String                @id @default(cuid())
+  email                  String                @unique
+  name                   String?
+  password               String
+  phone                  String?               @unique
+  phoneVerifiedAt        DateTime?
+  isActive               Boolean               @default(true)
+  lastLoginAt            DateTime?
+  createdAt              DateTime              @default(now())
+  twoFactorEnabled       Boolean               @default(false)
+  twoFactorSecret        String?
+  twoFactorMethod        String?
+  twoFactorBackupCodes   String[]              @default([])
+  passwordChangedAt      DateTime?
+  sessions               Session[]
+  updatedAt              DateTime              @updatedAt
+  orders                 Order[]               @relation("CustomerOrders")
+  platformMember         PlatformMember?
+  sellerMemberships      SellerMember[]
   customerOrgMemberships CustomerOrgMember[]
   createdCustomerOrgs    CustomerOrg[]         @relation("CustomerOrgCreator")
-  wallet               Wallet[]
-  addresses            CustomerAddress[]
-  carts                Cart[]
-  customerUploadAssets CustomerUploadAsset[]
-  savedDesigns         SavedDesign[]
-  wishlistItems        WishlistItem[]
-  invoicesAsBuyer      Invoice[]             @relation("BuyerInvoices")
-  purchaseOrdersAsBuyer PurchaseOrder[]      @relation("BuyerPurchaseOrders")
+  wallet                 Wallet[]
+  addresses              CustomerAddress[]
+  carts                  Cart[]
+  customerUploadAssets   CustomerUploadAsset[]
+  savedDesigns           SavedDesign[]
+  wishlistItems          WishlistItem[]
+  invoicesAsBuyer        Invoice[]             @relation("BuyerInvoices")
+  purchaseOrdersAsBuyer  PurchaseOrder[]       @relation("BuyerPurchaseOrders")
+  quotationsAsBuyer      Quotation[]           @relation("BuyerQuotations")
+  proformaInvoicesAsBuyer ProformaInvoice[]    @relation("BuyerProformaInvoices")
 
   @@index([email])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_name_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_email_trgm_idx")
   @@map("users")
 }
 
@@ -102,6 +106,8 @@ model Seller {
   state                      String
   pincode                    String
   status                     SellerStatus              @default(PENDING)
+  negotiationFlagCount       Int                       @default(0)
+  negotiationFlaggedAt       DateTime?
   invitedBy                  String?
   suspendedAt                DateTime?
   suspendedBy                String?
@@ -138,6 +144,8 @@ model Seller {
   attributeOptionSubmissions CategoryAttributeOption[]
   invoices                   Invoice[]
   purchaseOrders             PurchaseOrder[]
+  quotations                 Quotation[]
+  proformaInvoices           ProformaInvoice[]
 
   @@index([status])
   @@map("sellers")
@@ -164,39 +172,49 @@ model SellerBankDetail {
 }
 
 model SellerKyc {
-  id                        String                   @id @default(cuid())
-  sellerId                  String                   @unique
-  aadharNumber              String
-  panNumber                 String
-  gstNumber                 String?
-  businessRegNumber         String?
-  documents                 String[]
-  status                    KycStatus                @default(PENDING)
-  rejectedReason            String?
-  verifiedAt                DateTime?
-  verifiedBy                String?
-  aadhaarStatus             KycStatus                @default(PENDING)
-  aadhaarRejectedReason     String?
-  aadhaarVerifiedAt         DateTime?
-  aadhaarDigilockerClientId String?
-  aadhaarVerifiedName       String?
-  aadhaarVerificationMeta   Json?
-  govtIdType                String?
-  govtIdNumber              String?
-  govtIdStatus              KycStatus                @default(PENDING)
-  govtIdRejectedReason      String?
-  govtIdVerifiedAt          DateTime?
-  govtIdVerifiedName        String?
-  govtIdVerificationMeta    Json?
-  gstVerificationStatus     GstPanVerificationStatus @default(UNVERIFIED)
-  gstVerifiedAt             DateTime?
-  gstVerificationMeta       Json?
-  panVerificationStatus     GstPanVerificationStatus @default(UNVERIFIED)
-  panVerifiedAt             DateTime?
-  panVerificationMeta       Json?
-  createdAt                 DateTime                 @default(now())
-  updatedAt                 DateTime                 @updatedAt
-  seller                    Seller                   @relation(fields: [sellerId], references: [id])
+  id                          String                   @id @default(cuid())
+  sellerId                    String                   @unique
+  //  Deprecated: Aadhaar-OTP mandatory.
+  //  application code no longer requires or writes this on new KYC submissions.
+  aadharNumber                String?
+  //  @deprecated No longer a mandatory.
+  //  PAN is now optional on KYC completion; use `Seller.pan` for registration-time PAN instead.
+  panNumber                   String?
+  gstNumber                   String?
+  businessRegNumber           String?
+  documents                   String[]
+  gstCertificateUrl           String?
+  msmeCertificateUrl          String?
+  incorporationCertificateUrl String?
+  status                      KycStatus                @default(PENDING)
+  rejectedReason              String?
+  verifiedAt                  DateTime?
+  verifiedBy                  String?
+  //  @deprecated Aadhaar-OTP verification is discontinued (non-compliant).
+  aadhaarStatus               KycStatus                @default(PENDING)
+  //  @deprecated see aadhaarStatus
+  aadhaarRejectedReason       String?
+  aadhaarVerifiedAt           DateTime?
+  aadhaarDigilockerClientId   String?
+  aadhaarVerifiedName         String?
+  //  @deprecated see aadhaarStatus
+  aadhaarVerificationMeta     Json?
+  govtIdType                  String?
+  govtIdNumber                String?
+  govtIdStatus                KycStatus                @default(PENDING)
+  govtIdRejectedReason        String?
+  govtIdVerifiedAt            DateTime?
+  govtIdVerifiedName          String?
+  govtIdVerificationMeta      Json?
+  gstVerificationStatus       GstPanVerificationStatus @default(UNVERIFIED)
+  gstVerifiedAt               DateTime?
+  gstVerificationMeta         Json?
+  panVerificationStatus       GstPanVerificationStatus @default(UNVERIFIED)
+  panVerifiedAt               DateTime?
+  panVerificationMeta         Json?
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+  seller                      Seller                   @relation(fields: [sellerId], references: [id])
 
   @@map("seller_kyc")
 }
@@ -280,27 +298,27 @@ model SellerInvite {
 }
 
 model CustomerOrg {
-  id             String  @id @default(cuid())
-  name           String
-  createdBy      String
-  creator        User    @relation("CustomerOrgCreator", fields: [createdBy], references: [id])
+  id              String    @id @default(cuid())
+  name            String
+  createdBy       String
+  creator         User      @relation("CustomerOrgCreator", fields: [createdBy], references: [id])
   legalEntityName String?
-  tradeName      String?
-  gstin          String?
-  pan            String?
-  businessType   String?
-  industry       String?
+  tradeName       String?
+  gstin           String?
+  pan             String?
+  businessType    String?
+  industry        String?
   yearEstablished Int?
-  employees      String?
-  annualTurnover String?
-  website        String?
+  employees       String?
+  annualTurnover  String?
+  website         String?
   registeredEmail String?
-  gstVerified    Boolean  @default(false)
-  panVerified    Boolean  @default(false)
-  gstVerifiedAt  DateTime?
-  panVerifiedAt  DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  gstVerified     Boolean   @default(false)
+  panVerified     Boolean   @default(false)
+  gstVerifiedAt   DateTime?
+  panVerifiedAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   members CustomerOrgMember[]
   roles   CustomerOrgRole[]
@@ -387,31 +405,34 @@ model CustomerOrgInvite {
 
 // SHOP
 model Shop {
-  id             String         @id @default(cuid())
-  displayId      String?        @unique
-  sellerId       String
-  name           String
-  slug           String         @unique
-  description    String?
-  category       String
-  logo           String?
-  logoKey        String?
-  banner         String?
-  bannerKey      String?
-  contactEmail   String
-  contactPhone   String
-  returnPolicy   String?
-  pickupStreet   String
-  pickupCity     String
-  pickupState    String
-  pickupPincode  String
-  slaBreachCount Int            @default(0)
-  latitude       Decimal?       @db.Decimal(10, 8)
-  longitude      Decimal?       @db.Decimal(11, 8)
-  status         ApprovalStatus @default(PENDING)
-  reviewedBy     String?
-  reviewNote     String?
-  reviewedAt     DateTime?
+  id                String         @id @default(cuid())
+  displayId         String?        @unique
+  sellerId          String
+  name              String
+  slug              String         @unique
+  description       String?
+  category          String?
+  userName          String?        @unique
+  gstCertificateUrl String?
+  contacts          Json?
+  logo              String?
+  logoKey           String?
+  banner            String?
+  bannerKey         String?
+  contactEmail      String
+  contactPhone      String
+  returnPolicy      String?
+  pickupStreet      String
+  pickupCity        String
+  pickupState       String
+  pickupPincode     String
+  slaBreachCount    Int            @default(0)
+  latitude          Decimal?       @db.Decimal(10, 8)
+  longitude         Decimal?       @db.Decimal(11, 8)
+  status            ApprovalStatus @default(PENDING)
+  reviewedBy        String?
+  reviewNote        String?
+  reviewedAt        DateTime?
 
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
@@ -499,54 +520,57 @@ model CategoryAttributeOption {
 
 // PRODUCT
 model Product {
-  id                            String                @id @default(cuid())
-  displayId                     String?               @unique
-  sellerId                      String
-  categoryId                    String
-  name                          String
-  description                   String?
-  specification                 String?
-  price                         Decimal?              @db.Decimal(10, 2)
-  compareAtPrice                Decimal?              @db.Decimal(10, 2)
-  sku                           String?               @unique
-  stock                         Int?
-  lowStockThreshold             Int?
-  weightGrams                   Int?
-  length                        Decimal?              @db.Decimal(8, 2)
-  width                         Decimal?              @db.Decimal(8, 2)
-  height                        Decimal?              @db.Decimal(8, 2)
-  isDigital                     Boolean               @default(false)
-  attributes                    Json?
-  status                        ProductStatus         @default(DRAFT)
-  reviewedBy                    String?
-  reviewNote                    String?
-  reviewedAt                    DateTime?
-  negotiationThresholdQty       Int?
-  customizationEnabled          Boolean               @default(false)
-  customizationAcceptedFormats  String[]              @default([])
-  createdAt                     DateTime              @default(now())
-  updatedAt                     DateTime              @updatedAt
-  category                      Category              @relation(fields: [categoryId], references: [id])
-  images                        ProductImage[]
-  variants                      VariantOption[]
-  skus                          ProductSKU[]
-  commissions                   ProductCommission[]
-  commissionProposals           CommissionProposal[]
-  model3d                       ProductModel3D[]
-  video                         ProductVideo?
-  printAreas                    PrintArea[]
-  customizationOptionGroups     CustomizationOptionGroup[]
-  uploadAssets                  CustomerUploadAsset[]
-  savedDesigns                  SavedDesign[]
-  orderItems                    OrderItem[]
-  templates                     Template[]
-  reviews                       Review[]
-  cartItems                     CartItem[]
-  wishlistItems                 WishlistItem[]
+  id                           String                     @id @default(cuid())
+  displayId                    String?                    @unique
+  sellerId                     String
+  categoryId                   String
+  name                         String
+  description                  String?
+  specification                String?
+  price                        Decimal?                   @db.Decimal(10, 2)
+  compareAtPrice               Decimal?                   @db.Decimal(10, 2)
+  sku                          String?                    @unique
+  stock                        Int?
+  lowStockThreshold            Int?
+  weightGrams                  Int?
+  length                       Decimal?                   @db.Decimal(8, 2)
+  width                        Decimal?                   @db.Decimal(8, 2)
+  height                       Decimal?                   @db.Decimal(8, 2)
+  isDigital                    Boolean                    @default(false)
+  attributes                   Json?
+  status                       ProductStatus              @default(DRAFT)
+  reviewedBy                   String?
+  reviewNote                   String?
+  reviewedAt                   DateTime?
+  negotiationThresholdQty      Int?
+  customizationEnabled         Boolean                    @default(false)
+  customizationAcceptedFormats String[]                   @default([])
+  createdAt                    DateTime                   @default(now())
+  updatedAt                    DateTime                   @updatedAt
+  category                     Category                   @relation(fields: [categoryId], references: [id])
+  images                       ProductImage[]
+  variants                     VariantOption[]
+  skus                         ProductSKU[]
+  commissions                  ProductCommission[]
+  commissionProposals          CommissionProposal[]
+  model3d                      ProductModel3D[]
+  video                        ProductVideo?
+  printAreas                   PrintArea[]
+  customizationOptionGroups    CustomizationOptionGroup[]
+  uploadAssets                 CustomerUploadAsset[]
+  savedDesigns                 SavedDesign[]
+  orderItems                   OrderItem[]
+  templates                    Template[]
+  reviews                      Review[]
+  cartItems                    CartItem[]
+  wishlistItems                WishlistItem[]
 
   @@index([sellerId, status])
   @@index([sellerId])
   @@index([categoryId])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_sku_trgm_idx")
+  @@index([displayId(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_displayId_trgm_idx")
   @@map("products")
 }
 
@@ -593,16 +617,16 @@ model VariantOptionValue {
 }
 
 model ProductSKU {
-  id            String         @id @default(cuid())
+  id            String                @id @default(cuid())
   productId     String
-  sku           String         @unique
-  price         Decimal        @db.Decimal(10, 2)
-  stock         Int            @default(0)
-  minQuantity   Int            @default(1)
+  sku           String                @unique
+  price         Decimal               @db.Decimal(10, 2)
+  stock         Int                   @default(0)
+  minQuantity   Int                   @default(1)
   options       Json
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  product       Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
   orderItems    OrderItem[]
   cartItems     CartItem[]
   wishlistItems WishlistItem[]
@@ -618,15 +642,15 @@ model ProductSKU {
 }
 
 model SkuPriceTier {
-  id        String     @id @default(cuid())
-  skuId     String
-  minQty    Int
-  maxQty    Int?
-  price     Decimal    @db.Decimal(10, 2)
-  hiddenFloorPrice Decimal?  @db.Decimal(10, 2)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  sku       ProductSKU @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  id               String     @id @default(cuid())
+  skuId            String
+  minQty           Int
+  maxQty           Int?
+  price            Decimal    @db.Decimal(10, 2)
+  hiddenFloorPrice Decimal?   @db.Decimal(10, 2)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  sku              ProductSKU @relation(fields: [skuId], references: [id], onDelete: Cascade)
 
   @@unique([skuId, minQty])
   @@index([skuId])
@@ -634,29 +658,31 @@ model SkuPriceTier {
 }
 
 model NegotiationSession {
-  id               String                   @id @default(cuid())
-  customerId       String
-  orgId            String?
-  sellerId         String
-  productId        String
-  skuId            String
-  quantity         Int
-  mode             NegotiationMode
-  status           NegotiationSessionStatus @default(PENDING)
-  visibleTierPrice Decimal                  @db.Decimal(10, 2)
-  hiddenFloorPrice Decimal?                 @db.Decimal(10, 2)
-  round            Int                      @default(0)
-  finalPrice       Decimal?                 @db.Decimal(10, 2)
-  orderId          String?                  @unique
-  nudgeDueAt       DateTime?
-  nudgeSentAt      DateTime?
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
-  formulaVersion   String                   @default("v1_linear")
-  activeEngineFlags Json?
+  id                   String                   @id @default(cuid())
+  customerId           String
+  orgId                String?
+  sellerId             String
+  productId            String
+  skuId                String
+  quantity             Int
+  mode                 NegotiationMode
+  status               NegotiationSessionStatus @default(PENDING)
+  visibleTierPrice     Decimal                  @db.Decimal(10, 2)
+  hiddenFloorPrice     Decimal?                 @db.Decimal(10, 2)
+  round                Int                      @default(0)
+  finalPrice           Decimal?                 @db.Decimal(10, 2)
+  orderId              String?                  @unique
+  nudgeDueAt           DateTime?
+  nudgeSentAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  formulaVersion       String                   @default("v1_linear")
+  activeEngineFlags    Json?
   resumedFromSessionId String?
-  resumedFrom          NegotiationSession?  @relation("SessionResumption", fields: [resumedFromSessionId], references: [id], onDelete: SetNull)
-  resumedInto          NegotiationSession[] @relation("SessionResumption")
+  intent               Json?
+  creditsCharged       Int                      @default(0)
+  resumedFrom          NegotiationSession?      @relation("SessionResumption", fields: [resumedFromSessionId], references: [id], onDelete: SetNull)
+  resumedInto          NegotiationSession[]     @relation("SessionResumption")
 
   rounds NegotiationRound[]
   chat   NegotiationChatSession?
@@ -710,6 +736,8 @@ model NegotiationMessage {
   senderId      String
   senderType    String // "customer" | "seller" | "system"
   body          String
+  kind          String   @default("TEXT")
+  offer         Json?
   createdAt     DateTime @default(now())
 
   chatSession NegotiationChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
@@ -719,24 +747,24 @@ model NegotiationMessage {
 }
 
 model SellerNegotiationConfig {
-  id            String   @id @default(cuid())
-  sellerId      String
-  category      String?
-  gammaBase     Decimal  @db.Decimal(4, 3)
-  gammaMin      Decimal  @db.Decimal(4, 3)
-  gammaMax      Decimal  @db.Decimal(4, 3)
-  alpha         Decimal  @db.Decimal(4, 3) // stock-pressure weight
-  beta          Decimal  @db.Decimal(4, 3) // demand weight
-  delta         Decimal  @db.Decimal(4, 3) @default(0) // volatility weight
-  zeta          Decimal  @db.Decimal(4, 3) @default(0) // regime weight
-  eta           Decimal  @db.Decimal(4, 3) @default(0) // order-flow-imbalance weight
-  tolerancePct      Decimal @db.Decimal(4, 3) @default(0.03)
-  earlyExitMinRound Int     @default(2) 
-  minImprovementPct Decimal @db.Decimal(5, 4) @default(0.005) // 0.5% of (V-F)
-  setBy         String
-  effectiveFrom DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String   @id @default(cuid())
+  sellerId          String
+  category          String?
+  gammaBase         Decimal  @db.Decimal(4, 3)
+  gammaMin          Decimal  @db.Decimal(4, 3)
+  gammaMax          Decimal  @db.Decimal(4, 3)
+  alpha             Decimal  @db.Decimal(4, 3) // stock-pressure weight
+  beta              Decimal  @db.Decimal(4, 3) // demand weight
+  delta             Decimal  @default(0) @db.Decimal(4, 3) // volatility weight
+  zeta              Decimal  @default(0) @db.Decimal(4, 3) // regime weight
+  eta               Decimal  @default(0) @db.Decimal(4, 3) // order-flow-imbalance weight
+  tolerancePct      Decimal  @default(0.03) @db.Decimal(4, 3)
+  earlyExitMinRound Int      @default(2)
+  minImprovementPct Decimal  @default(0.005) @db.Decimal(5, 4) // 0.5% of (V-F)
+  setBy             String
+  effectiveFrom     DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([sellerId, category, effectiveFrom])
   @@index([sellerId])
@@ -762,32 +790,32 @@ model PricingEngineConfig {
 }
 
 model PricingEngineConstants {
-  id String @id @default(cuid())
-  kMin               Decimal @db.Decimal(5, 3) @default(1.1)
-  kMax               Decimal @db.Decimal(5, 3) @default(3.5)
-  kappa              Decimal @db.Decimal(5, 3) @default(0.6) // curve stiffness sensitivity to sigma
-  w0                 Decimal @db.Decimal(5, 3) @default(0.5) // base customer-influence weight
-  pExponent          Decimal @db.Decimal(5, 3) @default(1.5) // w(r) time-decay exponent
-  lambdaAdverse      Decimal @db.Decimal(5, 3) @default(0.6) // w(r) discount from adverse signal
-  psiImpact          Decimal @db.Decimal(5, 3) @default(0.4) // w(r) discount from price impact
-  muJitter           Decimal @db.Decimal(5, 3) @default(0.5) // jitter widening under volatility
-  jitterBaseFraction Decimal @db.Decimal(6, 4) @default(0.02) // max jitter amplitude, fraction of (V-F)
+  id                 String  @id @default(cuid())
+  kMin               Decimal @default(1.1) @db.Decimal(5, 3)
+  kMax               Decimal @default(3.5) @db.Decimal(5, 3)
+  kappa              Decimal @default(0.6) @db.Decimal(5, 3) // curve stiffness sensitivity to sigma
+  w0                 Decimal @default(0.5) @db.Decimal(5, 3) // base customer-influence weight
+  pExponent          Decimal @default(1.5) @db.Decimal(5, 3) // w(r) time-decay exponent
+  lambdaAdverse      Decimal @default(0.6) @db.Decimal(5, 3) // w(r) discount from adverse signal
+  psiImpact          Decimal @default(0.4) @db.Decimal(5, 3) // w(r) discount from price impact
+  muJitter           Decimal @default(0.5) @db.Decimal(5, 3) // jitter widening under volatility
+  jitterBaseFraction Decimal @default(0.02) @db.Decimal(6, 4) // max jitter amplitude, fraction of (V-F)
 
-  theta Decimal @db.Decimal(5, 3) @default(0.5) // dynamic-horizon stock-urgency sensitivity
+  theta Decimal @default(0.5) @db.Decimal(5, 3) // dynamic-horizon stock-urgency sensitivity
 
-  tau      Decimal @db.Decimal(5, 3) @default(1) // discount-trend slope sensitivity
-  deltaMax Decimal @db.Decimal(5, 3) @default(0.15) // regimeAdj clamp bound
+  tau      Decimal @default(1) @db.Decimal(5, 3) // discount-trend slope sensitivity
+  deltaMax Decimal @default(0.15) @db.Decimal(5, 3) // regimeAdj clamp bound
 
-  rhoRepeat Decimal @db.Decimal(5, 3) @default(0.1) // repeat-rejection gamma multiplier
+  rhoRepeat Decimal @default(0.1) @db.Decimal(5, 3) // repeat-rejection gamma multiplier
 
-  lambdaDecayPerDay        Decimal @db.Decimal(6, 4) @default(0.15) // recency-decay rate
-  crossSkuWeight           Decimal @db.Decimal(5, 3) @default(0.3) // cross-SKU demand blend weight
+  lambdaDecayPerDay        Decimal @default(0.15) @db.Decimal(6, 4) // recency-decay rate
+  crossSkuWeight           Decimal @default(0.3) @db.Decimal(5, 3) // cross-SKU demand blend weight
   demandColdStartThreshold Int     @default(5) // sessions below this count trigger cross-SKU borrowing
 
   // volatility shrinkage
   volatilityShrinkageN0 Int @default(10)
 
-  minImprovementFloorRupees Decimal @db.Decimal(10, 2) @default(5)
+  minImprovementFloorRupees Decimal @default(5) @db.Decimal(10, 2)
 
   updatedAt DateTime @updatedAt
   updatedBy String
@@ -853,29 +881,29 @@ model CommissionProposal {
 
 // ORDER
 model Order {
-  id               String             @id @default(cuid())
-  displayId        String?            @unique
+  id               String          @id @default(cuid())
+  displayId        String?         @unique
   sellerId         String
   customerId       String
   orgId            String?
   type             OrderType
-  status           OrderStatus        @default(PENDING)
-  totalAmount      Decimal            @db.Decimal(10, 2)
-  finalAmount      Decimal?           @db.Decimal(10, 2)
-  commissionRate   Decimal?           @db.Decimal(5, 2)
-  commissionAmount Decimal?           @db.Decimal(10, 2)
-  paymentStatus    PaymentStatus      @default(UNPAID)
-  paymentMethod    PaymentMethod      @default(ONLINE)
+  status           OrderStatus     @default(PENDING)
+  totalAmount      Decimal         @db.Decimal(10, 2)
+  finalAmount      Decimal?        @db.Decimal(10, 2)
+  commissionRate   Decimal?        @db.Decimal(5, 2)
+  commissionAmount Decimal?        @db.Decimal(10, 2)
+  paymentStatus    PaymentStatus   @default(UNPAID)
+  paymentMethod    PaymentMethod   @default(ONLINE)
   assignedShopId   String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
   packingDeadline  DateTime?
   packedAt         DateTime?
   dispatchDeadline DateTime?
   slaBreachedAt    DateTime?
-  seller           Seller             @relation(fields: [sellerId], references: [id])
-  assignedShop     Shop?              @relation(fields: [assignedShopId], references: [id])
-  customer         User               @relation("CustomerOrders", fields: [customerId], references: [id])
+  seller           Seller          @relation(fields: [sellerId], references: [id])
+  assignedShop     Shop?           @relation(fields: [assignedShopId], references: [id])
+  customer         User            @relation("CustomerOrders", fields: [customerId], references: [id])
   items            OrderItem[]
   addresses        OrderAddress[]
   bulkUpload       BulkUpload?
@@ -885,13 +913,22 @@ model Order {
   payoutOrders     PayoutOrder[]
   reviews          Review[]
   couponUsage      CouponUsage?
-  discountAmount   Decimal?           @db.Decimal(10, 2)
+  discountAmount   Decimal?        @db.Decimal(10, 2)
   invoice          Invoice?
   purchaseOrder    PurchaseOrder?
+  quotation        Quotation?
+  proformaInvoice  ProformaInvoice?
+  sellerApprovedAt DateTime?
+  idempotencyKey   String?         @unique
 
   @@index([sellerId, status])
-  @@index([customerId])
-  @@index([orgId])
+  @@index([sellerId, createdAt])
+  @@index([customerId, createdAt])
+  @@index([orgId, createdAt])
+  @@index([assignedShopId])
+  @@index([status, packingDeadline])
+  @@index([status, dispatchDeadline])
+  @@index([sellerApprovedAt, paymentStatus])
   @@map("orders")
 }
 
@@ -973,22 +1010,24 @@ model Shipment {
   shop              Shop           @relation(fields: [shopId], references: [id])
 
   @@index([orderId])
+  @@index([trackingId])
+  @@index([createdAt])
   @@map("shipments")
 }
 
 // RETURN
 model ReturnRequest {
-  id         String          @id @default(cuid())
+  id         String                @id @default(cuid())
   orderId    String
   customerId String
   reason     String
-  status     ReturnStatus    @default(PENDING)
+  status     ReturnStatus          @default(PENDING)
   approvedBy String?
   rejectedBy String?
   note       String?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  order      Order           @relation(fields: [orderId], references: [id])
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+  order      Order                 @relation(fields: [orderId], references: [id])
   shipment   ReturnShipment?
   images     CustomerUploadAsset[]
 
@@ -1078,7 +1117,7 @@ model PayoutOrder {
 
   @@unique([payoutId, orderId])
   @@index([payoutId])
-  @@index([orderId])
+  @@unique([orderId])
   @@map("payout_orders")
 }
 
@@ -1128,6 +1167,47 @@ model PurchaseOrder {
   @@map("purchase_orders")
 }
 
+model Quotation {
+  id              String   @id @default(cuid())
+  quotationNumber String   @unique
+  orderId         String   @unique
+  sellerId        String
+  buyerId         String
+  issuedBy        String
+  issuedByType    String
+  snapshot        Json
+  totalAmount     Decimal  @db.Decimal(10, 2)
+  disclaimerText  String
+  createdAt       DateTime @default(now())
+  order           Order    @relation(fields: [orderId], references: [id])
+  seller          Seller   @relation(fields: [sellerId], references: [id])
+  buyer           User     @relation("BuyerQuotations", fields: [buyerId], references: [id])
+
+  @@index([sellerId])
+  @@index([buyerId])
+  @@map("quotations")
+}
+
+model ProformaInvoice {
+  id           String   @id @default(cuid())
+  piNumber     String   @unique
+  orderId      String   @unique
+  sellerId     String
+  buyerId      String
+  issuedBy     String
+  issuedByType String
+  snapshot     Json
+  totalAmount  Decimal  @db.Decimal(10, 2)
+  createdAt    DateTime @default(now())
+  order        Order    @relation(fields: [orderId], references: [id])
+  seller       Seller   @relation(fields: [sellerId], references: [id])
+  buyer        User     @relation("BuyerProformaInvoices", fields: [buyerId], references: [id])
+
+  @@index([sellerId])
+  @@index([buyerId])
+  @@map("proforma_invoices")
+}
+
 // NOTIFICATION
 model NotificationPreference {
   id        String               @id @default(cuid())
@@ -1143,18 +1223,18 @@ model NotificationPreference {
 }
 
 model Notification {
-  id        String           @id @default(cuid())
-  userId    String
-  type      NotificationType
-  title     String
-  message   String
-  data      Json?
-  isRead    Boolean          @default(false)
-  createdAt DateTime         @default(now())
+  id         String                 @id @default(cuid())
+  userId     String
+  type       NotificationType
+  title      String
+  message    String
+  data       Json?
+  isRead     Boolean                @default(false)
+  createdAt  DateTime               @default(now())
+  deliveries NotificationDelivery[]
 
   @@index([userId, isRead])
   @@index([userId, createdAt])
-  deliveries NotificationDelivery[]
   @@map("notifications")
 }
 
@@ -1173,19 +1253,19 @@ enum NotificationDeliveryStatus {
 }
 
 model NotificationDelivery {
-  id            String                       @id @default(cuid())
+  id             String                      @id @default(cuid())
   notificationId String
-  channel       NotificationDeliveryChannel
-  status        NotificationDeliveryStatus   @default(PENDING)
-  attempts      Int                          @default(0)
-  maxAttempts   Int                          @default(5)
-  lastError     String?
-  lastAttemptAt DateTime?
-  nextRetryAt   DateTime?
-  payload       Json
-  createdAt     DateTime                     @default(now())
-  updatedAt     DateTime                     @updatedAt
-  notification  Notification                 @relation(fields: [notificationId], references: [id])
+  channel        NotificationDeliveryChannel
+  status         NotificationDeliveryStatus  @default(PENDING)
+  attempts       Int                         @default(0)
+  maxAttempts    Int                         @default(5)
+  lastError      String?
+  lastAttemptAt  DateTime?
+  nextRetryAt    DateTime?
+  payload        Json
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+  notification   Notification                @relation(fields: [notificationId], references: [id])
 
   @@index([status, nextRetryAt])
   @@index([notificationId])
@@ -1330,6 +1410,7 @@ model WalletTransaction {
   wallet       Wallet        @relation(fields: [walletId], references: [id])
 
   @@index([walletId])
+  @@unique([walletId, reason, referenceId])
   @@map("wallet_transactions")
 }
 
@@ -1509,19 +1590,19 @@ model CustomerAddress {
 }
 
 model CustomerUploadAsset {
-  id        String   @id @default(cuid())
-  userId    String
-  productId String?
-  skuId     String?
+  id              String         @id @default(cuid())
+  userId          String
+  productId       String?
+  skuId           String?
   returnRequestId String?
-  url       String
-  key       String
-  fileType  String
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
-  product   Product? @relation(fields: [productId], references: [id])
-  sku       ProductSKU? @relation(fields: [skuId], references: [id], onDelete: SetNull)
-  returnRequest ReturnRequest? @relation(fields: [returnRequestId], references: [id])
+  url             String
+  key             String
+  fileType        String
+  createdAt       DateTime       @default(now())
+  user            User           @relation(fields: [userId], references: [id])
+  product         Product?       @relation(fields: [productId], references: [id])
+  sku             ProductSKU?    @relation(fields: [skuId], references: [id], onDelete: SetNull)
+  returnRequest   ReturnRequest? @relation(fields: [returnRequestId], references: [id])
 
   @@index([userId])
   @@index([productId])

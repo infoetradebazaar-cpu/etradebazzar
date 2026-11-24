@@ -1,14 +1,13 @@
 import { db } from "../../db/index";
 import { StorageFactory } from "../../lib/storage/storage.factory";
-const ALLOWED_THUMBNAIL_MIME_TYPES = new Set([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-]);
+import { validateFileContent, type DetectedFileType } from "../../lib/storage/file-signature";
+const ALLOWED_THUMBNAIL_TYPES: readonly DetectedFileType[] = ["image/jpeg", "image/png", "image/webp"];
 
-function validateThumbnailFile(file: Express.Multer.File) {
-    if (!ALLOWED_THUMBNAIL_MIME_TYPES.has(file.mimetype)) {
-        throw new Error(`Invalid file type: ${file.mimetype}. Only JPEG, PNG, and WEBP thumbnails are allowed`);
+function validateThumbnailFile(file: Express.Multer.File): DetectedFileType {
+    try {
+        return validateFileContent(file.buffer, ALLOWED_THUMBNAIL_TYPES);
+    } catch {
+        throw new Error("Invalid file type. Only JPEG, PNG, and WEBP thumbnails are allowed");
     }
 }
 
@@ -26,13 +25,13 @@ export const templateService = {
     ) {
         const product = await db.product.findFirst({ where: { id: data.productId, sellerId } });
         if (!product) throw new Error("Product not found");
-        validateThumbnailFile(thumbnailFile);
+        const contentType = validateThumbnailFile(thumbnailFile);
 
         const storage = StorageFactory.get();
         const upload = await storage.upload({
             key: `templates/${data.productId}/${Date.now()}-${thumbnailFile.originalname}`,
             buffer: thumbnailFile.buffer,
-            mimeType: thumbnailFile.mimetype,
+            mimeType: contentType,
             size: thumbnailFile.size,
         });
 

@@ -26,5 +26,6 @@ export interface StorageProvider {
     upload(input: UploadInput): Promise<UploadResult>;
     delete(input: DeleteInput): Promise<void>;
     getSignedUrl(input: SignedUrlInput): Promise<string>;
+    download(key: string): Promise<Buffer | null>;
     getPublicUrl(key: string): string;
 }

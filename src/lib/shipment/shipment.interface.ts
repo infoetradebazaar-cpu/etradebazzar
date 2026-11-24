@@ -22,10 +22,13 @@ export interface CreateShipmentInput {
         sellingPrice: number;
         weight?: number;
     }[];
+    courierId?: number;
+    pickupPincode?: string;
 }
 
 export interface ShipmentResult {
     trackingId: string | null;
+    courierName?: string | null;
     trackingUrl: string | null;
     raw: any;
 }
@@ -38,6 +41,7 @@ export interface TrackingResult {
 export interface ServiceabilityResult {
     available: boolean;
     couriers: any[];
+    recommendedCourierId?: number | null;
     raw: any;
 }
 

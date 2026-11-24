@@ -112,6 +112,15 @@ router.get(
   payoutController.getPayoutById,
 );
 
+router.post(
+  "/:payoutId/sync",
+  protect,
+  requirePlatformAdminAndPermission(["super_admin"], [PLATFORM_PERMISSIONS.PLATFORM_PAYOUTS_INITIATE]),
+  paymentLimiter,
+  validate(payoutParamSchema),
+  payoutController.syncPayout,
+);
+
 router.get(
   "/:payoutId/reconcile",
   protect,

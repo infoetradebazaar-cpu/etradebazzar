@@ -1,5 +1,6 @@
 import { logger } from "../../utils/logger";
 import { checkNegotiationV2CircuitBreaker } from "../../modules/negotiation/pricing-engine-v2/circuitBreaker";
+import { scheduleExclusive } from "../jobs/run-exclusive";
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 let checkInFlight = false;
@@ -24,11 +25,7 @@ async function runCheck(): Promise<void> {
 
 export function startPricingCircuitBreakerMonitor(intervalMs = 5 * 60 * 1000): void {
   if (intervalHandle) return;
-  intervalHandle = setInterval(() => {
-    runCheck().catch((err: any) => {
-      logger.error({ err: err.message }, "Negotiation pricing-engine-v2 circuit breaker tick failed");
-    });
-  }, intervalMs);
+  intervalHandle = scheduleExclusive("pricing-circuit-breaker", intervalMs, runCheck);
   logger.info({ intervalMs }, "Negotiation pricing-engine-v2 circuit breaker monitor started");
 }
 

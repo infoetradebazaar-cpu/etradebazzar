@@ -49,6 +49,16 @@ export class S3Provider implements StorageProvider {
         };
     }
 
+    async download(key: string): Promise<Buffer | null> {
+        try {
+            const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+            return res.Body ? Buffer.from(await res.Body.transformToByteArray()) : null;
+        } catch (err: any) {
+            if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) return null;
+            throw err;
+        }
+    }
+
     async delete(input: DeleteInput): Promise<void> {
         await this.client.send(
             new DeleteObjectCommand({

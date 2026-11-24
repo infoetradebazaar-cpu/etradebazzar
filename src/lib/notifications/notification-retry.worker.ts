@@ -5,6 +5,7 @@ import { SmsFactory } from "./sms/sms.factory";
 import { interpolateTemplate } from "./template-interpolation";
 import { computeNextRetryAt, MAX_DELIVERY_ATTEMPTS } from "./retry-backoff";
 import { adminNotificationService } from "../../modules/notification/admin-notification.service";
+import { scheduleExclusive } from "../jobs/run-exclusive";
 
 async function retryOne(delivery: {
     id: string;
@@ -97,11 +98,7 @@ let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
 export function startNotificationRetryWorker(intervalMs = 5 * 60 * 1000): void {
     if (intervalHandle) return;
-    intervalHandle = setInterval(() => {
-        checkFailedNotificationDeliveries().catch((err) => {
-            logger.error({ err: err.message }, "Notification delivery retry sweep failed");
-        });
-    }, intervalMs);
+    intervalHandle = scheduleExclusive("notification-retry", intervalMs, checkFailedNotificationDeliveries);
     logger.info({ intervalMs }, "Notification delivery retry worker started");
 }
 

@@ -6,7 +6,7 @@ import { requirePermissionIfSeller, requirePlatformPermission } from "../../midd
 import { PERMISSIONS, PLATFORM_PERMISSIONS } from "../../lib/permission/permission.constants";
 import { validate } from "../../utils/validate";
 import { sellerLimiter } from "../../middleware/rate-limit";
-import { orderIdParamSchema, listBillingDocumentsSchema, listMyBillingDocumentsSchema, invoiceIdParamSchema, poIdParamSchema } from "./invoicing.schema";
+import { orderIdParamSchema, listBillingDocumentsSchema, listMyBillingDocumentsSchema, invoiceIdParamSchema, poIdParamSchema, quotationIdParamSchema, proformaInvoiceIdParamSchema } from "./invoicing.schema";
 
 export const invoiceRoutes = Router();
 
@@ -152,4 +152,159 @@ purchaseOrderRoutes.get(
   sellerLimiter,
   validate(orderIdParamSchema),
   invoicingController.downloadPurchaseOrderPdf,
+);
+
+export const quotationRoutes = Router();
+
+quotationRoutes.get(
+  "/",
+  protect,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_INVOICES_VIEW),
+  sellerLimiter,
+  validate(listBillingDocumentsSchema),
+  invoicingController.listQuotationsAdmin,
+);
+
+quotationRoutes.get(
+  "/admin/:quotationId",
+  protect,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_INVOICES_VIEW),
+  sellerLimiter,
+  invoicingController.getQuotationAdmin,
+);
+
+quotationRoutes.get(
+  "/admin/:quotationId/pdf",
+  protect,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_INVOICES_VIEW),
+  sellerLimiter,
+  invoicingController.downloadQuotationPdfAdmin,
+);
+
+quotationRoutes.post(
+  "/orders/:orderId/generate",
+  protect,
+  resolveTenant,
+  requirePermissionIfSeller(PERMISSIONS.INVOICES_MANAGE),
+  sellerLimiter,
+  validate(orderIdParamSchema),
+  invoicingController.generateQuotation,
+);
+
+quotationRoutes.get(
+  "/mine",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(listMyBillingDocumentsSchema),
+  invoicingController.listMyQuotations,
+);
+
+quotationRoutes.get(
+  "/mine/:quotationId/pdf",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(quotationIdParamSchema),
+  invoicingController.downloadMyQuotationPdf,
+);
+
+quotationRoutes.get(
+  "/orders/:orderId",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(orderIdParamSchema),
+  invoicingController.getQuotation,
+);
+
+quotationRoutes.get(
+  "/orders/:orderId/pdf",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(orderIdParamSchema),
+  invoicingController.downloadQuotationPdf,
+);
+
+export const proformaInvoiceRoutes = Router();
+
+proformaInvoiceRoutes.get(
+  "/",
+  protect,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_INVOICES_VIEW),
+  sellerLimiter,
+  validate(listBillingDocumentsSchema),
+  invoicingController.listProformaInvoicesAdmin,
+);
+
+proformaInvoiceRoutes.get(
+  "/admin/:piId",
+  protect,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_INVOICES_VIEW),
+  sellerLimiter,
+  invoicingController.getProformaInvoiceAdmin,
+);
+
+proformaInvoiceRoutes.get(
+  "/admin/:piId/pdf",
+  protect,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_INVOICES_VIEW),
+  sellerLimiter,
+  invoicingController.downloadProformaInvoicePdfAdmin,
+);
+
+proformaInvoiceRoutes.post(
+  "/orders/:orderId/generate",
+  protect,
+  resolveTenant,
+  requirePermissionIfSeller(PERMISSIONS.INVOICES_MANAGE),
+  sellerLimiter,
+  validate(orderIdParamSchema),
+  invoicingController.generateProformaInvoice,
+);
+
+proformaInvoiceRoutes.get(
+  "/orders/:orderId/bank-details",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(orderIdParamSchema),
+  invoicingController.getBankTransferDetails,
+);
+
+proformaInvoiceRoutes.get(
+  "/mine",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(listMyBillingDocumentsSchema),
+  invoicingController.listMyProformaInvoices,
+);
+
+proformaInvoiceRoutes.get(
+  "/mine/:piId/pdf",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(proformaInvoiceIdParamSchema),
+  invoicingController.downloadMyProformaInvoicePdf,
+);
+
+proformaInvoiceRoutes.get(
+  "/orders/:orderId",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(orderIdParamSchema),
+  invoicingController.getProformaInvoice,
+);
+
+proformaInvoiceRoutes.get(
+  "/orders/:orderId/pdf",
+  protect,
+  resolveTenant,
+  sellerLimiter,
+  validate(orderIdParamSchema),
+  invoicingController.downloadProformaInvoicePdf,
 );
