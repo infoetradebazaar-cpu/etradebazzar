@@ -9,37 +9,37 @@ datasource db {
 
 // PLATFORM LEVEL
 model User {
-  id                     String                @id @default(cuid())
-  email                  String                @unique
-  name                   String?
-  password               String
-  phone                  String?               @unique
-  phoneVerifiedAt        DateTime?
-  isActive               Boolean               @default(true)
-  lastLoginAt            DateTime?
-  createdAt              DateTime              @default(now())
-  twoFactorEnabled       Boolean               @default(false)
-  twoFactorSecret        String?
-  twoFactorMethod        String?
-  twoFactorBackupCodes   String[]              @default([])
-  passwordChangedAt      DateTime?
-  sessions               Session[]
-  updatedAt              DateTime              @updatedAt
-  orders                 Order[]               @relation("CustomerOrders")
-  platformMember         PlatformMember?
-  sellerMemberships      SellerMember[]
-  customerOrgMemberships CustomerOrgMember[]
-  createdCustomerOrgs    CustomerOrg[]         @relation("CustomerOrgCreator")
-  wallet                 Wallet[]
-  addresses              CustomerAddress[]
-  carts                  Cart[]
-  customerUploadAssets   CustomerUploadAsset[]
-  savedDesigns           SavedDesign[]
-  wishlistItems          WishlistItem[]
-  invoicesAsBuyer        Invoice[]             @relation("BuyerInvoices")
-  purchaseOrdersAsBuyer  PurchaseOrder[]       @relation("BuyerPurchaseOrders")
-  quotationsAsBuyer      Quotation[]           @relation("BuyerQuotations")
-  proformaInvoicesAsBuyer ProformaInvoice[]    @relation("BuyerProformaInvoices")
+  id                      String                @id @default(cuid())
+  email                   String                @unique
+  name                    String?
+  password                String
+  phone                   String?               @unique
+  phoneVerifiedAt         DateTime?
+  isActive                Boolean               @default(true)
+  lastLoginAt             DateTime?
+  createdAt               DateTime              @default(now())
+  twoFactorEnabled        Boolean               @default(false)
+  twoFactorSecret         String?
+  twoFactorMethod         String?
+  twoFactorBackupCodes    String[]              @default([])
+  passwordChangedAt       DateTime?
+  sessions                Session[]
+  updatedAt               DateTime              @updatedAt
+  orders                  Order[]               @relation("CustomerOrders")
+  platformMember          PlatformMember?
+  sellerMemberships       SellerMember[]
+  customerOrgMemberships  CustomerOrgMember[]
+  createdCustomerOrgs     CustomerOrg[]         @relation("CustomerOrgCreator")
+  wallet                  Wallet[]
+  addresses               CustomerAddress[]
+  carts                   Cart[]
+  customerUploadAssets    CustomerUploadAsset[]
+  savedDesigns            SavedDesign[]
+  wishlistItems           WishlistItem[]
+  invoicesAsBuyer         Invoice[]             @relation("BuyerInvoices")
+  purchaseOrdersAsBuyer   PurchaseOrder[]       @relation("BuyerPurchaseOrders")
+  quotationsAsBuyer       Quotation[]           @relation("BuyerQuotations")
+  proformaInvoicesAsBuyer ProformaInvoice[]     @relation("BuyerProformaInvoices")
 
   @@index([email])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_name_trgm_idx")
@@ -771,7 +771,6 @@ model SellerNegotiationConfig {
   @@map("seller_negotiation_configs")
 }
 
- 
 model PricingEngineConfig {
   id                     String   @id @default(cuid())
   stage                  Int      @default(0)
@@ -881,29 +880,34 @@ model CommissionProposal {
 
 // ORDER
 model Order {
-  id               String          @id @default(cuid())
-  displayId        String?         @unique
+  id               String           @id @default(cuid())
+  displayId        String?          @unique
   sellerId         String
   customerId       String
   orgId            String?
   type             OrderType
-  status           OrderStatus     @default(PENDING)
-  totalAmount      Decimal         @db.Decimal(10, 2)
-  finalAmount      Decimal?        @db.Decimal(10, 2)
-  commissionRate   Decimal?        @db.Decimal(5, 2)
-  commissionAmount Decimal?        @db.Decimal(10, 2)
-  paymentStatus    PaymentStatus   @default(UNPAID)
-  paymentMethod    PaymentMethod   @default(ONLINE)
+  status           OrderStatus      @default(PENDING)
+  totalAmount      Decimal          @db.Decimal(10, 2)
+  finalAmount      Decimal?         @db.Decimal(10, 2)
+  commissionRate   Decimal?         @db.Decimal(5, 2)
+  commissionAmount Decimal?         @db.Decimal(10, 2)
+  paymentStatus    PaymentStatus    @default(UNPAID)
+  paymentMethod    PaymentMethod    @default(ONLINE)
+  requiredBy       DateTime?
+  customerNotes    String?
+  multiLocation    Boolean          @default(false)
+  addressSheetUrl  String?
+  negotiationIntent Json?
   assignedShopId   String?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
   packingDeadline  DateTime?
   packedAt         DateTime?
   dispatchDeadline DateTime?
   slaBreachedAt    DateTime?
-  seller           Seller          @relation(fields: [sellerId], references: [id])
-  assignedShop     Shop?           @relation(fields: [assignedShopId], references: [id])
-  customer         User            @relation("CustomerOrders", fields: [customerId], references: [id])
+  seller           Seller           @relation(fields: [sellerId], references: [id])
+  assignedShop     Shop?            @relation(fields: [assignedShopId], references: [id])
+  customer         User             @relation("CustomerOrders", fields: [customerId], references: [id])
   items            OrderItem[]
   addresses        OrderAddress[]
   bulkUpload       BulkUpload?
@@ -913,13 +917,13 @@ model Order {
   payoutOrders     PayoutOrder[]
   reviews          Review[]
   couponUsage      CouponUsage?
-  discountAmount   Decimal?        @db.Decimal(10, 2)
+  discountAmount   Decimal?         @db.Decimal(10, 2)
   invoice          Invoice?
   purchaseOrder    PurchaseOrder?
   quotation        Quotation?
   proformaInvoice  ProformaInvoice?
   sellerApprovedAt DateTime?
-  idempotencyKey   String?         @unique
+  idempotencyKey   String?          @unique
 
   @@index([sellerId, status])
   @@index([sellerId, createdAt])
@@ -1116,8 +1120,8 @@ model PayoutOrder {
   order            Order        @relation(fields: [orderId], references: [id])
 
   @@unique([payoutId, orderId])
-  @@index([payoutId])
   @@unique([orderId])
+  @@index([payoutId])
   @@map("payout_orders")
 }
 
@@ -1409,8 +1413,8 @@ model WalletTransaction {
   createdAt    DateTime      @default(now())
   wallet       Wallet        @relation(fields: [walletId], references: [id])
 
-  @@index([walletId])
   @@unique([walletId, reason, referenceId])
+  @@index([walletId])
   @@map("wallet_transactions")
 }
 
@@ -1502,6 +1506,7 @@ model PrintArea {
   updatedAt      DateTime    @updatedAt
   product        Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   sku            ProductSKU? @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
   @@unique([productId, skuId])
   @@index([skuId])
 }
@@ -1517,6 +1522,7 @@ model ProductModel3D {
   updatedAt DateTime    @updatedAt
   product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   sku       ProductSKU? @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
   @@unique([productId, skuId])
   @@index([skuId])
   @@map("product_models_3d")
@@ -1645,16 +1651,19 @@ model Cart {
 }
 
 model CartItem {
-  id        String      @id @default(cuid())
-  cartId    String
-  productId String
-  skuId     String?
-  quantity  Int
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  cart      Cart        @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product   Product     @relation(fields: [productId], references: [id])
-  sku       ProductSKU? @relation(fields: [skuId], references: [id])
+  id                  String      @id @default(cuid())
+  cartId              String
+  productId           String
+  skuId               String?
+  quantity            Int
+  negotiationId       String?
+  negotiatedPrice     Decimal?    @db.Decimal(10, 2)
+  negotiatedExpiresAt DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  cart                Cart        @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product             Product     @relation(fields: [productId], references: [id])
+  sku                 ProductSKU? @relation(fields: [skuId], references: [id])
 
   @@unique([cartId, productId, skuId])
   @@map("cart_items")

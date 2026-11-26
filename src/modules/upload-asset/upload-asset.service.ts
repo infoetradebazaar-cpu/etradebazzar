@@ -1,6 +1,6 @@
 import { db } from "../../db/index";
 import { StorageFactory } from "../../lib/storage/storage.factory";
-import { detectFileSignature, DetectedFileType } from "../../lib/storage/file-signature";
+import { detectFileSignature, isSpreadsheetContent, DetectedFileType } from "../../lib/storage/file-signature";
 import { randomUUID } from "crypto";
 
 const EXT_BY_TYPE: Record<DetectedFileType, string> = {
@@ -15,6 +15,14 @@ const EXT_BY_TYPE: Record<DetectedFileType, string> = {
     "video/quicktime": ".mov",
     "video/webm": ".webm",
     "video/x-matroska": ".mkv",
+};
+
+// Spreadsheets carry no reliable magic bytes (xlsx is just a ZIP, csv is text)
+// so they're verified by isSpreadsheetContent + declared type/original name.
+const SPREADSHEET_TYPES: Record<string, string> = {
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-excel": ".xls",
+    "text/csv": ".csv",
 };
 
 const DEFAULT_ALLOWED_TYPES: readonly DetectedFileType[] = [
@@ -67,19 +75,35 @@ export const uploadAssetService = {
         }
 
         const detected = detectFileSignature(file.buffer);
-        if (!detected || !allowedTypes.includes(detected)) {
+        let detectedType: string | null = detected;
+        let ext: string | undefined = detected ? EXT_BY_TYPE[detected] : undefined;
+
+        // Address sheets and other spreadsheet uploads: signature sniffing can't
+        // identify them, so fall back to content heuristic + declared type/ext.
+        if ((!detected || !allowedTypes.includes(detected)) && isSpreadsheetContent(file.buffer)) {
+            const byExt = Object.entries(SPREADSHEET_TYPES).find(([, e]) =>
+                file.originalname.toLowerCase().endsWith(e),
+            );
+            const sheetType = SPREADSHEET_TYPES[file.mimetype] ? file.mimetype : byExt?.[0];
+            if (sheetType) {
+                detectedType = sheetType;
+                ext = SPREADSHEET_TYPES[sheetType] ?? byExt?.[1];
+            }
+        }
+
+        if (!detectedType || (!allowedTypes.includes(detectedType as DetectedFileType) && !SPREADSHEET_TYPES[detectedType])) {
             throw new Error(
-                `File content does not match an allowed type. Allowed: ${allowedTypes.join(", ")}`,
+                `File content does not match an allowed type. Allowed: ${[...allowedTypes, ...Object.keys(SPREADSHEET_TYPES)].join(", ")}`,
             );
         }
 
-        const safeKey = `${category}/${userId}/${Date.now()}-${randomUUID()}${EXT_BY_TYPE[detected]}`;
+        const safeKey = `${category}/${userId}/${Date.now()}-${randomUUID()}${ext ?? ""}`;
 
         const storage = StorageFactory.get();
         const upload = await storage.upload({
             key: safeKey,
             buffer: file.buffer,
-            mimeType: detected,
+            mimeType: detectedType,
             size: file.size,
             contentDisposition: "attachment",
         });
@@ -90,7 +114,7 @@ export const uploadAssetService = {
                 productId: productId ?? null,
                 url: upload.url,
                 key: upload.key,
-                fileType: detected,
+                fileType: detectedType,
             },
         });
     },

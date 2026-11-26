@@ -15,6 +15,7 @@ export const negotiationIntentSchema = z
   .object({
     multipleLocations: z.boolean(),
     locationRange: z.enum(LOCATION_RANGES).optional(),
+    locationCount: z.number().int().min(1).max(10000).optional(),
     customPackaging: z.boolean(),
     packagingDescription: z.string().trim().max(1000).optional(),
     remarks: z.string().trim().max(2000).optional(),

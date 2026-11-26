@@ -41,6 +41,11 @@ async function getOrCreateCart(userId: string, orgId: OrgId) {
 async function getCartWithItems(userId: string, orgId: OrgId) {
   const cart = await getOrCreateCart(userId, orgId);
 
+  // Drop negotiated-price items whose lock has expired (5 days from add)
+  await db.cartItem.deleteMany({
+    where: { cartId: cart.id, negotiatedExpiresAt: { lt: new Date() } },
+  });
+
   const items = await db.cartItem.findMany({
     where: { cartId: cart.id },
     include: {
@@ -70,7 +75,9 @@ async function getCartWithItems(userId: string, orgId: OrgId) {
 
   let subtotal = 0;
   const lineItems = items.map((item) => {
-    const unitPrice = Number(item.sku?.price ?? item.product.price ?? 0);
+    const unitPrice = Number(
+      item.negotiatedPrice ?? item.sku?.price ?? item.product.price ?? 0,
+    );
     const lineTotal = unitPrice * item.quantity;
     subtotal += lineTotal;
     return {
@@ -85,6 +92,10 @@ async function getCartWithItems(userId: string, orgId: OrgId) {
       availableStock: item.sku?.stock ?? item.product.stock ?? 0,
       options: item.sku?.options,
       weightGrams: item.product.weightGrams ?? 500,
+      negotiationId: item.negotiationId,
+      negotiatedPrice: item.negotiatedPrice ? Number(item.negotiatedPrice) : null,
+      negotiatedExpiresAt: item.negotiatedExpiresAt,
+      listPrice: Number(item.sku?.price ?? item.product.price ?? 0),
     };
   });
 
@@ -98,14 +109,36 @@ export const cartService = {
 
   async addItem(
     userId: string,
-    data: { productId: string; skuId?: string; quantity: number },
+    data: { productId: string; skuId?: string; quantity: number; negotiationId?: string },
     orgId?: OrgId,
   ) {
     const product = await db.product.findUnique({
       where: { id: data.productId },
     });
     if (!product) throw new Error("Product not found");
-    if (product.status !== "LIVE" && product.status !== "APPROVED") throw new Error("Product not available");
+    if (product.status !== "LIVE") throw new Error("Product not available");
+
+    // Resolve negotiated price lock (5 days) when a confirmed session is referenced
+    let negotiatedPrice: number | null = null;
+    let negotiatedExpiresAt: Date | null = null;
+    if (data.negotiationId) {
+      const session = await db.negotiationSession.findFirst({
+        where: {
+          id: data.negotiationId,
+          customerId: userId,
+          status: "ACCEPTED",
+          productId: data.productId,
+          skuId: data.skuId ?? undefined,
+        },
+      });
+      if (!session) {
+        throw new Error("Negotiation session not found or not confirmed");
+      }
+      if (session.finalPrice != null) {
+        negotiatedPrice = Number(session.finalPrice);
+        negotiatedExpiresAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+      }
+    }
 
     const cart = await getOrCreateCart(userId, orgId);
 
@@ -151,7 +184,16 @@ export const cartService = {
     if (existing) {
       await db.cartItem.update({
         where: { id: existing.id },
-        data: { quantity: newQuantity },
+        data: {
+          quantity: newQuantity,
+          ...(data.negotiationId
+            ? {
+                negotiationId: data.negotiationId,
+                negotiatedPrice,
+                negotiatedExpiresAt,
+              }
+            : {}),
+        },
       });
     } else {
       await db.cartItem.create({
@@ -160,6 +202,9 @@ export const cartService = {
           productId: data.productId,
           skuId: data.skuId,
           quantity: data.quantity,
+          negotiationId: data.negotiationId ?? null,
+          negotiatedPrice,
+          negotiatedExpiresAt,
         },
       });
     }
@@ -222,6 +267,10 @@ export const cartService = {
       newAddress?: any;
       couponCode?: string;
       paymentMethod?: "ONLINE" | "COD";
+      requiredBy?: string;
+      customerNotes?: string;
+      multiLocation?: boolean;
+      addressSheetUrl?: string;
     },
     orgId?: OrgId,
   ) {
@@ -231,6 +280,17 @@ export const cartService = {
     const { cart, items, subtotal, sellerId } = await getCartWithItems(userId, orgId);
     if (!items.length) throw new Error("Cart is empty");
     if (!sellerId) throw new Error("Cart has no seller assigned");
+
+    // Preserve buyer delivery requirements from the negotiated session on the order
+    const negotiatedItem = items.find((i) => i.negotiationId);
+    const negotiationIntent = negotiatedItem?.negotiationId
+      ? (
+          (await db.negotiationSession.findUnique({
+            where: { id: negotiatedItem.negotiationId },
+            select: { intent: true },
+          }))?.intent ?? undefined
+        )
+      : undefined;
 
     let deliveryAddress;
     if (data.addressId) {
@@ -302,6 +362,11 @@ export const cartService = {
       couponCode,
       couponId,
       paymentMethod,
+      requiredBy: data.requiredBy,
+      customerNotes: data.customerNotes,
+      multiLocation: data.multiLocation,
+      addressSheetUrl: data.addressSheetUrl,
+      negotiationIntent,
       orgId: orgId ?? undefined,
     });
 

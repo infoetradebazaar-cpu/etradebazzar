@@ -64,7 +64,7 @@ export const manualAcceptSchema = z.object({
   params: z.object({ sessionId: z.string() }),
   body: z.object({
     finalPrice: z.number().positive(),
-    deliveryAddress: deliveryAddressSchema,
+    deliveryAddress: deliveryAddressSchema.optional(),
   }),
 });
 

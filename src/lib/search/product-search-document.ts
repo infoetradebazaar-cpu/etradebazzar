@@ -85,7 +85,7 @@ export async function syncProductSearchIndex(productId: string): Promise<void> {
     select: { status: true },
   });
 
-  if (!product || (product.status !== "LIVE" && product.status !== "APPROVED")) {
+  if (!product || product.status !== "LIVE") {
     await provider.deleteProduct(productId);
     return;
   }

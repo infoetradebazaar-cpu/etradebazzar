@@ -156,6 +156,28 @@ export const productController = {
     }
   },
 
+  // Public storefront detail — customers must only see LIVE products
+  async getPublicProductById(req: Request, res: Response) {
+    try {
+      const { productId } = req.params;
+      const result = await productService.getProductById(productId as string);
+      if (result.status !== "LIVE") {
+        return res
+          .status(404)
+          .json({ success: false, error: "Product not found" });
+      }
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error.message }, "Get public product failed");
+      if (error.message === "Product not found") {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async listProducts(req: Request, res: Response) {
     try {
       const sellerId = req.seller!.id;

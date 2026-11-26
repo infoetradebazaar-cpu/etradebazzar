@@ -1,10 +1,9 @@
 import { db } from "../../db/index";
 import { resolveTierPrice } from "../../utils/tier-pricing";
-import { createOrderFromNegotiation, DeliveryAddress } from "./negotiation-order.helper";
+import { DeliveryAddress } from "./negotiation-order.helper";
 import { NEGOTIATION_SESSION_OMIT } from "./negotiation.select";
 import { notificationService } from "../notification/notification.service";
 import { chargeNegotiationFee, getNegotiationQuota, type NegotiationIntent } from "./negotiation-gate";
-import { invoicingService } from "../invoicing/invoicing.service";
 import { getCommissionRate } from "../../utils/commission";
 import { logger } from "../../utils/logger";
 import { canAccessOrgResource } from "../../lib/permission/customer-org-permission.service";
@@ -309,7 +308,7 @@ export const manualNegotiationService = {
     });
   },
 
-  async accept(customerId: string, sessionId: string, finalPrice: number, deliveryAddress: DeliveryAddress) {
+  async accept(customerId: string, sessionId: string, finalPrice: number, _deliveryAddress?: DeliveryAddress) {
     const session = await db.negotiationSession.findUnique({ where: { id: sessionId } });
     if (!session) throw new Error("Negotiation session not found");
     const permitted =
@@ -330,25 +329,9 @@ export const manualNegotiationService = {
         data: { status: "ACCEPTED", finalPrice },
       });
       if (claimed.count === 0) throw new Error("This negotiation is already resolved");
-
-      const order = await createOrderFromNegotiation(tx, session, finalPrice, deliveryAddress);
-      await tx.negotiationSession.update({ where: { id: sessionId }, data: { orderId: order.id } });
-      return { status: "ACCEPTED" as const, order };
+      return { status: "ACCEPTED" as const };
     });
 
-    if (result.status === "ACCEPTED" && "order" in result) {
-      invoicingService
-        .generateQuotation(result.order.id, { userId: "system", sellerId: session.sellerId, actorType: "system" })
-        .catch((err: any) => logger.error({ err: err.message, orderId: result.order.id }, "Quotation on acceptance failed"));
-      notificationService
-        .sellerNewOrder({
-          sellerId: session.sellerId,
-          orderId: result.order.id,
-          displayId: result.order.displayId,
-          totalAmount: Number(result.order.finalAmount ?? result.order.totalAmount),
-        })
-        .catch(() => null);
-    }
     return result;
   },
 

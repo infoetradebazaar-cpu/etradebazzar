@@ -5,6 +5,7 @@ export const addCartItemSchema = z.object({
         productId: z.string(),
         skuId: z.string().optional(),
         quantity: z.number().int().positive(),
+        negotiationId: z.string().optional(),
     }),
 });
 
@@ -31,5 +32,9 @@ export const checkoutSchema = z.object({
         }).optional(),
         couponCode: z.string().optional(),
         paymentMethod: z.enum(["ONLINE", "COD"]).optional(),
+        requiredBy: z.string().datetime({ offset: true }).optional(),
+        customerNotes: z.string().max(1000).optional(),
+        multiLocation: z.boolean().optional(),
+        addressSheetUrl: z.string().optional(),
     }),
 });

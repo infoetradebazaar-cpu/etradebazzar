@@ -30,15 +30,15 @@ bun run db:reindex
 
 # 1. Reset (wipes all data, applies all migrations)
 DATABASE_URL="postgresql://postgres:pRNnmdybgIxzMvyOVVstbRPzSpXxNlLh@altaria.proxy.rlwy.net:45214/railway" \
-  npx prisma migrate reset --force
+  bunx prisma migrate reset --force
 
 # 2. Generate Prisma client
 DATABASE_URL="postgresql://postgres:pRNnmdybgIxzMvyOVVstbRPzSpXxNlLh@altaria.proxy.rlwy.net:45214/railway" \
-  npx prisma generate
+  bunx prisma generate
 
 # 3. Sync schema (creates tables not covered by migrations)
 DATABASE_URL="postgresql://postgres:pRNnmdybgIxzMvyOVVstbRPzSpXxNlLh@altaria.proxy.rlwy.net:45214/railway" \
-  npx prisma db push
+  bunx prisma db push
 
 # 4. RLS + analytics views
 ALLOW_PROD_MIGRATE=true \

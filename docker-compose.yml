@@ -10,7 +10,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5434:5432"
     networks:
       - internal
     mem_limit: 1g
@@ -30,7 +30,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:6381:6379"
     networks:
       - internal
     mem_limit: 512m
@@ -77,6 +77,58 @@ services:
       retries: 10
       start_period: 30s
 
+  minio:
+    # MinIO images were delisted from Docker Hub; LocalStack requires a paid
+    # license. rustfs is a MinIO-compatible S3 server (same :9000 API + :9001
+    # console + /minio/health endpoints). Backend S3 client uses
+    # forcePathStyle — compatible with rustfs's default path-style mode.
+    image: rustfs/rustfs:latest
+    container_name: etradebazaar_minio
+    restart: unless-stopped
+    command: server /data --console-enable
+    environment:
+      # rustfs also reads MINIO_ROOT_USER / MINIO_ROOT_PASSWORD as credential
+      # fallbacks — kept identical to the old MinIO config.
+      RUSTFS_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      RUSTFS_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+      - minio_logs:/logs
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    networks:
+      - internal
+    mem_limit: 512m
+    cpus: 0.5
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-sf",
+          "http://localhost:9000/minio/health/live",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  minio-init:
+    image: amazon/aws-cli:latest
+    container_name: etradebazaar_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - internal
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_DEFAULT_REGION: ${MINIO_REGION:-us-east-1}
+    entrypoint: ["/bin/sh", "-c", "aws --endpoint-url http://minio:9000 s3 mb s3://${MINIO_BUCKET:-etradebazaar-local} || true; aws --endpoint-url http://minio:9000 s3api put-bucket-policy --bucket ${MINIO_BUCKET:-etradebazaar-local} --policy '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::${MINIO_BUCKET:-etradebazaar-local}/*\"}]}'"]
+    restart: "no"
+
   adminer:
     image: adminer:latest
     container_name: etradebazaar_adminer
@@ -103,3 +155,5 @@ volumes:
   postgres_data:
   redis_data:
   opensearch_data:
+  minio_data:
+  minio_logs:

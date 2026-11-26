@@ -95,7 +95,7 @@ export const productSearchController = {
 
             while (true) {
                 const batch = await db.product.findMany({
-                    where: { status: { in: ["LIVE", "APPROVED"] } },
+                    where: { status: "LIVE" },
                     select: { id: true },
                     orderBy: { id: "asc" },
                     take: 200,

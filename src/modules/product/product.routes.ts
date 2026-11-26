@@ -197,7 +197,7 @@ router.get(
   "/:productId/detail",
   publicLimiter,
   validate(productParamSchema),
-  productController.getProductById,
+  productController.getPublicProductById,
 );
 
 // Seller: Product CRUD

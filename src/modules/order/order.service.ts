@@ -11,7 +11,7 @@ import { creditEngine } from "../../lib/credit-engine/credit-rules";
 import { recommendationService } from "../../lib/order-assignment/recommendation.service";
 import { shopAccessService } from "../shop/shop-access.service";
 import { reliabilityService } from "../../lib/order-assignment/reliability.service";
-import { OrderStatus } from "../../../prisma/generated/client";
+import { OrderStatus, Prisma } from "../../../prisma/generated/client";
 import { slaConfigService } from "../platform/sla-config.service";
 import { shipmentService } from "../shipment/shipment.service";
 import { paymentService, sumPaidPayments } from "../payment/payment.service";
@@ -105,6 +105,10 @@ export const orderService = {
       couponCode?: string;
       couponId?: string;
       paymentMethod?: "ONLINE" | "COD";
+      requiredBy?: string;
+      customerNotes?: string;
+      multiLocation?: boolean;
+      addressSheetUrl?: string;
       orgId?: string;
     },
   ) {
@@ -164,6 +168,11 @@ export const orderService = {
       couponCode?: string;
       couponId?: string;
       paymentMethod?: "ONLINE" | "COD";
+      requiredBy?: string;
+      customerNotes?: string;
+      multiLocation?: boolean;
+      addressSheetUrl?: string;
+      negotiationIntent?: Prisma.InputJsonValue;
       orgId?: string;
     },
     idempotencyKey?: string,
@@ -287,6 +296,11 @@ export const orderService = {
           commissionRate,
           commissionAmount,
           paymentMethod: data.paymentMethod ?? "ONLINE",
+          requiredBy: data.requiredBy ? new Date(data.requiredBy) : undefined,
+          customerNotes: data.customerNotes,
+          multiLocation: data.multiLocation ?? false,
+          addressSheetUrl: data.addressSheetUrl,
+          negotiationIntent: data.negotiationIntent,
           assignedShopId: autoAssignedShopId,
           packingDeadline,
           items: { create: itemsData },

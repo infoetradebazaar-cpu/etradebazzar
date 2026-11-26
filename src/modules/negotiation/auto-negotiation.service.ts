@@ -1,7 +1,6 @@
 import { db } from "../../db/index";
 import { resolveTierPrice } from "../../utils/tier-pricing";
-import { notificationService } from "../notification/notification.service";
-import { createOrderFromNegotiation, DeliveryAddress } from "./negotiation-order.helper";
+import { DeliveryAddress } from "./negotiation-order.helper";
 import { NEGOTIATION_SESSION_OMIT } from "./negotiation.select";
 import { computeOfferV2 } from "./pricing-engine-v2/engine";
 import { resolveEngineConfig, resolveEngineConstants, resolveSellerGammaConfig } from "./pricing-engine-v2/config-resolution";
@@ -13,8 +12,6 @@ import { computeMomentumState } from "./momentum-gate";
 import { canAccessOrgResource } from "../../lib/permission/customer-org-permission.service";
 import { CUSTOMER_ORG_PERMISSIONS } from "../../lib/permission/customer-org-permission.constants";
 import { setCustomerOrgScope } from "../../middleware/tenant";
-import { invoicingService } from "../invoicing/invoicing.service";
-import { logger } from "../../utils/logger";
 import { chargeNegotiationFee, getNegotiationQuota, type NegotiationIntent } from "./negotiation-gate";
 
 export { MAX_ROUNDS, interpolateOffer, decideAcceptOutcome };
@@ -219,7 +216,7 @@ export const autoNegotiationService = {
     customerId: string,
     sessionId: string,
     action: "ACCEPT" | "REJECT",
-    deliveryAddress?: DeliveryAddress,
+    _deliveryAddress?: DeliveryAddress,
     customerPrice?: number,
   ) {
     const session = await db.negotiationSession.findUnique({ where: { id: sessionId } });
@@ -282,13 +279,6 @@ export const autoNegotiationService = {
     const finalPriceIfAccept =
       action === "ACCEPT" ? Math.round(currentOfferedPrice) : evaluation.outcome === "accept" ? evaluation.decision.finalPrice : undefined;
 
-    if (isAccept && !deliveryAddress) {
-      throw new Error(
-        evaluation.outcome === "accept"
-          ? `Your offer meets our price of ${finalPriceIfAccept} provide a delivery address to accept it`
-          : "Delivery address is required to accept and place the order",
-      );
-    }
 
     const result = await db.$transaction(async (tx) => {
       await setCustomerOrgScope(tx, session.orgId);
@@ -302,14 +292,12 @@ export const autoNegotiationService = {
 
       if (isAccept) {
         const finalPrice = finalPriceIfAccept!;
-        const order = await createOrderFromNegotiation(tx, session, finalPrice, deliveryAddress!);
         await tx.negotiationSession.update({
           where: { id: sessionId },
-          data: { status: "ACCEPTED", finalPrice, orderId: order.id },
+          data: { status: "ACCEPTED", finalPrice },
         });
         return {
           status: "ACCEPTED" as const,
-          order,
           acceptCase: evaluation.outcome === "accept" ? evaluation.decision.acceptCase : undefined,
         };
       }
@@ -356,19 +344,6 @@ export const autoNegotiationService = {
       return { status: newStatus, offeredPrice };
     });
 
-    if (result.status === "ACCEPTED" && "order" in result) {
-      invoicingService
-        .generateQuotation(result.order.id, { userId: "system", sellerId: session.sellerId, actorType: "system" })
-        .catch((err: any) => logger.error({ err: err.message, orderId: result.order.id }, "Quotation on acceptance failed"));
-      notificationService
-        .sellerNewOrder({
-          sellerId: session.sellerId,
-          orderId: result.order.id,
-          displayId: result.order.displayId,
-          totalAmount: Number(result.order.finalAmount ?? result.order.totalAmount),
-        })
-        .catch(() => null);
-    }
     return result;
   },
 };
