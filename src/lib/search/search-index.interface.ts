@@ -14,6 +14,7 @@ export interface SearchProductDocument {
   categoryName: string;
   categoryPath: string[];
   sellerId: string;
+  status: string;
   imageKey: string | null;
   negotiationThresholdQty: number | null;
   attributes: SearchProductAttribute[];

@@ -70,6 +70,7 @@ export class OpenSearchIndexInstance implements SearchIndexProvider {
             categoryName: { type: "keyword" },
             categoryPath: { type: "keyword" },
             sellerId: { type: "keyword" },
+            status: { type: "keyword" },
             imageKey: { type: "keyword", index: false },
             negotiationThresholdQty: { type: "integer" },
             attributes: {
@@ -115,7 +116,8 @@ export class OpenSearchIndexInstance implements SearchIndexProvider {
   }
 
   private buildFilterClauses(filters: SearchFilters, excludeAttributeName?: string): any[] {
-    const filter: any[] = [];
+    // Only LIVE products are public; guards against stale index entries.
+    const filter: any[] = [{ term: { status: "LIVE" } }];
 
     if (filters.categoryId) {
       filter.push({ term: { categoryPath: filters.categoryId } });
@@ -275,6 +277,7 @@ export class OpenSearchIndexInstance implements SearchIndexProvider {
       index: INDEX_NAME,
       body: {
         size: 0,
+        query: { term: { status: "LIVE" } },
         aggs: {
           by_category: { terms: { field: "categoryId", size: 1000 } },
         },
